@@ -43,6 +43,7 @@
     "build": "tsdown src/index.ts src/server.ts",
     "dev": "tsdown src/index.ts src/server.ts --watch",
     "pack": "pnpm pack --pack-destination .",
+    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "lint": "oxlint --config ../../.oxlintrc.json .",
     "format:check": "prettier --check ."
