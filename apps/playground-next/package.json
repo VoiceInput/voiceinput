@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@voiceinput/deepgram": "workspace:*",
+    "@voiceinput/elevenlabs": "workspace:*",
     "@voiceinput/openai": "workspace:*",
     "@voiceinput/playground-auth": "workspace:*",
     "@voiceinput/playground-shared": "workspace:*",

@@ -50,6 +50,12 @@ importers:
       '@hono/node-server':
         specifier: 2.1.1
         version: 2.1.1(hono@4.13.3)
+      '@voiceinput/deepgram':
+        specifier: workspace:*
+        version: link:../../packages/deepgram
+      '@voiceinput/elevenlabs':
+        specifier: workspace:*
+        version: link:../../packages/elevenlabs
       '@voiceinput/openai':
         specifier: workspace:*
         version: link:../../packages/openai
@@ -68,6 +74,12 @@ importers:
 
   apps/playground-next:
     dependencies:
+      '@voiceinput/deepgram':
+        specifier: workspace:*
+        version: link:../../packages/deepgram
+      '@voiceinput/elevenlabs':
+        specifier: workspace:*
+        version: link:../../packages/elevenlabs
       '@voiceinput/openai':
         specifier: workspace:*
         version: link:../../packages/openai
@@ -99,6 +111,12 @@ importers:
       '@voiceinput/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@voiceinput/deepgram':
+        specifier: workspace:*
+        version: link:../../packages/deepgram
+      '@voiceinput/elevenlabs':
+        specifier: workspace:*
+        version: link:../../packages/elevenlabs
       '@voiceinput/openai':
         specifier: workspace:*
         version: link:../../packages/openai

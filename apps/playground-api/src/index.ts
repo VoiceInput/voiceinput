@@ -1,4 +1,6 @@
 import { serve } from "@hono/node-server";
+import { createDeepgramTokenHandler } from "@voiceinput/deepgram/server";
+import { createElevenLabsTokenHandler } from "@voiceinput/elevenlabs/server";
 import { createOpenAITokenHandler } from "@voiceinput/openai/server";
 import {
   authorizeDevRequest,
@@ -38,10 +40,36 @@ app.post("/api/dev-auth", async (context) => {
 app.post("/api/voice-token", async (context) => {
   try {
     const secret = getDevAuthSecret();
-    return await createOpenAITokenHandler({
-      apiKey: readEnvironment("OPENAI_API_KEY"),
-      authorize: (request) => authorizeDevRequest(request, { secret }),
-    })(context.req.raw);
+    const request = context.req.raw;
+    const authorize = (tokenRequest: Request) =>
+      authorizeDevRequest(tokenRequest, { secret });
+    switch (new URL(request.url).searchParams.get("provider") ?? "openai") {
+      case "openai":
+        return await createOpenAITokenHandler({
+          apiKey: readEnvironment("OPENAI_API_KEY"),
+          authorize,
+        })(request);
+      case "elevenlabs":
+        return await createElevenLabsTokenHandler({
+          apiKey: readEnvironment("ELEVENLABS_API_KEY"),
+          authorize,
+        })(request);
+      case "deepgram":
+        return await createDeepgramTokenHandler({
+          apiKey: readEnvironment("DEEPGRAM_API_KEY"),
+          authorize,
+        })(request);
+      default:
+        return context.json(
+          {
+            error: {
+              code: "invalid-configuration",
+              message: "Unknown voice provider.",
+            },
+          },
+          400,
+        );
+    }
   } catch {
     return context.json(
       {

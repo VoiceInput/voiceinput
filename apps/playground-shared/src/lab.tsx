@@ -6,6 +6,8 @@ import {
   type VoiceInputStatus,
   type VoiceInputTextEngineSnapshot,
 } from "@voiceinput/core";
+import { deepgram } from "@voiceinput/deepgram";
+import { elevenlabs } from "@voiceinput/elevenlabs";
 import { openai } from "@voiceinput/openai";
 import { VoiceInputProvider, useVoiceInput } from "@voiceinput/react";
 import {
@@ -24,7 +26,7 @@ import {
   type LabFakeRuntime,
 } from "./fixtures.js";
 
-type ProviderChoice = "fake" | "openai";
+type ProviderChoice = "fake" | "openai" | "elevenlabs" | "deepgram";
 type FieldId = "controlled" | "uncontrolled";
 type InterimBehavior = "inline" | "expose";
 type ActivationMode = "toggle" | "hold";
@@ -74,6 +76,13 @@ const initialConfiguration: LabConfiguration = {
   endpointing: "default",
 };
 
+function providerTokenEndpoint(
+  endpoint: string,
+  provider: Exclude<ProviderChoice, "fake">,
+): string {
+  return `${endpoint}${endpoint.includes("?") ? "&" : "?"}provider=${provider}`;
+}
+
 export function VoiceInputLab({
   runtime,
   tokenEndpoint = "/api/voice-token",
@@ -83,13 +92,24 @@ export function VoiceInputLab({
   const fakeAudioSource = useMemo(() => createSilentAudioSource(), []);
   const [configuration, setConfiguration] =
     useState<LabConfiguration>(initialConfiguration);
-  const provider = useMemo(
-    () =>
-      configuration.provider === "fake"
-        ? fakeRuntime.provider
-        : openai({ tokenEndpoint }),
-    [configuration.provider, fakeRuntime.provider, tokenEndpoint],
-  );
+  const provider = useMemo(() => {
+    switch (configuration.provider) {
+      case "fake":
+        return fakeRuntime.provider;
+      case "openai":
+        return openai({
+          tokenEndpoint: providerTokenEndpoint(tokenEndpoint, "openai"),
+        });
+      case "elevenlabs":
+        return elevenlabs({
+          tokenEndpoint: providerTokenEndpoint(tokenEndpoint, "elevenlabs"),
+        });
+      case "deepgram":
+        return deepgram({
+          tokenEndpoint: providerTokenEndpoint(tokenEndpoint, "deepgram"),
+        });
+    }
+  }, [configuration.provider, fakeRuntime.provider, tokenEndpoint]);
 
   return (
     <VoiceInputProvider
@@ -328,8 +348,8 @@ function LabWorkspace({
             >
               <option value="fake">Fake / deterministic</option>
               <option value="openai">OpenAI / live</option>
-              <option disabled>ElevenLabs / Step 9</option>
-              <option disabled>Deepgram / Step 9</option>
+              <option value="elevenlabs">ElevenLabs / live</option>
+              <option value="deepgram">Deepgram / live</option>
             </select>
           </Control>
           <SegmentedControl

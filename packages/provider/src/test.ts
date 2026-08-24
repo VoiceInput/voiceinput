@@ -350,16 +350,16 @@ export function createVoiceInputProviderV1ConformanceCases(
         const harness = options.createHarness();
         const session = await openSession(harness);
         const partsPromise = readStream(session.stream);
+        harness.controller.emit({ type: "speech-start" });
         harness.controller.emit({ type: "interim", text: "hel" });
         harness.controller.emit({ type: "interim", text: "hello" });
         harness.controller.emit({ type: "final", text: "hello" });
-        harness.controller.emit({ type: "speech-start" });
         harness.controller.emit({ type: "speech-end" });
         harness.controller.close();
         const partTypes = (await partsPromise).map((part) => part.type);
         assert(
           partTypes.join(",") ===
-            "interim,interim,final,speech-start,speech-end",
+            "speech-start,interim,interim,final,speech-end",
           `Unexpected stream order: ${partTypes.join(",")}`,
         );
 
