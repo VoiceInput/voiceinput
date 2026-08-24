@@ -8,6 +8,8 @@ import {
 } from "@voiceinput/provider";
 import { z } from "zod";
 
+import type { VoiceInputTextEngine } from "./text-engine.js";
+
 export { VoiceInputError };
 export type {
   VoiceInputErrorCode,
@@ -106,6 +108,7 @@ export interface VoiceAudioSource {
 export interface CreateVoiceInputSessionOptions extends VoiceTranscriptionOptions {
   provider: VoiceInputProviderV1;
   audioSource: VoiceAudioSource;
+  textEngine?: VoiceInputTextEngine;
   maxDurationMs?: number;
 }
 
@@ -138,6 +141,9 @@ export function createVoiceInputSession(
 ): VoiceInputSession {
   assertProvider(options.provider);
   assertAudioSource(options.audioSource);
+  if (options.textEngine !== undefined) {
+    assertTextEngine(options.textEngine);
+  }
 
   const result = sessionConfigurationSchema.safeParse({
     language: options.language,
@@ -162,6 +168,7 @@ export function createVoiceInputSession(
   return new VoiceInputSessionController(
     options.provider,
     options.audioSource,
+    options.textEngine,
     configuration,
   );
 }
@@ -170,6 +177,7 @@ class VoiceInputSessionController implements VoiceInputSession {
   readonly #listeners = new Set<(event: VoiceInputSessionEvent) => void>();
   readonly #provider: VoiceInputProviderV1;
   readonly #audioSource: VoiceAudioSource;
+  readonly #textEngine: VoiceInputTextEngine | undefined;
   readonly #configuration: SessionConfiguration;
 
   #snapshot: VoiceInputSnapshot = Object.freeze({
@@ -184,10 +192,12 @@ class VoiceInputSessionController implements VoiceInputSession {
   constructor(
     provider: VoiceInputProviderV1,
     audioSource: VoiceAudioSource,
+    textEngine: VoiceInputTextEngine | undefined,
     configuration: SessionConfiguration,
   ) {
     this.#provider = provider;
     this.#audioSource = audioSource;
+    this.#textEngine = textEngine;
     this.#configuration = configuration;
   }
 
@@ -222,6 +232,7 @@ class VoiceInputSessionController implements VoiceInputSession {
     }
 
     const run: ActiveRun = { abortController: new AbortController() };
+    this.#textEngine?.begin();
     this.#activeRun = run;
     this.#transition("requesting-permission");
 
@@ -320,6 +331,7 @@ class VoiceInputSessionController implements VoiceInputSession {
 
     this.#activeRun = undefined;
     this.#abortRun(run, "cancelled");
+    this.#textEngine?.cancel();
     this.#setSnapshot({
       transcript: this.#snapshot.finalTranscript,
       interimTranscript: "",
@@ -354,6 +366,10 @@ class VoiceInputSessionController implements VoiceInputSession {
     const providerTask = run.providerTask;
 
     if (providerSession === undefined) {
+      const completed = await this.#completeTextEngine(run);
+      if (!completed) {
+        return;
+      }
       this.#activeRun = undefined;
       this.#abortRun(run, reason);
       this.#transition("idle");
@@ -377,6 +393,11 @@ class VoiceInputSessionController implements VoiceInputSession {
       );
 
       if (!this.#isActive(run)) {
+        return;
+      }
+
+      const completed = await this.#completeTextEngine(run);
+      if (!completed) {
         return;
       }
 
@@ -444,6 +465,7 @@ class VoiceInputSessionController implements VoiceInputSession {
 
     switch (part.type) {
       case "interim": {
+        this.#textEngine?.applyInterim(part.text);
         this.#setSnapshot({
           interimTranscript: part.text,
           transcript: `${this.#snapshot.finalTranscript}${part.text}`,
@@ -452,6 +474,7 @@ class VoiceInputSessionController implements VoiceInputSession {
         return false;
       }
       case "final": {
+        this.#textEngine?.applyFinal(part.text);
         const finalTranscript = `${this.#snapshot.finalTranscript}${part.text}`;
         this.#setSnapshot({
           finalTranscript,
@@ -554,6 +577,7 @@ class VoiceInputSessionController implements VoiceInputSession {
 
     this.#activeRun = undefined;
     this.#abortRun(run, error);
+    this.#textEngine?.cancel();
     this.#setSnapshot({
       transcript: this.#snapshot.finalTranscript,
       interimTranscript: "",
@@ -648,6 +672,28 @@ class VoiceInputSessionController implements VoiceInputSession {
       delete run.durationTimer;
     }
   }
+
+  async #completeTextEngine(run: ActiveRun): Promise<boolean> {
+    const completion = this.#textEngine?.complete();
+    if (completion === undefined) {
+      return this.#isActive(run);
+    }
+
+    if (completion.processing) {
+      this.#transition("processing");
+    }
+
+    const errors = await completion.result;
+    if (!this.#isActive(run)) {
+      return false;
+    }
+
+    for (const error of errors) {
+      this.#setSnapshot({ error });
+      this.#emit({ type: "error", error });
+    }
+    return true;
+  }
 }
 
 function getTranscriptionOptions(options: {
@@ -714,6 +760,23 @@ function assertAudioSource(audioSource: VoiceAudioSource): void {
     throw new VoiceInputError({
       code: "invalid-configuration",
       message: "audioSource must implement the VoiceAudioSource interface.",
+    });
+  }
+}
+
+function assertTextEngine(textEngine: VoiceInputTextEngine): void {
+  if (
+    typeof textEngine !== "object" ||
+    textEngine === null ||
+    typeof textEngine.begin !== "function" ||
+    typeof textEngine.applyInterim !== "function" ||
+    typeof textEngine.applyFinal !== "function" ||
+    typeof textEngine.complete !== "function" ||
+    typeof textEngine.cancel !== "function"
+  ) {
+    throw new VoiceInputError({
+      code: "invalid-configuration",
+      message: "textEngine must implement the VoiceInputTextEngine interface.",
     });
   }
 }

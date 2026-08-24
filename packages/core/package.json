@@ -33,7 +33,8 @@
     "build": "tsdown src/index.ts",
     "dev": "tsdown src/index.ts --watch",
     "pack": "pnpm pack --pack-destination .",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.ts",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "lint": "oxlint --config ../../.oxlintrc.json .",
     "format:check": "prettier --check ."

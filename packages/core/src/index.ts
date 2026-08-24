@@ -13,3 +13,17 @@ export {
   type VoiceInputStatus,
   type VoiceInputStopReason,
 } from "./session.js";
+export {
+  createVoiceInputTextEngine,
+  type CreateVoiceInputTextEngineOptions,
+  type VoiceInputControlledTextBinding,
+  type VoiceInputInterimBehavior,
+  type VoiceInputTextCompletion,
+  type VoiceInputTextEngine,
+  type VoiceInputTextEngineSnapshot,
+  type VoiceInputTextSelection,
+  type VoiceInputTextSpan,
+  type VoiceInputTextSpanState,
+  type VoiceInputTextTarget,
+  type VoiceInputTransformTranscript,
+} from "./text-engine.js";

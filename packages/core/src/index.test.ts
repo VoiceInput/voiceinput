@@ -15,6 +15,8 @@ import {
   type VoiceAudioSourcePrepareOptions,
   type VoiceInputSession,
   type VoiceInputSessionEvent,
+  type VoiceInputTextCompletion,
+  type VoiceInputTextEngine,
 } from "./index.js";
 
 interface AudioInspection {
@@ -177,6 +179,7 @@ function createSession(
     maxDurationMs?: number;
     language?: string;
     vocabulary?: readonly string[];
+    textEngine?: VoiceInputTextEngine;
   } = {},
 ): {
   session: VoiceInputSession;
@@ -196,10 +199,44 @@ function createSession(
     ...(options.vocabulary === undefined
       ? {}
       : { vocabulary: options.vocabulary }),
+    ...(options.textEngine === undefined
+      ? {}
+      : { textEngine: options.textEngine }),
   });
   const events: VoiceInputSessionEvent[] = [];
   session.subscribe((event) => events.push(event));
   return { session, provider, audio, events };
+}
+
+function createFakeTextEngine(
+  completion: VoiceInputTextCompletion = {
+    processing: false,
+    result: Promise.resolve([]),
+  },
+): VoiceInputTextEngine & {
+  begin: ReturnType<typeof vi.fn<() => void>>;
+  applyInterim: ReturnType<typeof vi.fn<(text: string) => void>>;
+  applyFinal: ReturnType<typeof vi.fn<(text: string) => void>>;
+  complete: ReturnType<typeof vi.fn<() => VoiceInputTextCompletion>>;
+  cancel: ReturnType<typeof vi.fn<() => void>>;
+} {
+  return {
+    getSnapshot: () => ({
+      value: "",
+      selection: null,
+      interimTranscript: "",
+      spans: [],
+    }),
+    setTarget: () => {},
+    captureSelection: () => null,
+    reconcileControlledValue: () => {},
+    begin: vi.fn<() => void>(),
+    applyInterim: vi.fn<(text: string) => void>(),
+    applyFinal: vi.fn<(text: string) => void>(),
+    complete: vi.fn<() => VoiceInputTextCompletion>(() => completion),
+    cancel: vi.fn<() => void>(),
+    destroy: () => {},
+  };
 }
 
 async function waitFor(assertion: () => void, timeout = 1_000): Promise<void> {
@@ -548,6 +585,82 @@ describe("graceful finalization", () => {
 
     expect(session.getSnapshot().status).toBe("error");
     expect(session.getSnapshot().error?.code).toBe("provider-error");
+  });
+});
+
+describe("text engine integration", () => {
+  it("forwards transcripts and waits in processing before emitting stop", async () => {
+    let resolveCompletion: (
+      errors: readonly VoiceInputError[],
+    ) => void = () => {};
+    const result = new Promise<readonly VoiceInputError[]>((resolve) => {
+      resolveCompletion = resolve;
+    });
+    const textEngine = createFakeTextEngine({ processing: true, result });
+    const { session, provider, events } = createSession({ textEngine });
+    await session.start();
+
+    provider.controller.emit({ type: "interim", text: "hel" });
+    provider.controller.emit({ type: "final", text: "hello" });
+    await waitFor(() => {
+      expect(textEngine.applyFinal).toHaveBeenCalledWith("hello");
+    });
+
+    const stopPromise = session.stop();
+    await waitFor(() => {
+      expect(session.getSnapshot().status).toBe("processing");
+    });
+    expect(textEngine.begin).toHaveBeenCalledOnce();
+    expect(textEngine.applyInterim).toHaveBeenCalledWith("hel");
+    expect(events).not.toContainEqual({ type: "stop", reason: "user" });
+
+    resolveCompletion([]);
+    await stopPromise;
+    expect(session.getSnapshot().status).toBe("idle");
+    expect(events).toContainEqual({ type: "stop", reason: "user" });
+  });
+
+  it("reports transform failures non-destructively and still stops", async () => {
+    const transformError = new VoiceInputError({
+      code: "transform-error",
+      message: "Transform failed.",
+    });
+    const textEngine = createFakeTextEngine({
+      processing: true,
+      result: Promise.resolve([transformError]),
+    });
+    const { session, events } = createSession({ textEngine });
+    await session.start();
+    await session.stop();
+
+    expect(session.getSnapshot()).toMatchObject({
+      status: "idle",
+      error: transformError,
+    });
+    expect(events).toContainEqual({ type: "error", error: transformError });
+    expect(events.at(-1)).toEqual({ type: "stop", reason: "user" });
+  });
+
+  it("cancels text ownership on cancellation and provider failure", async () => {
+    const cancelledEngine = createFakeTextEngine();
+    const cancelled = createSession({ textEngine: cancelledEngine });
+    await cancelled.session.start();
+    await cancelled.session.cancel();
+    expect(cancelledEngine.cancel).toHaveBeenCalledOnce();
+
+    const failedEngine = createFakeTextEngine();
+    const failed = createSession({ textEngine: failedEngine });
+    await failed.session.start();
+    failed.provider.controller.fail(
+      new VoiceInputError({
+        code: "network-error",
+        message: "offline",
+      }),
+    );
+    await waitFor(() => {
+      expect(failed.session.getSnapshot().status).toBe("error");
+    });
+    expect(failedEngine.cancel).toHaveBeenCalledOnce();
   });
 });
 
