@@ -133,7 +133,7 @@ export function createLabFakeRuntime(): LabFakeRuntime {
   };
 }
 
-export function createSilentAudioSource(): VoiceAudioSource {
+export function createDeterministicAudioSource(): VoiceAudioSource {
   return {
     async prepare(): Promise<PreparedVoiceAudioSource> {
       let controller: ReadableStreamDefaultController<Int16Array> | undefined;
@@ -151,7 +151,9 @@ export function createSilentAudioSource(): VoiceAudioSource {
       };
       return {
         stream,
-        start() {},
+        start() {
+          controller?.enqueue(new Int16Array([0, 2_048, -2_048, 0]));
+        },
         stop: close,
         abort: close,
       };

@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Format, lint, and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  tests:
+    name: Unit and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test
+      - run: pnpm test:browser
+
+  packages:
+    name: Builds, tarballs, and browser isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPENAI_API_KEY: voiceinput-security-openai-canary
+      ELEVENLABS_API_KEY: voiceinput-security-elevenlabs-canary
+      DEEPGRAM_API_KEY: voiceinput-security-deepgram-canary
+      BROWSERSTACK_ACCESS_KEY: voiceinput-security-browserstack-canary
+      VOICEINPUT_DEV_AUTH_SECRET: voiceinput-security-auth-canary
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm validate:packages
+      - run: pnpm test:security
+
+  playgrounds:
+    name: Deterministic playground E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OPENAI_API_KEY: voiceinput-security-openai-canary
+      ELEVENLABS_API_KEY: voiceinput-security-elevenlabs-canary
+      DEEPGRAM_API_KEY: voiceinput-security-deepgram-canary
+      BROWSERSTACK_ACCESS_KEY: voiceinput-security-browserstack-canary
+      VOICEINPUT_DEV_AUTH_SECRET: voiceinput-security-auth-canary
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - if: always()
+        run: pnpm test:security
+      - if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playground-e2e-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7

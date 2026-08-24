@@ -7,6 +7,7 @@ coverage/
 .next/
 playwright-report/
 test-results/
+log/
 .playwright-cli/
 output/
 *.tgz

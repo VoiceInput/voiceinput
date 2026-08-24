@@ -26,7 +26,7 @@ import {
 
 import {
   createLabFakeRuntime,
-  createSilentAudioSource,
+  createDeterministicAudioSource,
   type LabFakeRuntime,
 } from "./fixtures.js";
 
@@ -93,7 +93,7 @@ export function VoiceInputLab({
   authEndpoint = "/api/dev-auth",
 }: VoiceInputLabProps): React.JSX.Element {
   const fakeRuntime = useMemo(() => createLabFakeRuntime(), []);
-  const fakeAudioSource = useMemo(() => createSilentAudioSource(), []);
+  const fakeAudioSource = useMemo(() => createDeterministicAudioSource(), []);
   const [configuration, setConfiguration] =
     useState<LabConfiguration>(initialConfiguration);
   const provider = useMemo(() => {
@@ -148,7 +148,10 @@ function LabWorkspace({
   setConfiguration: React.Dispatch<React.SetStateAction<LabConfiguration>>;
 }): React.JSX.Element {
   const unstyledRuntime = useMemo(() => createLabFakeRuntime(), []);
-  const unstyledAudioSource = useMemo(() => createSilentAudioSource(), []);
+  const unstyledAudioSource = useMemo(
+    () => createDeterministicAudioSource(),
+    [],
+  );
   const [activeField, setActiveField] = useState<FieldId>("controlled");
   const [events, setEvents] = useState<readonly LabEvent[]>([]);
   const [diagnostics, setDiagnostics] = useState<
@@ -556,6 +559,15 @@ function LabWorkspace({
               type="button"
               onClick={() =>
                 withListeningFake((handle) => {
+                  const audioChunks =
+                    fakeRuntime.controller.sessions.at(-1)?.audioChunks
+                      .length ?? 0;
+                  if (audioChunks === 0) {
+                    throw new Error(
+                      "The deterministic audio source did not reach the provider.",
+                    );
+                  }
+                  log("fake", "audio-received", { chunks: audioChunks });
                   fakeRuntime.keepNextFinishOpen();
                   void handle.stop();
                   fakeRuntime.emit({ type: "speech-end" });

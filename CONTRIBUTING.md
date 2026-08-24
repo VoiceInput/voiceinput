@@ -45,8 +45,24 @@ pnpm test
 pnpm test:browser
 pnpm test:e2e
 pnpm validate:packages
+pnpm test:security
 ```
 
 Run `pnpm format` to apply Prettier formatting. Oxlint is the only
 JavaScript/TypeScript linter; do not add ESLint configuration or compatibility
 packages.
+
+`pnpm test:e2e` builds the workspace, starts both playground stacks, and runs
+their deterministic fake-audio/provider flows. Maintainers with BrowserStack
+credentials can run the same suite with `pnpm test:e2e:browserstack`; that
+command supplements the Playwright matrix with a small WebDriver smoke on
+branded current and previous macOS Safari.
+
+`pnpm test:provider-smoke` loads an ignored root `.env` when present, mints a
+short-lived credential for each provider, opens its live WebSocket, and sends
+deterministic PCM without requesting a physical microphone. The Deepgram key
+must have Member-or-higher permission so it can call `/v1/auth/grant`.
+
+Run `pnpm changeset` for user-visible package work. The six public packages are
+versioned as one fixed group until 1.0. Publishing is manual and must follow the
+[release checklist](docs/release-checklist.md).

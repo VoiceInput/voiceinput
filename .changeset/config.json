@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.1.2/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [
+    [
+      "@voiceinput/provider",
+      "@voiceinput/core",
+      "@voiceinput/react",
+      "@voiceinput/openai",
+      "@voiceinput/elevenlabs",
+      "@voiceinput/deepgram"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": [],
+  "bumpVersionsWithWorkspaceProtocolOnly": false,
+  "privatePackages": {
+    "version": false,
+    "tag": false
+  }
+}

@@ -1,0 +1,50 @@
+userName: ${BROWSERSTACK_USERNAME}
+accessKey: ${BROWSERSTACK_ACCESS_KEY}
+
+projectName: VoiceInput
+buildName: cross-browser playgrounds
+buildIdentifier: "#${BUILD_NUMBER}"
+
+platforms:
+  - os: Windows
+    osVersion: 11
+    browserName: chrome
+    browserVersion: latest
+  - os: Windows
+    osVersion: 11
+    browserName: chrome
+    browserVersion: latest-1
+  - os: Windows
+    osVersion: 11
+    browserName: edge
+    browserVersion: latest
+  - os: Windows
+    osVersion: 11
+    browserName: edge
+    browserVersion: latest-1
+  - os: OS X
+    osVersion: Tahoe
+    browserName: playwright-firefox
+    playwrightVersion: 1.latest
+  - os: OS X
+    osVersion: Tahoe
+    browserName: playwright-firefox
+    playwrightVersion: 1.latest-1
+  - deviceName: iPhone 17 Pro
+    osVersion: 26
+    browserName: safari
+  - deviceName: iPhone 16 Pro
+    osVersion: 18
+    browserName: safari
+
+parallelsPerPlatform: 1
+browserstackLocal: true
+framework: playwright
+source: voiceinput
+
+debug: false
+networkLogs: false
+video: false
+maskCommands:
+  sendType, sendPress, setHTTPCredentials, setStorageState, setGeolocation
+testObservability: true

@@ -1,0 +1,38 @@
+name: Browser compatibility
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "35 8 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browserstack-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    name: Current and previous browsers
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+      BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+      BUILD_NUMBER: ${{ github.run_number }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify BrowserStack credentials
+        run: |
+          test -n "$BROWSERSTACK_USERNAME"
+          test -n "$BROWSERSTACK_ACCESS_KEY"
+      - run: pnpm test:e2e:browserstack
+      - if: always()
+        run: pnpm test:security

@@ -208,14 +208,18 @@ pnpm install
 cp .env.example .env
 pnpm test
 pnpm test:browser
+pnpm test:e2e
 pnpm build
 pnpm validate:packages
+pnpm test:security
 ```
 
 The Next.js and Vite/Hono apps are maintainer laboratories. Their signed local
 cookie, loopback checks, and in-memory behavior are deliberately
 **development-only fixtures**, not production authentication or rate limiting.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete workspace commands.
+Release candidates also follow the
+[release checklist](docs/release-checklist.md).
 
 ## License
 
