@@ -1,3 +1,4 @@
+import "@voiceinput/react/styles.css";
 import "@voiceinput/playground-shared/styles.css";
 
 import { VoiceInputLab } from "@voiceinput/playground-shared";

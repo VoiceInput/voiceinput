@@ -89,6 +89,9 @@ importers:
       '@voiceinput/playground-shared':
         specifier: workspace:*
         version: link:../playground-shared
+      '@voiceinput/react':
+        specifier: workspace:*
+        version: link:../../packages/react
       next:
         specifier: 16.3.2
         version: 16.3.2(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -139,6 +142,9 @@ importers:
       '@voiceinput/playground-shared':
         specifier: workspace:*
         version: link:../playground-shared
+      '@voiceinput/react':
+        specifier: workspace:*
+        version: link:../../packages/react
       react:
         specifier: 19.2.8
         version: 19.2.8

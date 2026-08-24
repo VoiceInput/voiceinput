@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@voiceinput/playground-shared": "workspace:*",
+    "@voiceinput/react": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

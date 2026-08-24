@@ -9,7 +9,11 @@ import {
 import { deepgram } from "@voiceinput/deepgram";
 import { elevenlabs } from "@voiceinput/elevenlabs";
 import { openai } from "@voiceinput/openai";
-import { VoiceInputProvider, useVoiceInput } from "@voiceinput/react";
+import {
+  VoiceInputProvider,
+  VoiceTextarea,
+  useVoiceInput,
+} from "@voiceinput/react";
 import {
   useCallback,
   useEffect,
@@ -501,12 +505,25 @@ function LabWorkspace({
           </div>
 
           <details className="voice-lab__unstyled">
-            <summary>Unstyled hook specimen</summary>
+            <summary>Headless and prebuilt controls</summary>
             <VoiceInputProvider
               provider={unstyledRuntime.provider}
               audioSource={unstyledAudioSource}
             >
               <BareField log={log} />
+              <VoiceTextarea
+                aria-label="Prebuilt voice textarea"
+                containerClassName="voice-lab__prebuilt"
+                defaultValue="The optional control works with or without its stylesheet."
+                voice={{
+                  onEvent: (event) =>
+                    log(
+                      "prebuilt",
+                      event.type,
+                      normalizeSessionEventDetail(event),
+                    ),
+                }}
+              />
             </VoiceInputProvider>
           </details>
         </section>

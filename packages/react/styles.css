@@ -1,1 +1,157 @@
-/* Optional VoiceInput styles are implemented in step 10. */
+:root {
+  --voiceinput-accent: #6d5dfc;
+  --voiceinput-accent-strong: #5847ed;
+  --voiceinput-surface: #ffffff;
+  --voiceinput-surface-active: #f0edff;
+  --voiceinput-text: #17151f;
+  --voiceinput-muted: #6f6a7c;
+  --voiceinput-danger: #c9364f;
+  --voiceinput-radius: 12px;
+  --voiceinput-focus: 0 0 0 3px rgb(109 93 252 / 24%);
+  --voiceinput-shadow:
+    0 0 0 1px rgb(0 0 0 / 7%), 0 1px 2px -1px rgb(0 0 0 / 8%),
+    0 4px 12px rgb(0 0 0 / 6%);
+  --voiceinput-shadow-hover:
+    0 0 0 1px rgb(0 0 0 / 10%), 0 2px 4px -1px rgb(0 0 0 / 9%),
+    0 6px 16px rgb(0 0 0 / 8%);
+}
+
+.voiceinput-button {
+  align-items: center;
+  appearance: none;
+  background: var(--voiceinput-surface);
+  border: 0;
+  border-radius: var(--voiceinput-radius);
+  box-shadow: var(--voiceinput-shadow);
+  color: var(--voiceinput-text);
+  cursor: pointer;
+  display: inline-flex;
+  font:
+    600 0.875rem/1 system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  gap: 0.5rem;
+  justify-content: center;
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  padding: 0.75rem 1rem;
+  transition-duration: 150ms;
+  transition-property: background-color, box-shadow, color, scale;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.voiceinput-button:hover:not(:disabled) {
+  box-shadow: var(--voiceinput-shadow-hover);
+}
+
+.voiceinput-button:focus-visible {
+  outline: 2px solid var(--voiceinput-accent);
+  outline-offset: 2px;
+}
+
+.voiceinput-button:active:not(:disabled) {
+  scale: 0.96;
+}
+
+.voiceinput-button:disabled {
+  color: var(--voiceinput-muted);
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.voiceinput-button[data-voiceinput-active="true"] {
+  background: var(--voiceinput-surface-active);
+  color: var(--voiceinput-accent-strong);
+}
+
+.voiceinput-button[data-voiceinput-status="error"] {
+  color: var(--voiceinput-danger);
+}
+
+.voiceinput-button__icon {
+  block-size: 18px;
+  display: inline-flex;
+  flex: 0 0 18px;
+  inline-size: 18px;
+}
+
+.voiceinput-field {
+  align-items: center;
+  background: var(--voiceinput-surface);
+  border-radius: calc(var(--voiceinput-radius) + 4px);
+  box-shadow: var(--voiceinput-shadow);
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  transition-duration: 150ms;
+  transition-property: box-shadow;
+  transition-timing-function: ease-out;
+}
+
+.voiceinput-field:focus-within {
+  box-shadow: var(--voiceinput-focus), var(--voiceinput-shadow);
+}
+
+.voiceinput-field__input {
+  background: transparent;
+  border: 0;
+  border-radius: var(--voiceinput-radius);
+  color: var(--voiceinput-text);
+  font:
+    400 1rem/1.5 system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  min-block-size: 44px;
+  min-inline-size: 12rem;
+  outline: 0;
+  padding: 0.625rem 0.75rem;
+}
+
+.voiceinput-field__input::placeholder {
+  color: var(--voiceinput-muted);
+}
+
+.voiceinput-field__button {
+  border-radius: var(--voiceinput-radius);
+  box-shadow: none;
+  flex: 0 0 auto;
+  padding-inline: 0.75rem;
+}
+
+.voiceinput-field--textarea {
+  align-items: flex-end;
+}
+
+.voiceinput-field--textarea .voiceinput-field__input {
+  min-block-size: 7rem;
+  resize: vertical;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --voiceinput-accent: #a99eff;
+    --voiceinput-accent-strong: #c0b8ff;
+    --voiceinput-surface: #1b1920;
+    --voiceinput-surface-active: #29243f;
+    --voiceinput-text: #f6f3fb;
+    --voiceinput-muted: #aaa4b6;
+    --voiceinput-danger: #ff899c;
+    --voiceinput-shadow: 0 0 0 1px rgb(255 255 255 / 9%);
+    --voiceinput-shadow-hover: 0 0 0 1px rgb(255 255 255 / 14%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voiceinput-button,
+  .voiceinput-field {
+    transition-duration: 0.01ms;
+  }
+
+  .voiceinput-button:active:not(:disabled) {
+    scale: 1;
+  }
+}
