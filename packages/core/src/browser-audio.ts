@@ -117,6 +117,7 @@ async function prepareBrowserAudio(
   let resolveFlush: (() => void) | undefined;
   let started = false;
   let closed = false;
+  let tracksStopped = false;
 
   const stream = new ReadableStream<Int16Array>({
     start(controller) {
@@ -134,9 +135,7 @@ async function prepareBrowserAudio(
     safely(() => workletNode?.disconnect());
     safely(() => silentOutput?.disconnect());
     safely(() => workletNode?.port.close());
-    for (const track of mediaStream?.getTracks() ?? []) {
-      safely(() => track.stop());
-    }
+    stopTracks();
     if (audioContext !== undefined && audioContext.state !== "closed") {
       closeContextPromise ??= audioContext.close().catch(() => {});
     }
@@ -155,6 +154,16 @@ async function prepareBrowserAudio(
     resolveFlush = undefined;
   };
 
+  function stopTracks(): void {
+    if (tracksStopped || mediaStream === undefined) {
+      return;
+    }
+    tracksStopped = true;
+    for (const track of mediaStream.getTracks()) {
+      safely(() => track.stop());
+    }
+  }
+
   const handleAbort = (): void => cleanup();
   abortSignal.addEventListener("abort", handleAbort, { once: true });
 
@@ -167,7 +176,7 @@ async function prepareBrowserAudio(
       video: false,
     });
     if (closed || abortSignal.aborted) {
-      stopMediaStream(mediaStream);
+      stopTracks();
     }
     throwIfAborted(abortSignal);
 
@@ -284,6 +293,7 @@ async function prepareBrowserAudio(
         sourceNode?.connect(workletNode as AudioWorkletNode);
       },
       async stop() {
+        stopTracks();
         if (!closed && started && workletNode !== undefined) {
           safely(() => sourceNode?.disconnect());
           started = false;
@@ -441,11 +451,5 @@ function safely(operation: () => void): void {
     operation();
   } catch {
     // Cleanup is best effort and remains idempotent.
-  }
-}
-
-function stopMediaStream(stream: MediaStream): void {
-  for (const track of stream.getTracks()) {
-    safely(() => track.stop());
   }
 }
