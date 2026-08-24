@@ -378,16 +378,18 @@ class VoiceInputSessionController implements VoiceInputSession {
     }
 
     try {
-      await audio?.stop();
-      await audioTask;
-
-      if (!this.#isActive(run)) {
-        return;
-      }
-
-      await providerSession.finish();
       await withTimeout(
-        providerTask ?? Promise.resolve(),
+        (async () => {
+          await audio?.stop();
+          await audioTask;
+
+          if (!this.#isActive(run)) {
+            return;
+          }
+
+          await providerSession.finish();
+          await providerTask;
+        })(),
         FINALIZATION_TIMEOUT_MS,
         this.#provider.provider,
       );

@@ -1,4 +1,12 @@
 export {
+  createBrowserAudioSource,
+  getBrowserVoiceInputSupport,
+  normalizeBrowserAudioError,
+  type BrowserVoiceInputCapability,
+  type BrowserVoiceInputSupport,
+  type CreateBrowserAudioSourceOptions,
+} from "./browser-audio.js";
+export {
   VoiceInputError,
   createVoiceInputSession,
   type CreateVoiceInputSessionOptions,

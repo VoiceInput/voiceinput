@@ -1,5 +1,6 @@
 import {
   VoiceInputError,
+  type VoiceInputProviderV1,
   type VoiceTranscriptionOptions,
 } from "@voiceinput/provider";
 import {
@@ -586,7 +587,74 @@ describe("graceful finalization", () => {
     expect(session.getSnapshot().status).toBe("error");
     expect(session.getSnapshot().error?.code).toBe("provider-error");
   });
+
+  it("bounds shutdown when sending the last audio frame stalls", async () => {
+    vi.useFakeTimers();
+    const fake = createFakeVoiceInputProvider();
+    const sendAudio = vi.fn<() => Promise<void>>(
+      () => new Promise<void>(() => {}),
+    );
+    const provider = overrideProviderSession(fake, { sendAudio });
+    const audio = createFakeAudioSource();
+    const session = createVoiceInputSession({
+      provider,
+      audioSource: audio.audioSource,
+    });
+    await session.start();
+    audio.emitChunk(new Int16Array([1, 2]));
+    await waitFor(() => expect(sendAudio).toHaveBeenCalledOnce());
+
+    const stop = session.stop();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await stop;
+
+    expect(session.getSnapshot()).toMatchObject({
+      status: "error",
+      error: { code: "provider-error" },
+    });
+  });
+
+  it("bounds shutdown when the provider finish call stalls", async () => {
+    vi.useFakeTimers();
+    const fake = createFakeVoiceInputProvider();
+    const finish = vi.fn<() => Promise<void>>(
+      () => new Promise<void>(() => {}),
+    );
+    const provider = overrideProviderSession(fake, { finish });
+    const audio = createFakeAudioSource();
+    const session = createVoiceInputSession({
+      provider,
+      audioSource: audio.audioSource,
+    });
+    await session.start();
+
+    const stop = session.stop();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await stop;
+
+    expect(finish).toHaveBeenCalledOnce();
+    expect(session.getSnapshot()).toMatchObject({
+      status: "error",
+      error: { code: "provider-error" },
+    });
+  });
 });
+
+function overrideProviderSession(
+  fake: FakeVoiceInputProvider,
+  overrides: Partial<{
+    sendAudio(chunk: Int16Array): PromiseLike<void> | void;
+    finish(): PromiseLike<void> | void;
+  }>,
+): VoiceInputProviderV1 {
+  return {
+    ...fake.provider,
+    async doOpen(options) {
+      const session = await fake.provider.doOpen(options);
+      return { ...session, ...overrides };
+    },
+  };
+}
 
 describe("text engine integration", () => {
   it("forwards transcripts and waits in processing before emitting stop", async () => {
