@@ -34,7 +34,7 @@
     }
   },
   "dependencies": {
-    "@voiceinput/core": "workspace:*"
+    "@voiceinput/provider": "workspace:*"
   },
   "publishConfig": {
     "access": "public"

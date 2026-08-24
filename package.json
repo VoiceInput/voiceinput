@@ -18,7 +18,7 @@
     "test": "turbo run test",
     "test:browser": "turbo run test:browser",
     "test:e2e": "turbo run test:e2e",
-    "pack": "turbo run pack && node scripts/validate-packages.mjs"
+    "validate:packages": "turbo run pack && node scripts/validate-packages.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
@@ -29,6 +29,7 @@
     "publint": "0.3.24",
     "tsdown": "0.22.14",
     "turbo": "2.10.11",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
   }
 }

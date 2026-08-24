@@ -1,5 +1,5 @@
 {
-  "name": "@voiceinput/openai",
+  "name": "@voiceinput/provider",
   "version": "0.0.0",
   "type": "module",
   "license": "MIT",
@@ -21,28 +21,25 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./server": {
-      "browser": null,
+    "./test": {
       "import": {
-        "types": "./dist/server.d.ts",
-        "default": "./dist/server.js"
+        "types": "./dist/test.d.ts",
+        "default": "./dist/test.js"
       },
       "require": {
-        "types": "./dist/server.d.cts",
-        "default": "./dist/server.cjs"
+        "types": "./dist/test.d.cts",
+        "default": "./dist/test.cjs"
       }
     }
-  },
-  "dependencies": {
-    "@voiceinput/provider": "workspace:*"
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/server.ts",
-    "dev": "tsdown src/index.ts src/server.ts --watch",
+    "build": "tsdown src/index.ts src/test.ts",
+    "dev": "tsdown src/index.ts src/test.ts --watch",
     "pack": "pnpm pack --pack-destination .",
+    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "lint": "oxlint --config ../../.oxlintrc.json .",
     "format:check": "prettier --check ."

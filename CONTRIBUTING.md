@@ -22,7 +22,9 @@ browser code, public-prefixed variables, fixtures, logs, or committed files.
 
 ## Workspace layout
 
-- `packages/core`: framework-neutral session and browser behavior
+- `packages/provider`: versioned provider contracts and conformance utilities
+- `packages/core`: framework-neutral session, audio-source, and insertion
+  behavior
 - `packages/react`: React bindings and optional controls
 - `packages/openai`: OpenAI client and server integration
 - `packages/elevenlabs`: ElevenLabs client and server integration
@@ -42,7 +44,7 @@ pnpm format:check
 pnpm test
 pnpm test:browser
 pnpm test:e2e
-pnpm run pack
+pnpm validate:packages
 ```
 
 Run `pnpm format` to apply Prettier formatting. Oxlint is the only

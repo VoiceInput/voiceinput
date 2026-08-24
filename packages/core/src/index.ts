@@ -1,1 +1,15 @@
-export {};
+export {
+  VoiceInputError,
+  createVoiceInputSession,
+  type CreateVoiceInputSessionOptions,
+  type PreparedVoiceAudioSource,
+  type VoiceAudioSource,
+  type VoiceAudioSourcePrepareOptions,
+  type VoiceInputErrorCode,
+  type VoiceInputErrorOptions,
+  type VoiceInputSession,
+  type VoiceInputSessionEvent,
+  type VoiceInputSnapshot,
+  type VoiceInputStatus,
+  type VoiceInputStopReason,
+} from "./session.js";

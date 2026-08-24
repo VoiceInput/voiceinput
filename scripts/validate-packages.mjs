@@ -5,7 +5,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
-const packages = ["core", "react", "openai", "elevenlabs", "deepgram"];
+const packages = [
+  "provider",
+  "core",
+  "react",
+  "openai",
+  "elevenlabs",
+  "deepgram",
+];
 const providerPackages = ["openai", "elevenlabs", "deepgram"];
 const reactVersions = ["18.3.1", "19.2.8"];
 
@@ -56,8 +63,12 @@ for (const [packageName, tarball] of tarballs) {
 }
 
 const esmConsumer = `
-import "@voiceinput/core";
-import "@voiceinput/core/testing";
+import { VoiceInputError } from "@voiceinput/provider";
+import {
+  createFakeVoiceInputProvider,
+  createVoiceInputProviderV1ConformanceCases,
+} from "@voiceinput/provider/test";
+import { createVoiceInputSession } from "@voiceinput/core";
 import "@voiceinput/react";
 import "@voiceinput/openai";
 import "@voiceinput/openai/server";
@@ -65,6 +76,22 @@ import "@voiceinput/elevenlabs";
 import "@voiceinput/elevenlabs/server";
 import "@voiceinput/deepgram";
 import "@voiceinput/deepgram/server";
+
+const fake = createFakeVoiceInputProvider({ sampleRate: 24_000 });
+const cases = createVoiceInputProviderV1ConformanceCases({
+  createHarness: () => createFakeVoiceInputProvider({ autoOpen: false }),
+});
+
+if (
+  fake.provider.sampleRate !== 24_000 ||
+  cases.length === 0 ||
+  typeof createVoiceInputSession !== "function" ||
+  !VoiceInputError.isInstance(
+    new VoiceInputError({ code: "provider-error", message: "test" }),
+  )
+) {
+  throw new Error("The provider or core runtime exports are invalid");
+}
 
 const stylesheet = import.meta.resolve("@voiceinput/react/styles.css");
 
@@ -74,8 +101,12 @@ if (!stylesheet.endsWith("/styles.css")) {
 `;
 
 const cjsConsumer = `
-require("@voiceinput/core");
-require("@voiceinput/core/testing");
+const { VoiceInputError } = require("@voiceinput/provider");
+const {
+  createFakeVoiceInputProvider,
+  createVoiceInputProviderV1ConformanceCases,
+} = require("@voiceinput/provider/test");
+const { createVoiceInputSession } = require("@voiceinput/core");
 require("@voiceinput/react");
 require("@voiceinput/openai");
 require("@voiceinput/openai/server");
@@ -83,6 +114,22 @@ require("@voiceinput/elevenlabs");
 require("@voiceinput/elevenlabs/server");
 require("@voiceinput/deepgram");
 require("@voiceinput/deepgram/server");
+
+const fake = createFakeVoiceInputProvider({ sampleRate: 24_000 });
+const cases = createVoiceInputProviderV1ConformanceCases({
+  createHarness: () => createFakeVoiceInputProvider({ autoOpen: false }),
+});
+
+if (
+  fake.provider.sampleRate !== 24_000 ||
+  cases.length === 0 ||
+  typeof createVoiceInputSession !== "function" ||
+  !VoiceInputError.isInstance(
+    new VoiceInputError({ code: "provider-error", message: "test" }),
+  )
+) {
+  throw new Error("The provider or core runtime exports are invalid");
+}
 
 const stylesheet = require.resolve("@voiceinput/react/styles.css");
 
@@ -92,8 +139,18 @@ if (!stylesheet.endsWith("/styles.css")) {
 `;
 
 const typeConsumer = `
-import "@voiceinput/core";
-import "@voiceinput/core/testing";
+import type {
+  VoiceInputProviderV1,
+  VoiceInputProviderV1Session,
+} from "@voiceinput/provider";
+import {
+  createFakeVoiceInputProvider,
+  createVoiceInputProviderV1ConformanceCases,
+} from "@voiceinput/provider/test";
+import {
+  createVoiceInputSession,
+  type VoiceAudioSource,
+} from "@voiceinput/core";
 import "@voiceinput/react";
 import "@voiceinput/openai";
 import "@voiceinput/openai/server";
@@ -101,6 +158,18 @@ import "@voiceinput/elevenlabs";
 import "@voiceinput/elevenlabs/server";
 import "@voiceinput/deepgram";
 import "@voiceinput/deepgram/server";
+
+declare const provider: VoiceInputProviderV1;
+declare const providerSession: VoiceInputProviderV1Session;
+declare const audioSource: VoiceAudioSource;
+
+provider.validateOptions({ language: "en-CA" });
+providerSession.sendAudio(new Int16Array([1, 2]));
+createVoiceInputSession({ provider, audioSource });
+createFakeVoiceInputProvider({ sampleRate: 16_000 });
+createVoiceInputProviderV1ConformanceCases({
+  createHarness: () => createFakeVoiceInputProvider({ autoOpen: false }),
+});
 `;
 
 const browserConsumer = `
