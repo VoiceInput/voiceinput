@@ -2,7 +2,8 @@
   "extends": "../../tsconfig.react.json",
   "compilerOptions": {
     "composite": true,
+    "plugins": [{ "name": "next" }],
     "tsBuildInfoFile": "../../node_modules/.cache/typescript/playground-next.tsbuildinfo"
   },
-  "include": ["src"]
+  "include": ["next-env.d.ts", "src", ".next/types/**/*.ts"]
 }

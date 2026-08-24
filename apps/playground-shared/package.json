@@ -1,0 +1,36 @@
+{
+  "name": "@voiceinput/playground-shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "dependencies": {
+    "@voiceinput/core": "workspace:*",
+    "@voiceinput/openai": "workspace:*",
+    "@voiceinput/provider": "workspace:*",
+    "@voiceinput/react": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "react": "19.2.8"
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts",
+    "dev": "tsdown src/index.ts --watch --no-clean",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "oxlint --config ../../.oxlintrc.json .",
+    "format:check": "prettier --check ."
+  }
+}

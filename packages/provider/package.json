@@ -37,7 +37,7 @@
   },
   "scripts": {
     "build": "tsdown src/index.ts src/test.ts",
-    "dev": "tsdown src/index.ts src/test.ts --watch",
+    "dev": "tsdown src/index.ts src/test.ts --watch --no-clean",
     "pack": "pnpm pack --pack-destination .",
     "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json --noEmit",

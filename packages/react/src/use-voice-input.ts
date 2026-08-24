@@ -153,6 +153,10 @@ export function useVoiceInput(
   ]);
   const currentTextEngineRef = useRef(textEngine);
   currentTextEngineRef.current = textEngine;
+  const getTextSnapshot = useCallback(
+    () => textEngine.getSnapshot(),
+    [textEngine],
+  );
 
   useEffect(
     () => () => {
@@ -398,6 +402,7 @@ export function useVoiceInput(
       targetRef,
       triggerProps,
       isSupported,
+      getTextSnapshot,
       start,
       stop,
       cancel,
@@ -405,6 +410,7 @@ export function useVoiceInput(
     }),
     [
       cancel,
+      getTextSnapshot,
       isSupported,
       snapshot,
       start,
@@ -424,6 +430,7 @@ function dispatchCallback(
   callbacks: UseVoiceInputOptions,
   event: VoiceInputSessionEvent,
 ): void {
+  callbacks.onEvent?.(event);
   switch (event.type) {
     case "status-change": {
       callbacks.onStatusChange?.(event.status, event.previousStatus);
@@ -450,6 +457,10 @@ function dispatchCallback(
       break;
     }
     case "cancel": {
+      break;
+    }
+    case "speech-start":
+    case "speech-end": {
       break;
     }
   }

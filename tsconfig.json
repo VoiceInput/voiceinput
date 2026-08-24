@@ -8,6 +8,8 @@
     { "path": "./packages/openai" },
     { "path": "./packages/elevenlabs" },
     { "path": "./packages/deepgram" },
+    { "path": "./apps/playground-auth" },
+    { "path": "./apps/playground-shared" },
     { "path": "./apps/playground-next" },
     { "path": "./apps/playground-vite" },
     { "path": "./apps/playground-api" }

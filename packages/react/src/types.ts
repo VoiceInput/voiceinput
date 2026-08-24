@@ -2,10 +2,12 @@ import type {
   VoiceAudioSource,
   VoiceInputError,
   VoiceInputInterimBehavior,
+  VoiceInputSessionEvent,
   VoiceInputSnapshot,
   VoiceInputStatus,
   VoiceInputStopReason,
   VoiceInputTextTarget,
+  VoiceInputTextEngineSnapshot,
   VoiceInputTransformTranscript,
 } from "@voiceinput/core";
 import type {
@@ -37,6 +39,7 @@ export interface UseVoiceInputOptions {
   transformTimeoutMs?: number;
   activationMode?: VoiceInputActivationMode;
   disabled?: boolean;
+  onEvent?: (event: VoiceInputSessionEvent) => void;
   onStatusChange?: (
     status: VoiceInputStatus,
     previousStatus: VoiceInputStatus,
@@ -66,8 +69,9 @@ export interface UseVoiceInputResult extends VoiceInputSnapshot {
   readonly targetRef: RefCallback<VoiceInputTextTarget>;
   readonly triggerProps: VoiceInputTriggerProps;
   readonly isSupported: boolean;
-  start(): Promise<void>;
-  stop(reason?: VoiceInputStopReason): Promise<void>;
-  cancel(): Promise<void>;
-  toggle(): Promise<void>;
+  getTextSnapshot(this: void): VoiceInputTextEngineSnapshot;
+  start(this: void): Promise<void>;
+  stop(this: void, reason?: VoiceInputStopReason): Promise<void>;
+  cancel(this: void): Promise<void>;
+  toggle(this: void): Promise<void>;
 }

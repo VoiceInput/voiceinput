@@ -31,7 +31,7 @@
   },
   "scripts": {
     "build": "tsdown src/index.ts",
-    "dev": "tsdown src/index.ts --watch",
+    "dev": "tsdown src/index.ts --watch --no-clean",
     "pack": "pnpm pack --pack-destination .",
     "test": "vitest run --config vitest.config.ts",
     "test:browser": "vitest run --config vitest.browser.config.ts",

@@ -1,0 +1,22 @@
+{
+  "name": "@voiceinput/playground-auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown src/index.ts",
+    "dev": "tsdown src/index.ts --watch --no-clean",
+    "test": "vitest run",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "oxlint --config ../../.oxlintrc.json .",
+    "format:check": "prettier --check ."
+  }
+}

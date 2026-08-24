@@ -85,6 +85,8 @@ export type VoiceInputSessionEvent =
     }
   | { type: "stop"; reason: VoiceInputStopReason }
   | { type: "cancel" }
+  | { type: "speech-start" }
+  | { type: "speech-end" }
   | { type: "error"; error: VoiceInputError };
 
 export interface VoiceAudioSourcePrepareOptions {
@@ -495,8 +497,12 @@ class VoiceInputSessionController implements VoiceInputSession {
         );
         return true;
       }
-      case "speech-start":
+      case "speech-start": {
+        this.#emit({ type: "speech-start" });
+        return false;
+      }
       case "speech-end": {
+        this.#emit({ type: "speech-end" });
         return false;
       }
     }

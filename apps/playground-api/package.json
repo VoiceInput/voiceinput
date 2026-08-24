@@ -3,7 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "@voiceinput/openai": "workspace:*",
+    "@voiceinput/playground-auth": "workspace:*",
+    "hono": "4.13.3"
+  },
+  "devDependencies": {
+    "tsx": "4.23.12"
+  },
   "scripts": {
+    "build": "tsdown src/index.ts",
+    "dev": "tsx watch --env-file=../../.env src/index.ts",
+    "start": "node --env-file-if-exists=../../.env dist/index.js",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "lint": "oxlint --config ../../.oxlintrc.json .",
     "format:check": "prettier --check ."

@@ -1,10 +1,12 @@
 import type {
   PreparedVoiceAudioSource,
   VoiceAudioSource,
+  VoiceInputSessionEvent,
+  VoiceInputTextEngineSnapshot,
 } from "@voiceinput/core";
 import { createFakeVoiceInputProvider } from "@voiceinput/provider/test";
 import type { VoiceInputProviderV1 } from "@voiceinput/provider";
-import { act, StrictMode, useState } from "react";
+import { act, StrictMode, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -94,6 +96,41 @@ describe("useVoiceInput", () => {
 
     await vi.waitFor(() => expect(textarea.value).toBe("hello world"));
     expect(inputEvents).toHaveBeenCalledOnce();
+  });
+
+  it("exposes exact text ownership snapshots", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const events: VoiceInputSessionEvent[] = [];
+    let readSnapshot: (() => VoiceInputTextEngineSnapshot) | undefined;
+    render(
+      <VoiceInputProvider
+        provider={fake.provider}
+        audioSource={createFakeAudioSource()}
+      >
+        <InspectableField
+          expose={(read) => (readSnapshot = read)}
+          onEvent={(event) => events.push(event)}
+        />
+      </VoiceInputProvider>,
+    );
+    const button = getButton("inspectable trigger");
+    await waitForEnabled(button);
+
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({ type: "interim", text: "draft" });
+      fake.controller.emit({ type: "speech-start" });
+      fake.controller.emit({ type: "speech-end" });
+    });
+
+    await vi.waitFor(() =>
+      expect(readSnapshot?.().spans).toMatchObject([
+        { start: 0, end: 5, state: "provisional", text: "draft" },
+      ]),
+    );
+    expect(events).toContainEqual({ type: "speech-start" });
+    expect(events).toContainEqual({ type: "speech-end" });
   });
 
   it("starts and preserves speech on pointer hold release", async () => {
@@ -417,6 +454,27 @@ function ControlledField({
         onChange={(event) => setValue(event.currentTarget.value)}
       />
       <button aria-label="controlled trigger" {...triggerProps}>
+        Speak
+      </button>
+    </>
+  );
+}
+
+function InspectableField({
+  expose,
+  onEvent,
+}: {
+  expose: (readSnapshot: () => VoiceInputTextEngineSnapshot) => void;
+  onEvent: (event: VoiceInputSessionEvent) => void;
+}): React.JSX.Element {
+  const { getTextSnapshot, targetRef, triggerProps } = useVoiceInput({
+    onEvent,
+  });
+  useEffect(() => expose(getTextSnapshot), [expose, getTextSnapshot]);
+  return (
+    <>
+      <textarea aria-label="inspectable" ref={targetRef} />
+      <button aria-label="inspectable trigger" {...triggerProps}>
         Speak
       </button>
     </>

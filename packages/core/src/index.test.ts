@@ -313,6 +313,8 @@ describe("session lifecycle", () => {
     provider.controller.emit({ type: "interim", text: "hello" });
     provider.controller.emit({ type: "final", text: "hello" });
     provider.controller.emit({ type: "final", text: " world" });
+    provider.controller.emit({ type: "speech-start" });
+    provider.controller.emit({ type: "speech-end" });
     await waitFor(() => {
       expect(session.getSnapshot().finalTranscript).toBe("hello world");
     });
@@ -323,6 +325,9 @@ describe("session lifecycle", () => {
       expect(provider.controller.sessions[0]?.audioChunks).toHaveLength(2);
     });
     await session.stop();
+
+    expect(events).toContainEqual({ type: "speech-start" });
+    expect(events).toContainEqual({ type: "speech-end" });
 
     expect(session.getSnapshot()).toMatchObject({
       status: "idle",
