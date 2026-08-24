@@ -1,0 +1,77 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "eslint",
+    "typescript",
+    "oxc",
+    "unicorn",
+    "react",
+    "jsx-a11y",
+    "import",
+    "promise",
+    "vitest",
+    "nextjs"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "options": {
+    "typeAware": true,
+    "typeCheck": false,
+    "denyWarnings": true,
+    "reportUnusedDisableDirectives": "error"
+  },
+  "ignorePatterns": [
+    ".private/**",
+    ".turbo/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/.next/**",
+    "**/playwright-report/**",
+    "**/test-results/**"
+  ],
+  "settings": {
+    "next": {
+      "rootDir": "apps/playground-next"
+    }
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ],
+      "env": {
+        "vitest": true
+      },
+      "rules": {
+        "typescript/no-non-null-assertion": "off"
+      }
+    },
+    {
+      "files": ["packages/*/src/server/**", "apps/playground-api/**"],
+      "env": {
+        "node": true
+      }
+    },
+    {
+      "files": ["**/*.worklet.ts", "**/worklets/**/*.ts"],
+      "globals": {
+        "AudioWorkletProcessor": "readonly",
+        "currentFrame": "readonly",
+        "currentTime": "readonly",
+        "registerProcessor": "readonly",
+        "sampleRate": "readonly"
+      }
+    },
+    {
+      "files": ["apps/playground-*/**"],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    }
+  ]
+}

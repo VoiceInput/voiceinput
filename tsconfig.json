@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/react" },
+    { "path": "./packages/openai" },
+    { "path": "./packages/elevenlabs" },
+    { "path": "./packages/deepgram" },
+    { "path": "./apps/playground-next" },
+    { "path": "./apps/playground-vite" },
+    { "path": "./apps/playground-api" }
+  ]
+}

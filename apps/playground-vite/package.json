@@ -1,0 +1,11 @@
+{
+  "name": "@voiceinput/playground-vite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "oxlint --config ../../.oxlintrc.json .",
+    "format:check": "prettier --check ."
+  }
+}

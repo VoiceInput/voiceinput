@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.react.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "../../node_modules/.cache/typescript/playground-next.tsbuildinfo"
+  },
+  "include": ["src"]
+}

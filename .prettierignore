@@ -1,0 +1,10 @@
+.private/
+.turbo/
+node_modules/
+dist/
+coverage/
+.next/
+playwright-report/
+test-results/
+pnpm-lock.yaml
+*.tgz

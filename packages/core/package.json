@@ -1,0 +1,14 @@
+{
+  "name": "@voiceinput/core",
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "oxlint --config ../../.oxlintrc.json .",
+    "format:check": "prettier --check ."
+  }
+}

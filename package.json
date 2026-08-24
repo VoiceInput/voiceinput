@@ -1,0 +1,30 @@
+{
+  "name": "voiceinput",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.23.0",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": "11.23.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "turbo run test",
+    "test:browser": "turbo run test:browser",
+    "test:e2e": "turbo run test:e2e",
+    "pack": "turbo run pack"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "oxlint": "1.79.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "prettier": "3.9.6",
+    "turbo": "2.10.11",
+    "typescript": "7.0.2"
+  }
+}
