@@ -26,7 +26,6 @@ for (const playground of playgrounds) {
         page.getByText(playground.name, { exact: true }),
       ).toBeVisible();
 
-      await page.getByRole("button", { name: "Issue local session" }).click();
       await expect(
         page.getByText("auth: login", { exact: true }),
       ).toBeVisible();

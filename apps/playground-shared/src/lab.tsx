@@ -157,7 +157,8 @@ function LabWorkspace({
   const [diagnostics, setDiagnostics] = useState<
     Partial<Record<FieldId, VoiceInputTextEngineSnapshot>>
   >({});
-  const [authState, setAuthState] = useState("not checked");
+  const [authState, setAuthState] = useState("enabling");
+  const requestedDefaultAuth = useRef(false);
   const handles = useRef(new Map<FieldId, FieldHandle>());
   const eventId = useRef(0);
 
@@ -256,6 +257,14 @@ function LabWorkspace({
     },
     [authEndpoint, log],
   );
+
+  useEffect(() => {
+    if (requestedDefaultAuth.current) {
+      return;
+    }
+    requestedDefaultAuth.current = true;
+    void runAuthControl("login");
+  }, [runAuthControl]);
 
   const runDelayedFinal = useCallback((): void => {
     withListeningFake((handle) => {
