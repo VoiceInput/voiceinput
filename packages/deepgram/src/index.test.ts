@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { deepgram } from "./index.js";
 
 describe("deepgram", () => {
-  it("maps shared settings, binary PCM16, results, and close semantics", async () => {
+  it("maps shared settings, language hints, binary PCM16, results, and close semantics", async () => {
     const transport = createTransport();
     const provider = deepgram({
       tokenEndpoint: "/token",
@@ -36,7 +36,7 @@ describe("deepgram", () => {
     expect(socket.url.searchParams.get("sample_rate")).toBe("16000");
     expect(socket.url.searchParams.get("interim_results")).toBe("true");
     expect(socket.url.searchParams.get("vad_events")).toBe("true");
-    expect(socket.url.searchParams.get("language")).toBe("en-CA");
+    expect(socket.url.searchParams.get("language")).toBe("en");
     expect(socket.url.searchParams.getAll("keyterm")).toEqual([
       "VoiceInput",
       "Nova",
@@ -128,6 +128,32 @@ describe("deepgram", () => {
     expect(() => medical.validateOptions({})).toThrowError(
       expect.objectContaining({ code: "invalid-configuration" }),
     );
+  });
+
+  it.each([
+    ["nova-2", "en-CA", "en"],
+    ["nova-2-general", "en-CA", "en"],
+    ["nova-3", "en-CA", "en"],
+    ["nova-3-general", "en-CA", "en"],
+    ["nova-3", "en-GB", "en-GB"],
+    ["nova-3-medical", "en-CA", "en-CA"],
+  ])("maps %s language %s to %s", async (model, language, expected) => {
+    const transport = createTransport();
+    const sessionPromise = Promise.resolve(
+      deepgram({
+        tokenEndpoint: "/token",
+        model,
+        fetch: transport.fetch,
+        webSocket: MockWebSocket as unknown as typeof WebSocket,
+      }).doOpen({
+        abortSignal: new AbortController().signal,
+        language,
+      }),
+    );
+    const socket = await transport.waitForSocket();
+    expect(socket.url.searchParams.get("language")).toBe(expected);
+    socket.open();
+    (await sessionPromise).abort();
   });
 
   it("surfaces Deepgram's authoritative keyterm token rejection", async () => {

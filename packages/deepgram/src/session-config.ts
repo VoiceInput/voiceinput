@@ -3,6 +3,15 @@ import type { VoiceTranscriptionOptions } from "@voiceinput/provider";
 export const DEEPGRAM_DEFAULT_MODEL = "nova-3";
 export const DEEPGRAM_SAMPLE_RATE = 16_000;
 
+const GENERAL_NOVA_ENGLISH_LANGUAGES = new Set([
+  "en",
+  "en-AU",
+  "en-GB",
+  "en-IN",
+  "en-NZ",
+  "en-US",
+]);
+
 export interface DeepgramRealtimeSettings {
   readonly smartFormat?: boolean;
   readonly punctuate?: boolean;
@@ -92,7 +101,13 @@ function validateLanguage(value: string | undefined, model: string): string {
     throw new TypeError("language must be a valid BCP 47 language tag.");
   }
   try {
-    return new Intl.Locale(value).toString();
+    const language = new Intl.Locale(value);
+    const canonical = language.toString();
+    return supportsMultilingual(model) &&
+      language.language === "en" &&
+      !GENERAL_NOVA_ENGLISH_LANGUAGES.has(canonical)
+      ? "en"
+      : canonical;
   } catch {
     throw new TypeError("language must be a valid BCP 47 language tag.");
   }

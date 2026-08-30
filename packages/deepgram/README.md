@@ -28,6 +28,9 @@ const provider = deepgram({
 - Audio: mono linear PCM16 at 16 kHz
 - Omitted language: `multi` for `nova-2`, `nova-2-general`, `nova-3`, and
   `nova-3-general`; other models require an explicit BCP 47 language
+- General Nova-2 and Nova-3 preserve supported regional English tags and
+  normalize unsupported tags such as `en-CA` to `en`; specialized models keep
+  their regional language tags exact
 - `vocabulary`: Deepgram key terms, supported only by Nova-3 model IDs
 - `endpointing`: provider default when omitted, disabled when `false`, or the
   supplied positive integer silence threshold
