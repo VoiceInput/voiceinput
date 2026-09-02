@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  cpSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -544,10 +545,81 @@ for (const reactVersion of reactVersions) {
         [join(consumerDirectory, "node_modules/next/dist/bin/next"), "build"],
         { cwd: nextDirectory },
       );
+      validateGoldenPaths(consumerDirectory);
     }
   } finally {
     rmSync(consumerDirectory, { force: true, recursive: true });
   }
+}
+
+function validateGoldenPaths(consumerDirectory) {
+  const environment = {
+    ...process.env,
+    APP_ORIGIN: "http://localhost:3000",
+    CLERK_PUBLISHABLE_KEY: "pk_test_example",
+    CLERK_SECRET_KEY: "sk_test_example",
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_example",
+    OPENAI_API_KEY: "test",
+    UPSTASH_REDIS_REST_TOKEN: "test",
+    UPSTASH_REDIS_REST_URL: "https://example.invalid",
+    VITE_CLERK_PUBLISHABLE_KEY: "pk_test_example",
+  };
+  const copiedExamples = join(consumerDirectory, "examples");
+  const nextDirectory = join(copiedExamples, "nextjs-app-router");
+  const viteDirectory = join(copiedExamples, "vite-hono");
+  mkdirSync(copiedExamples, { recursive: true });
+  copyGoldenPath("nextjs-app-router", nextDirectory);
+  copyGoldenPath("vite-hono", viteDirectory);
+
+  for (const directory of [nextDirectory, viteDirectory]) {
+    const packagePath = join(directory, "package.json");
+    const manifest = JSON.parse(readFileSync(packagePath, "utf8"));
+    manifest.dependencies["@voiceinput/openai"] =
+      `file:${tarballs.get("openai")}`;
+    manifest.dependencies["@voiceinput/react"] =
+      `file:${tarballs.get("react")}`;
+    writeFileSync(packagePath, `${JSON.stringify(manifest, undefined, 2)}\n`);
+    run(
+      "npm",
+      [
+        "install",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+        "--no-package-lock",
+        ...tarballs.values(),
+      ],
+      { cwd: directory },
+    );
+  }
+
+  console.log("\nBuilding packed-package golden paths");
+  run("npm", ["run", "build"], { cwd: nextDirectory, env: environment });
+  run("npm", ["run", "build"], { cwd: viteDirectory, env: environment });
+}
+
+function copyGoldenPath(name, destination) {
+  const excluded = new Set([
+    ".next",
+    ".turbo",
+    "bun.lock",
+    "bun.lockb",
+    "dist",
+    "node_modules",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+  ]);
+  cpSync(join(rootDirectory, "examples", name), destination, {
+    recursive: true,
+    filter: (source) => {
+      const fileName = basename(source);
+      return (
+        !excluded.has(fileName) &&
+        (!fileName.startsWith(".env") || fileName === ".env.example")
+      );
+    },
+  });
 }
 
 console.log("\nAll packed-package checks passed.");

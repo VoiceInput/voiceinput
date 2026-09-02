@@ -108,7 +108,7 @@ export function Composer() {
         value={message}
         onChange={(event) => setMessage(event.currentTarget.value)}
       />
-      <button {...voice.triggerProps}>
+      <button {...voice.getTriggerProps()}>
         {voice.status === "listening" ? "Stop" : "Speak"}
       </button>
       {voice.error ? <p role="alert">{voice.error.message}</p> : null}
@@ -136,7 +136,9 @@ import "@voiceinput/react/styles.css";
 ```
 
 See the full [Next.js guide](docs/nextjs.md),
-[Vite/Hono guide](docs/vite-hono.md), or [Express bridge](docs/express.md).
+[Vite/Hono guide](docs/vite-hono.md), or [Express bridge](docs/express.md). For
+copyable consumer projects, start with the [golden paths](docs/golden-paths.md)
+and [authentication recipes](docs/authentication-recipes.md).
 
 ## Architecture and privacy
 
@@ -201,6 +203,8 @@ backgrounding, expiring credentials, and network failures.
 - [ElevenLabs](packages/elevenlabs/README.md)
 - [Deepgram](packages/deepgram/README.md)
 - [Write a custom provider](docs/custom-provider.md)
+- [Minimal golden paths](docs/golden-paths.md)
+- [Authentication and durable quota recipes](docs/authentication-recipes.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
 ## Local development

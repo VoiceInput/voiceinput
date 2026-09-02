@@ -16,7 +16,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev --concurrency=20",
     "typecheck": "tsc --project tsconfig.e2e.json --noEmit && turbo run typecheck",
-    "lint": "turbo run lint && oxlint --config .oxlintrc.json e2e scripts playwright.config.ts playwright.safari.config.ts tsdown.config.ts",
+    "lint": "turbo run lint && oxlint --config .oxlintrc.json e2e examples scripts playwright.config.ts playwright.safari.config.ts tsdown.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "turbo run test && vitest run scripts/release.test.ts scripts/provider-smoke.test.mjs",
