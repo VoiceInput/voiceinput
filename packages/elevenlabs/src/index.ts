@@ -18,6 +18,8 @@ import {
 
 const DEFAULT_REALTIME_URL =
   "wss://api.elevenlabs.io/v1/speech-to-text/realtime";
+const DEFAULT_FINISH_TIMEOUT_MS = 4_000;
+const FINISH_DRAIN_MS = 250;
 
 export interface ElevenLabsVoiceInputProviderOptions extends ElevenLabsRealtimeSettings {
   readonly tokenEndpoint: string | URL;
@@ -25,6 +27,7 @@ export interface ElevenLabsVoiceInputProviderOptions extends ElevenLabsRealtimeS
   readonly fetch?: typeof globalThis.fetch;
   readonly webSocket?: typeof globalThis.WebSocket;
   readonly realtimeUrl?: string;
+  readonly finishTimeoutMs?: number;
 }
 
 export function elevenlabs(
@@ -41,6 +44,10 @@ export function elevenlabs(
   const realtimeUrl = factoryString(
     options.realtimeUrl ?? DEFAULT_REALTIME_URL,
     "realtimeUrl",
+  );
+  const finishTimeoutMs = positiveInteger(
+    options.finishTimeoutMs ?? DEFAULT_FINISH_TIMEOUT_MS,
+    "finishTimeoutMs",
   );
   const providerSettings: ElevenLabsRealtimeSettings = {
     ...(options.vadThreshold === undefined
@@ -92,6 +99,7 @@ export function elevenlabs(
         abortSignal: callOptions.abortSignal,
         configuration,
         fetchImplementation: options.fetch ?? globalThis.fetch,
+        finishTimeoutMs,
         realtimeUrl,
         tokenEndpoint,
         WebSocketImplementation: options.webSocket ?? globalThis.WebSocket,
@@ -104,6 +112,7 @@ async function openSession(options: {
   abortSignal: AbortSignal;
   configuration: ElevenLabsSessionConfiguration;
   fetchImplementation: typeof globalThis.fetch;
+  finishTimeoutMs: number;
   realtimeUrl: string;
   tokenEndpoint: string;
   WebSocketImplementation: typeof globalThis.WebSocket;
@@ -125,7 +134,11 @@ async function openSession(options: {
       options.configuration,
     ),
   );
-  return await createSession(socket, options.abortSignal);
+  return await createSession(
+    socket,
+    options.abortSignal,
+    options.finishTimeoutMs,
+  );
 }
 
 async function requestToken(
@@ -180,6 +193,7 @@ async function requestToken(
 async function createSession(
   socket: WebSocket,
   abortSignal: AbortSignal,
+  finishTimeoutMs: number,
 ): Promise<VoiceInputProviderV1Session> {
   let controller:
     ReadableStreamDefaultController<VoiceInputProviderV1StreamPart> | undefined;
@@ -200,6 +214,10 @@ async function createSession(
   let closed = false;
   let failed = false;
   let finishing = false;
+  let finishDeferred: Deferred<void> | undefined;
+  let finishSettled = false;
+  let finishTimer: ReturnType<typeof setTimeout> | undefined;
+  let finishDrainTimer: ReturnType<typeof setTimeout> | undefined;
   let lastInterim = "";
   const unsettledFinals: string[] = [];
   let speechActive = false;
@@ -217,15 +235,50 @@ async function createSession(
     abortSignal.removeEventListener("abort", abort);
     controller?.close();
   };
+  const settleFinish = (error?: unknown): void => {
+    if (finishDeferred === undefined || finishSettled) {
+      return;
+    }
+    finishSettled = true;
+    if (finishTimer !== undefined) {
+      clearTimeout(finishTimer);
+      finishTimer = undefined;
+    }
+    if (finishDrainTimer !== undefined) {
+      clearTimeout(finishDrainTimer);
+      finishDrainTimer = undefined;
+    }
+    if (error === undefined) {
+      finishDeferred.resolve(undefined);
+    } else {
+      finishDeferred.reject(error);
+    }
+  };
   const finishCleanly = (): void => {
+    if (lastInterim.length > 0) {
+      lastInterim = "";
+      controller?.enqueue({ type: "interim", text: "" });
+    }
+    endSpeech();
+    settleFinish();
     closeStream();
     closeSocket("finished");
+  };
+  const scheduleFinishDrain = (): void => {
+    if (!finishing || finishSettled) {
+      return;
+    }
+    if (finishDrainTimer !== undefined) {
+      clearTimeout(finishDrainTimer);
+    }
+    finishDrainTimer = setTimeout(finishCleanly, FINISH_DRAIN_MS);
   };
   const fail = (error: VoiceInputError): void => {
     if (closed || failed) {
       return;
     }
     failed = true;
+    settleFinish(error);
     controller?.enqueue({ type: "error", error });
     closeStream();
     closeSocket("aborted");
@@ -261,33 +314,28 @@ async function createSession(
     if (text.length === 0) {
       return;
     }
-    unsettledFinals.push(text);
-    const preservedInterim = isSameTranscriptDraft(lastInterim, text)
-      ? ""
-      : lastInterim;
+    if (!unsettledFinals.includes(text)) {
+      unsettledFinals.push(text);
+    }
+  };
+  const commitTranscript = (text: string): void => {
+    const hadInterim = lastInterim.length > 0;
+    const settledIndex = unsettledFinals.indexOf(text);
+    if (settledIndex !== -1) {
+      unsettledFinals.splice(settledIndex, 1);
+    }
+    const preservedInterim =
+      text.length === 0 || isSameTranscriptDraft(lastInterim, text)
+        ? ""
+        : lastInterim;
     if (preservedInterim.length === 0) {
       lastInterim = "";
     }
     emitFinal(text);
-    if (preservedInterim.length > 0) {
+    if (text.length === 0 && hadInterim) {
+      controller?.enqueue({ type: "interim", text: "" });
+    } else if (preservedInterim.length > 0) {
       controller?.enqueue({ type: "interim", text: preservedInterim });
-    }
-  };
-  const commitTranscript = (text: string): void => {
-    const settledIndex = unsettledFinals.indexOf(text);
-    if (settledIndex === -1) {
-      const preservedInterim = isSameTranscriptDraft(lastInterim, text)
-        ? ""
-        : lastInterim;
-      if (preservedInterim.length === 0) {
-        lastInterim = "";
-      }
-      emitFinal(text);
-      if (preservedInterim.length > 0) {
-        controller?.enqueue({ type: "interim", text: preservedInterim });
-      }
-    } else {
-      unsettledFinals.splice(settledIndex, 1);
     }
     if (!finishing && lastInterim.length === 0) {
       endSpeech();
@@ -302,10 +350,19 @@ async function createSession(
       const type = value["message_type"];
       if (type === "partial_transcript") {
         emitInterim(readText(value));
+        if (finishDrainTimer !== undefined) {
+          scheduleFinishDrain();
+        }
       } else if (type === "final_transcript") {
         settleTranscript(readText(value));
+        if (finishDrainTimer !== undefined) {
+          scheduleFinishDrain();
+        }
       } else if (type === "committed_transcript") {
         commitTranscript(readText(value));
+        if (finishing) {
+          scheduleFinishDrain();
+        }
       } else if (elevenLabsErrorTypes.has(type)) {
         fail(normalizeRealtimeError(value));
       }
@@ -325,6 +382,10 @@ async function createSession(
       return;
     }
     if (event.code === 1000) {
+      if (finishing) {
+        finishCleanly();
+        return;
+      }
       closeStream();
     } else {
       fail(
@@ -342,6 +403,14 @@ async function createSession(
     if (closed) {
       return;
     }
+    settleFinish(
+      abortSignal.reason ??
+        new VoiceInputError({
+          code: "provider-error",
+          message: "The ElevenLabs Realtime session was aborted.",
+          provider: "elevenlabs",
+        }),
+    );
     closeStream();
     closeSocket("aborted");
   }
@@ -376,29 +445,50 @@ async function createSession(
       });
     },
     finish() {
-      if (closed || finishing) {
+      if (finishDeferred !== undefined) {
+        return finishDeferred.promise;
+      }
+      if (closed) {
         return;
       }
       finishing = true;
+      finishDeferred = createDeferred<void>();
       if (!hasAudio) {
         finishCleanly();
-        return;
+        return finishDeferred.promise;
       }
-      sendJson(socket, {
-        message_type: "input_audio_chunk",
-        audio_base_64: "",
-        commit: true,
-        sample_rate: ELEVENLABS_SAMPLE_RATE,
-      });
-      // ElevenLabs does not correlate commit requests with transcript events,
-      // so a delayed VAD commit cannot be distinguished from this final commit.
-      // Preserve every settled result and freeze the latest visible interim,
-      // then follow the official client by closing without claiming a drain.
-      if (lastInterim.length > 0) {
-        emitFinal(lastInterim);
+      try {
+        sendJson(socket, {
+          message_type: "input_audio_chunk",
+          audio_base_64: "",
+          commit: true,
+          sample_rate: ELEVENLABS_SAMPLE_RATE,
+        });
+      } catch (cause) {
+        fail(
+          VoiceInputError.isInstance(cause)
+            ? cause
+            : new VoiceInputError({
+                code: "network-error",
+                message: "Unable to commit the ElevenLabs transcript.",
+                provider: "elevenlabs",
+                retryable: true,
+                cause,
+              }),
+        );
+        return finishDeferred.promise;
       }
-      endSpeech();
-      finishCleanly();
+      finishTimer = setTimeout(() => {
+        fail(
+          new VoiceInputError({
+            code: "network-error",
+            message: `ElevenLabs did not commit the final transcript within ${finishTimeoutMs}ms.`,
+            provider: "elevenlabs",
+            retryable: true,
+          }),
+        );
+      }, finishTimeoutMs);
+      return finishDeferred.promise;
     },
     abort,
   };
@@ -505,6 +595,31 @@ function factoryString(value: string, name: string): string {
     throw invalidConfiguration(new TypeError(`${name} must be non-empty.`));
   }
   return value;
+}
+
+function positiveInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw invalidConfiguration(
+      new TypeError(`${name} must be a positive safe integer.`),
+    );
+  }
+  return value;
+}
+
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  resolve(value: T | PromiseLike<T>): void;
+  reject(reason?: unknown): void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((resolve_, reject_) => {
+    resolve = resolve_;
+    reject = reject_;
+  });
+  return { promise, resolve, reject };
 }
 
 function tokenResponseError(response: Response): VoiceInputError {

@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { readFile } from "node:fs/promises";
 
 import { deepgram } from "../packages/deepgram/dist/index.js";
 import { createDeepgramTokenHandler } from "../packages/deepgram/dist/server.js";
@@ -98,19 +99,28 @@ async function runSmokeCase(smokeCase) {
       abortSignal: abortController.signal,
       language: "en-US",
     });
-    const streamFailure = monitorStream(providerSession.stream).catch(
-      (error) => error,
+    const streamResult = collectStream(providerSession.stream).then(
+      (parts) => ({ parts }),
+      (error) => ({ error }),
     );
-    const chunks = createDeterministicPcm(provider.sampleRate);
+    const chunks = await createSpeechPcm(provider.sampleRate);
     for (const chunk of chunks) {
-      await runWhileStreamHealthy(streamFailure, async () => {
-        await providerSession.sendAudio(chunk);
-        await delay(20, undefined, { signal: abortController.signal });
-      });
+      await providerSession.sendAudio(chunk);
+      await delay(20, undefined, { signal: abortController.signal });
     }
-    await runWhileStreamHealthy(streamFailure, () =>
-      delay(250, undefined, { signal: abortController.signal }),
-    );
+    await providerSession.finish();
+    const outcome = await streamResult;
+    if ("error" in outcome) {
+      throw outcome.error;
+    }
+    const finalTranscript = outcome.parts
+      .filter((part) => part.type === "final")
+      .map((part) => part.text)
+      .join(" ")
+      .trim();
+    if (finalTranscript.length === 0) {
+      throw new Error("Provider returned no committed final transcript.");
+    }
 
     if (!tokenIssued) {
       throw new Error(
@@ -118,11 +128,9 @@ async function runSmokeCase(smokeCase) {
       );
     }
 
-    providerSession.abort("credential-smoke-complete");
     abortController.abort("credential-smoke-complete");
-    await Promise.race([streamFailure, delay(1_000)]);
     console.log(
-      `${smokeCase.name}: token minted, WebSocket opened, PCM streamed`,
+      `${smokeCase.name}: token minted, speech streamed, committed final received (${JSON.stringify(finalTranscript)})`,
     );
   } catch (error) {
     providerSession?.abort("credential-smoke-failed");
@@ -149,46 +157,95 @@ function createHandlerFetch(handler) {
   };
 }
 
-function createDeterministicPcm(sampleRate) {
+async function createSpeechPcm(sampleRate) {
+  const wav = await readFile(
+    new URL(
+      "../fixtures/audio/librispeech-1272-128104-0014.wav",
+      import.meta.url,
+    ),
+  );
+  const source = readPcm16Wav(wav);
+  const samples = resamplePcm16(source.samples, source.sampleRate, sampleRate);
   const chunkLength = Math.round(sampleRate / 50);
-  return Array.from({ length: 25 }, (_, chunkIndex) => {
-    const chunk = new Int16Array(chunkLength);
-    for (let index = 0; index < chunk.length; index += 1) {
-      const sampleIndex = chunkIndex * chunkLength + index;
-      chunk[index] = Math.round(
-        Math.sin((2 * Math.PI * 440 * sampleIndex) / sampleRate) * 3_000,
-      );
-    }
-    return chunk;
-  });
+  const chunks = [];
+  for (let offset = 0; offset < samples.length; offset += chunkLength) {
+    chunks.push(samples.slice(offset, offset + chunkLength));
+  }
+  return chunks;
 }
 
-async function monitorStream(stream) {
+function readPcm16Wav(wav) {
+  if (
+    wav.toString("ascii", 0, 4) !== "RIFF" ||
+    wav.toString("ascii", 8, 12) !== "WAVE"
+  ) {
+    throw new Error("Speech fixture is not a WAV file.");
+  }
+  let sampleRate;
+  let data;
+  for (let offset = 12; offset + 8 <= wav.length;) {
+    const id = wav.toString("ascii", offset, offset + 4);
+    const size = wav.readUInt32LE(offset + 4);
+    const start = offset + 8;
+    if (id === "fmt ") {
+      if (
+        wav.readUInt16LE(start) !== 1 ||
+        wav.readUInt16LE(start + 2) !== 1 ||
+        wav.readUInt16LE(start + 14) !== 16
+      ) {
+        throw new Error("Speech fixture must be mono PCM16.");
+      }
+      sampleRate = wav.readUInt32LE(start + 4);
+    } else if (id === "data") {
+      data = wav.subarray(start, start + size);
+    }
+    offset = start + size + (size % 2);
+  }
+  if (sampleRate === undefined || data === undefined) {
+    throw new Error("Speech fixture is missing WAV format or audio data.");
+  }
+  const samples = new Int16Array(data.length / 2);
+  for (let index = 0; index < samples.length; index += 1) {
+    samples[index] = data.readInt16LE(index * 2);
+  }
+  return { sampleRate, samples };
+}
+
+function resamplePcm16(samples, sourceRate, targetRate) {
+  if (sourceRate === targetRate) {
+    return samples;
+  }
+  const output = new Int16Array(
+    Math.round((samples.length * targetRate) / sourceRate),
+  );
+  for (let index = 0; index < output.length; index += 1) {
+    const position = (index * sourceRate) / targetRate;
+    const left = Math.floor(position);
+    const right = Math.min(left + 1, samples.length - 1);
+    const weight = position - left;
+    output[index] = Math.round(
+      (samples[left] ?? 0) * (1 - weight) + (samples[right] ?? 0) * weight,
+    );
+  }
+  return output;
+}
+
+async function collectStream(stream) {
+  const parts = [];
   const reader = stream.getReader();
   try {
     while (true) {
       const result = await reader.read();
       if (result.done) {
-        throw new Error("Provider stream closed before the smoke completed.");
+        return parts;
       }
       if (result.value.type === "error") {
         throw result.value.error;
       }
+      parts.push(result.value);
     }
   } finally {
     reader.releaseLock();
-  }
-}
-
-async function runWhileStreamHealthy(streamFailure, operation) {
-  const outcome = await Promise.race([
-    Promise.resolve()
-      .then(operation)
-      .then(() => ({ type: "operation-complete" })),
-    streamFailure.then((error) => ({ type: "stream-failure", error })),
-  ]);
-  if (outcome.type === "stream-failure") {
-    throw outcome.error;
   }
 }
 

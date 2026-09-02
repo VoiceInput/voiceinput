@@ -41,6 +41,7 @@ without line breaks. Invalid settings fail before microphone permission.
 | ----------------------------------- | ------------------------------------------------------------- |
 | `tokenEndpoint`                     | Required same-origin endpoint that returns a single-use token |
 | `model`                             | Model ID; default `scribe_v2_realtime`                        |
+| `finishTimeoutMs`                   | Graceful final-commit deadline; default 4 seconds             |
 | `vadThreshold`                      | VAD threshold from 0.1 to 0.9                                 |
 | `minSpeechDurationMs`               | Integer from 50 to 2000                                       |
 | `minSilenceDurationMs`              | Integer from 50 to 2000                                       |

@@ -54,14 +54,15 @@ describe("elevenlabs", () => {
     session.sendAudio(new Int16Array([1, -2]));
     socket.message({ message_type: "partial_transcript", text: "hel" });
     socket.message({ message_type: "final_transcript", text: "hello" });
-    socket.message({ message_type: "committed_transcript", text: "hello" });
-    session.finish();
-    session.finish();
+    const firstFinish = session.finish();
+    expect(session.finish()).toBe(firstFinish);
+    socket.message({ message_type: "committed_transcript", text: "hello!" });
+    await firstFinish;
 
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
       { type: "interim", text: "hel" },
-      { type: "final", text: "hello" },
+      { type: "final", text: "hello!" },
       { type: "speech-end" },
     ]);
     expect(decodeAudio(socket.json[0]?.["audio_base_64"])).toEqual(
@@ -119,7 +120,7 @@ describe("elevenlabs", () => {
     ).not.toThrow();
   });
 
-  it("preserves settled text and freezes the visible tail on finish", async () => {
+  it("waits for the committed final and never promotes a partial result", async () => {
     const transport = createTransport();
     const sessionPromise = Promise.resolve(
       createProvider(transport).doOpen({
@@ -138,7 +139,18 @@ describe("elevenlabs", () => {
     socket.message({ message_type: "partial_transcript", text: "second" });
     socket.message({ message_type: "final_transcript", text: "first" });
     socket.message({ message_type: "committed_transcript", text: "first" });
-    session.finish();
+    const finish = Promise.resolve(session.finish());
+    let finished = false;
+    void finish.then(() => {
+      finished = true;
+    });
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    socket.message({
+      message_type: "committed_transcript",
+      text: "second corrected.",
+    });
+    await finish;
 
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
@@ -146,7 +158,7 @@ describe("elevenlabs", () => {
       { type: "interim", text: "second" },
       { type: "final", text: "first" },
       { type: "interim", text: "second" },
-      { type: "final", text: "second" },
+      { type: "final", text: "second corrected." },
       { type: "speech-end" },
     ]);
     expect(socket.closeReason).toBe("finished");
@@ -155,6 +167,259 @@ describe("elevenlabs", () => {
       commit: false,
       sample_rate: 16_000,
     });
+  });
+
+  it("does not confuse a delayed prior VAD commit with the finish commit", async () => {
+    vi.useFakeTimers();
+    try {
+      const transport = createTransport();
+      const sessionPromise = Promise.resolve(
+        createProvider(transport).doOpen({
+          abortSignal: new AbortController().signal,
+          endpointing: { silenceMs: 650 },
+        }),
+      );
+      const socket = await transport.waitForSocket();
+      socket.open();
+      const session = await sessionPromise;
+      const partsPromise = readStream(session.stream);
+
+      session.sendAudio(new Int16Array([1]));
+      socket.message({ message_type: "partial_transcript", text: "first" });
+      socket.message({ message_type: "partial_transcript", text: "second" });
+      const finish = Promise.resolve(session.finish());
+      let finished = false;
+      void finish.then(() => {
+        finished = true;
+      });
+
+      socket.message({ message_type: "committed_transcript", text: "first" });
+      await vi.advanceTimersByTimeAsync(249);
+      expect(finished).toBe(false);
+      expect(socket.closeReason).toBeUndefined();
+
+      socket.message({
+        message_type: "committed_transcript",
+        text: "entirely revised.",
+      });
+      await vi.advanceTimersByTimeAsync(250);
+      await finish;
+
+      expect(await partsPromise).toEqual([
+        { type: "speech-start" },
+        { type: "interim", text: "first" },
+        { type: "interim", text: "second" },
+        { type: "final", text: "first" },
+        { type: "interim", text: "second" },
+        { type: "final", text: "entirely revised." },
+        { type: "interim", text: "second" },
+        { type: "interim", text: "" },
+        { type: "speech-end" },
+      ]);
+      expect(socket.closeReason).toBe("finished");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("accepts an empty committed result after a partial", async () => {
+    vi.useFakeTimers();
+    try {
+      const transport = createTransport();
+      const sessionPromise = Promise.resolve(
+        createProvider(transport).doOpen({
+          abortSignal: new AbortController().signal,
+        }),
+      );
+      const socket = await transport.waitForSocket();
+      socket.open();
+      const session = await sessionPromise;
+      const partsPromise = readStream(session.stream);
+
+      session.sendAudio(new Int16Array([1]));
+      socket.message({ message_type: "partial_transcript", text: "noise" });
+      const finish = Promise.resolve(session.finish());
+      socket.message({ message_type: "committed_transcript", text: "" });
+      await vi.advanceTimersByTimeAsync(250);
+
+      await expect(finish).resolves.toBeUndefined();
+      expect(await partsPromise).toEqual([
+        { type: "speech-start" },
+        { type: "interim", text: "noise" },
+        { type: "interim", text: "" },
+        { type: "speech-end" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("accepts a normal terminal close while waiting for a commit", async () => {
+    const transport = createTransport();
+    const sessionPromise = Promise.resolve(
+      createProvider(transport).doOpen({
+        abortSignal: new AbortController().signal,
+      }),
+    );
+    const socket = await transport.waitForSocket();
+    socket.open();
+    const session = await sessionPromise;
+    const partsPromise = readStream(session.stream);
+
+    session.sendAudio(new Int16Array([1]));
+    socket.message({ message_type: "partial_transcript", text: "draft" });
+    const finish = Promise.resolve(session.finish());
+    socket.remoteClose(1000);
+
+    await expect(finish).resolves.toBeUndefined();
+    expect(await partsPromise).toEqual([
+      { type: "speech-start" },
+      { type: "interim", text: "draft" },
+      { type: "interim", text: "" },
+      { type: "speech-end" },
+    ]);
+  });
+
+  it("rejects finish when the connection closes abnormally", async () => {
+    const transport = createTransport();
+    const sessionPromise = Promise.resolve(
+      createProvider(transport).doOpen({
+        abortSignal: new AbortController().signal,
+      }),
+    );
+    const socket = await transport.waitForSocket();
+    socket.open();
+    const session = await sessionPromise;
+    const partsPromise = readStream(session.stream);
+
+    session.sendAudio(new Int16Array([1]));
+    const finish = Promise.resolve(session.finish());
+    socket.remoteClose(1006);
+
+    await expect(finish).rejects.toMatchObject({
+      code: "network-error",
+      provider: "elevenlabs",
+      retryable: true,
+    });
+    expect(await partsPromise).toEqual([
+      expect.objectContaining({
+        type: "error",
+        error: expect.objectContaining({ code: "network-error" }),
+      }),
+    ]);
+  });
+
+  it("times out a missing committed transcript with a typed error", async () => {
+    vi.useFakeTimers();
+    try {
+      const transport = createTransport();
+      const provider = elevenlabs({
+        tokenEndpoint: "/token",
+        fetch: transport.fetch,
+        webSocket: MockWebSocket as unknown as typeof WebSocket,
+        finishTimeoutMs: 25,
+      });
+      const sessionPromise = Promise.resolve(
+        provider.doOpen({ abortSignal: new AbortController().signal }),
+      );
+      const socket = await transport.waitForSocket();
+      socket.open();
+      const session = await sessionPromise;
+      const partsPromise = readStream(session.stream);
+
+      session.sendAudio(new Int16Array([1]));
+      const finish = Promise.resolve(session.finish());
+      const finishError = finish.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(25);
+
+      expect(await finishError).toMatchObject({
+        code: "network-error",
+        provider: "elevenlabs",
+        retryable: true,
+      });
+      expect(await partsPromise).toEqual([
+        expect.objectContaining({
+          type: "error",
+          error: expect.objectContaining({ code: "network-error" }),
+        }),
+      ]);
+      expect(socket.closeReason).toBe("aborted");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the finish deadline absolute after transcript activity", async () => {
+    vi.useFakeTimers();
+    try {
+      const transport = createTransport();
+      const provider = elevenlabs({
+        tokenEndpoint: "/token",
+        fetch: transport.fetch,
+        webSocket: MockWebSocket as unknown as typeof WebSocket,
+        finishTimeoutMs: 25,
+      });
+      const sessionPromise = Promise.resolve(
+        provider.doOpen({ abortSignal: new AbortController().signal }),
+      );
+      const socket = await transport.waitForSocket();
+      socket.open();
+      const session = await sessionPromise;
+      const partsPromise = readStream(session.stream);
+
+      session.sendAudio(new Int16Array([1]));
+      const finishError = Promise.resolve(session.finish()).catch(
+        (error: unknown) => error,
+      );
+      socket.message({ message_type: "committed_transcript", text: "first" });
+      await vi.advanceTimersByTimeAsync(20);
+      socket.message({ message_type: "partial_transcript", text: "more" });
+      await vi.advanceTimersByTimeAsync(5);
+
+      expect(await finishError).toMatchObject({
+        code: "network-error",
+        provider: "elevenlabs",
+      });
+      expect(await partsPromise).toEqual([
+        { type: "speech-start" },
+        { type: "final", text: "first" },
+        { type: "interim", text: "more" },
+        expect.objectContaining({
+          type: "error",
+          error: expect.objectContaining({ code: "network-error" }),
+        }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts immediately while finish is waiting", async () => {
+    const transport = createTransport();
+    const sessionPromise = Promise.resolve(
+      createProvider(transport).doOpen({
+        abortSignal: new AbortController().signal,
+      }),
+    );
+    const socket = await transport.waitForSocket();
+    socket.open();
+    const session = await sessionPromise;
+    const partsPromise = readStream(session.stream);
+
+    session.sendAudio(new Int16Array([1]));
+    socket.message({ message_type: "partial_transcript", text: "draft" });
+    const finish = Promise.resolve(session.finish());
+    session.abort("cancelled");
+
+    await expect(finish).rejects.toMatchObject({
+      code: "provider-error",
+      provider: "elevenlabs",
+    });
+    expect(await partsPromise).toEqual([
+      { type: "speech-start" },
+      { type: "interim", text: "draft" },
+    ]);
+    expect(socket.closeReason).toBe("aborted");
   });
 
   it("rejects unsupported shared options before fetching a token", async () => {
@@ -278,6 +543,7 @@ class MockWebSocket extends EventTarget {
   readonly json: Array<Record<string, unknown>> = [];
   readyState = MockWebSocket.CONNECTING;
   closeReason: string | undefined;
+  onSend: ((value: Record<string, unknown>) => void) | undefined;
 
   constructor(url: string | URL) {
     super();
@@ -294,7 +560,9 @@ class MockWebSocket extends EventTarget {
     if (this.readyState !== MockWebSocket.OPEN) {
       throw new Error("Socket is not open.");
     }
-    this.json.push(JSON.parse(data) as Record<string, unknown>);
+    const value = JSON.parse(data) as Record<string, unknown>;
+    this.json.push(value);
+    this.onSend?.(value);
   }
 
   message(value: Record<string, unknown>): void {
@@ -329,8 +597,20 @@ function createConformanceHarness(): {
   const provider = createProvider(transport);
   let socket: MockWebSocket | undefined;
   let closed = false;
-  const getSocket = async (): Promise<MockWebSocket> =>
-    (socket ??= await transport.waitForSocket());
+  const getSocket = async (): Promise<MockWebSocket> => {
+    socket ??= await transport.waitForSocket();
+    socket.onSend = (value) => {
+      if (value["commit"] === true) {
+        queueMicrotask(() => {
+          socket?.message({
+            message_type: "committed_transcript",
+            text: "",
+          });
+        });
+      }
+    };
+    return socket;
+  };
   const requireSocket = (): MockWebSocket => {
     if (socket === undefined) {
       throw new Error("The ElevenLabs test session does not exist.");
