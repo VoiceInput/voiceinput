@@ -17,7 +17,6 @@ import { openai } from "@voiceinput/openai";
 
 const provider = openai({
   tokenEndpoint: "/api/voice-token",
-  model: "gpt-transcribe",
 });
 ```
 
@@ -25,12 +24,12 @@ Pass `provider` to `VoiceInputProvider` or directly to `useVoiceInput`.
 
 ### Defaults and shared-option mapping
 
-- Model: `gpt-transcribe` (`OPENAI_DEFAULT_MODEL`)
+- Model: `gpt-live-transcribe` (`OPENAI_DEFAULT_MODEL`)
 - Audio: mono PCM16 at 24 kHz
 - Omitted language: provider automatic detection
 - `language`: normalized to its ISO 639-1 primary language code
-- `vocabulary`: a transcription prompt for standard transcription models;
-  `keywords` for `gpt-live-transcribe*` models
+- `vocabulary`: `keywords` for `gpt-live-transcribe*` models; a transcription
+  prompt for committed-turn transcription models
 - `endpointing`: provider default when omitted, manual commit when `false`, or
   server VAD with `silence_duration_ms`
 
@@ -43,7 +42,7 @@ before microphone permission with distinct error codes.
 | Option          | Purpose                                                            |
 | --------------- | ------------------------------------------------------------------ |
 | `tokenEndpoint` | Required same-origin endpoint that returns an ephemeral credential |
-| `model`         | Model ID; default `gpt-transcribe`                                 |
+| `model`         | Model ID; default `gpt-live-transcribe`                            |
 | `fetch`         | Test/runtime override for `globalThis.fetch`                       |
 | `webSocket`     | Test/runtime override for `globalThis.WebSocket`                   |
 | `realtimeUrl`   | Realtime WebSocket URL override                                    |
@@ -83,7 +82,7 @@ request bodies. If `onTokenIssued` throws, credential delivery fails closed.
 | --------------------------- | ------------------------------------------------------------------- |
 | `apiKey`                    | Required server-only OpenAI key                                     |
 | `authorize(request)`        | Required application authorization; returns `{ subject }` or `null` |
-| `model`                     | Default model; default `gpt-transcribe`                             |
+| `model`                     | Default model; default `gpt-live-transcribe`                        |
 | `allowedModels`             | Models a browser request may select; defaults to only `model`       |
 | `organization`, `project`   | Optional OpenAI request headers                                     |
 | `safetyIdentifier(context)` | Optional per-subject OpenAI safety identifier                       |
@@ -94,6 +93,12 @@ request bodies. If `onTokenIssued` throws, credential delivery fails closed.
 `OpenAITokenHandlerContext` contains `request`, `subject`, and `model`.
 `OpenAITokenIssuedMetadata` contains `provider: "openai"`, `subject`, `model`,
 and `expiresAt`.
+
+The live default favors early microphone feedback. Set `model: "gpt-transcribe"`
+in both the adapter and token handler when lower cost and committed-turn
+accuracy matter more than interim latency. See the repository's
+[provider certification](../../docs/provider-certification.md) for measured
+tradeoffs.
 
 ## Public API
 

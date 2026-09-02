@@ -22,7 +22,7 @@ without creating a second transcription stack.
 | Package                                                   | Use it for                                                     |
 | --------------------------------------------------------- | -------------------------------------------------------------- |
 | [`@voiceinput/react`](packages/react/README.md)           | React context, `useVoiceInput`, and optional controls          |
-| [`@voiceinput/openai`](packages/openai/README.md)         | OpenAI Realtime transcription; default `gpt-transcribe`        |
+| [`@voiceinput/openai`](packages/openai/README.md)         | OpenAI Realtime transcription; default `gpt-live-transcribe`   |
 | [`@voiceinput/elevenlabs`](packages/elevenlabs/README.md) | ElevenLabs Realtime Scribe; default `scribe_v2_realtime`       |
 | [`@voiceinput/deepgram`](packages/deepgram/README.md)     | Deepgram live transcription; default `nova-3`                  |
 | [`@voiceinput/core`](packages/core/README.md)             | Framework-neutral sessions, browser audio, and text ownership  |
@@ -167,7 +167,7 @@ provider capabilities are identical.
 
 | Capability           | OpenAI                                         | ElevenLabs           | Deepgram                                                      |
 | -------------------- | ---------------------------------------------- | -------------------- | ------------------------------------------------------------- |
-| Default model        | `gpt-transcribe`                               | `scribe_v2_realtime` | `nova-3`                                                      |
+| Default model        | `gpt-live-transcribe`                          | `scribe_v2_realtime` | `nova-3`                                                      |
 | PCM16 rate           | 24 kHz                                         | 16 kHz               | 16 kHz                                                        |
 | Omitted language     | Automatic                                      | Automatic            | `multi` on known multilingual Nova models; otherwise required |
 | Vocabulary mapping   | Prompt, or keywords for live-transcribe models | Key terms            | Nova-3 key terms                                              |
@@ -175,6 +175,9 @@ provider capabilities are identical.
 
 Unsupported or invalid normalized options fail before microphone permission is
 requested; adapters never silently discard them.
+
+The measurements and product-contract evidence behind these launch defaults are
+recorded in [Provider certification](docs/provider-certification.md).
 
 ## Browser support
 

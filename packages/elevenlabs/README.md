@@ -29,8 +29,8 @@ const provider = elevenlabs({
 - Omitted language: provider automatic detection
 - `language`: normalized to an ISO 639-1 or ISO 639-3 primary code
 - `vocabulary`: ElevenLabs key terms
-- `endpointing`: provider default when omitted, manual commit when `false`, or
-  VAD with a 300–3000 ms silence threshold
+- `endpointing`: VAD with a 650 ms silence threshold when omitted, manual commit
+  when `false`, or VAD with a supplied 300–3000 ms silence threshold
 
 Vocabulary accepts at most 50 trimmed terms, each at most 20 characters and
 without line breaks. Invalid or unsupported settings fail before microphone
@@ -50,8 +50,8 @@ permission with distinct error codes.
 | `filterBackgroundAudio`             | Provider background-audio filtering                           |
 | `fetch`, `webSocket`, `realtimeUrl` | Transport/endpoint overrides                                  |
 
-Provider-only VAD settings select ElevenLabs VAD commit behavior even when the
-portable `endpointing` option is omitted.
+Provider-only VAD settings customize the VAD behavior used by the portable 650
+ms default.
 
 ## Server token handler
 

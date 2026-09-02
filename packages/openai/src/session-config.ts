@@ -4,7 +4,7 @@ import {
   type VoiceTranscriptionOptions,
 } from "@voiceinput/provider";
 
-export const OPENAI_DEFAULT_MODEL = "gpt-transcribe";
+export const OPENAI_DEFAULT_MODEL = "gpt-live-transcribe";
 export const OPENAI_SAMPLE_RATE = 24_000;
 
 export interface OpenAITokenRequest extends VoiceTranscriptionOptions {

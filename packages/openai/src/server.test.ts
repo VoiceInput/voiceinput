@@ -17,9 +17,9 @@ describe("createOpenAITokenHandler", () => {
             input: {
               format: { type: "audio/pcm", rate: 24_000 },
               transcription: {
-                model: "gpt-transcribe",
-                language: "en",
-                prompt: "Expected vocabulary: VoiceInput, WebSocket.",
+                model: "gpt-live-transcribe",
+                languages: ["en"],
+                keywords: ["VoiceInput", "WebSocket"],
               },
               turn_detection: null,
             },
@@ -37,7 +37,7 @@ describe("createOpenAITokenHandler", () => {
       apiKey: "sk-server",
       authorize: () => ({ subject: "user-1" }),
       rateLimit: ({ subject, model }) => ({
-        allowed: subject === "user-1" && model === "gpt-transcribe",
+        allowed: subject === "user-1" && model === "gpt-live-transcribe",
       }),
       safetyIdentifier: () => "hashed-user",
       onTokenIssued: audit,
@@ -46,7 +46,6 @@ describe("createOpenAITokenHandler", () => {
 
     const response = await handler(
       tokenRequest({
-        model: "gpt-transcribe",
         language: "en-CA",
         vocabulary: ["VoiceInput", "WebSocket"],
         endpointing: false,
@@ -62,7 +61,7 @@ describe("createOpenAITokenHandler", () => {
     expect(audit).toHaveBeenCalledWith({
       provider: "openai",
       subject: "user-1",
-      model: "gpt-transcribe",
+      model: "gpt-live-transcribe",
       expiresAt: 2_000_000_000,
     });
     expect(JSON.stringify(audit.mock.calls)).not.toContain("ek_ephemeral");
@@ -177,6 +176,7 @@ describe("createOpenAITokenHandler", () => {
       authorize,
       rateLimit,
       safetyIdentifier,
+      model: "gpt-transcribe",
       fetch: upstream,
     });
 

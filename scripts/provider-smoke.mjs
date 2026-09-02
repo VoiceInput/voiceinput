@@ -7,86 +7,93 @@ import { elevenlabs } from "../packages/elevenlabs/dist/index.js";
 import { createElevenLabsTokenHandler } from "../packages/elevenlabs/dist/server.js";
 import { openai } from "../packages/openai/dist/index.js";
 import { createOpenAITokenHandler } from "../packages/openai/dist/server.js";
+import { readRunOptions, wordErrorRate } from "./provider-smoke-support.mjs";
 
-const requestedProvider = readRequestedProvider(process.argv.slice(2));
+const runOptions = readRunOptions(process.argv.slice(2));
 const smokeCases = [
   {
     name: "openai",
+    defaultEndpointing: "provider-default",
     environmentName: "OPENAI_API_KEY",
-    create(apiKey, onTokenIssued) {
+    create(apiKey, onTokenIssued, options) {
       const handler = createOpenAITokenHandler({
         apiKey,
         authorize: () => ({ subject: "credential-smoke" }),
         onTokenIssued,
+        ...(options.model === undefined
+          ? {}
+          : { model: options.model, allowedModels: [options.model] }),
       });
       return openai({
         tokenEndpoint: "https://voiceinput.invalid/openai",
         fetch: createHandlerFetch(handler),
+        ...(options.model === undefined ? {} : { model: options.model }),
       });
     },
   },
   {
     name: "elevenlabs",
+    defaultEndpointing: 650,
     environmentName: "ELEVENLABS_API_KEY",
-    create(apiKey, onTokenIssued) {
+    create(apiKey, onTokenIssued, options) {
       const handler = createElevenLabsTokenHandler({
         apiKey,
         authorize: () => ({ subject: "credential-smoke" }),
         onTokenIssued,
+        ...(options.model === undefined
+          ? {}
+          : { model: options.model, allowedModels: [options.model] }),
       });
       return elevenlabs({
         tokenEndpoint: "https://voiceinput.invalid/elevenlabs",
         fetch: createHandlerFetch(handler),
+        ...(options.model === undefined ? {} : { model: options.model }),
       });
     },
   },
   {
     name: "deepgram",
+    defaultEndpointing: "provider-default",
     environmentName: "DEEPGRAM_API_KEY",
-    create(apiKey, onTokenIssued) {
+    create(apiKey, onTokenIssued, options) {
       const handler = createDeepgramTokenHandler({
         apiKey,
         authorize: () => ({ subject: "credential-smoke" }),
         onTokenIssued,
+        ...(options.model === undefined
+          ? {}
+          : { model: options.model, allowedModels: [options.model] }),
       });
       return deepgram({
         tokenEndpoint: "https://voiceinput.invalid/deepgram",
         fetch: createHandlerFetch(handler),
+        ...(options.model === undefined ? {} : { model: options.model }),
       });
     },
   },
 ].filter(
-  ({ name }) => requestedProvider === undefined || name === requestedProvider,
+  ({ name }) =>
+    runOptions.provider === undefined || name === runOptions.provider,
 );
 
 for (const smokeCase of smokeCases) {
-  await runSmokeCase(smokeCase);
+  await runSmokeCase(smokeCase, runOptions);
 }
 
-function readRequestedProvider(arguments_) {
-  const providerArgument = arguments_.find((value) =>
-    value.startsWith("--provider="),
-  );
-  if (providerArgument === undefined) {
-    return undefined;
-  }
-  const provider = providerArgument.slice("--provider=".length);
-  if (!["openai", "elevenlabs", "deepgram"].includes(provider)) {
-    throw new Error(`Unknown provider: ${provider}`);
-  }
-  return provider;
-}
-
-async function runSmokeCase(smokeCase) {
+async function runSmokeCase(smokeCase, options) {
   const apiKey = process.env[smokeCase.environmentName];
   if (apiKey === undefined || apiKey.trim().length === 0) {
     throw new Error(`${smokeCase.environmentName} is required.`);
   }
 
-  let tokenIssued = false;
-  const provider = smokeCase.create(apiKey, () => {
-    tokenIssued = true;
-  });
+  let tokenMetadata;
+  const provider = smokeCase.create(
+    apiKey,
+    (metadata) => {
+      tokenMetadata = metadata;
+    },
+    options,
+  );
   const abortController = new AbortController();
   const timeout = setTimeout(
     () => abortController.abort(new Error("Credential smoke timed out.")),
@@ -95,25 +102,42 @@ async function runSmokeCase(smokeCase) {
   let providerSession;
 
   try {
+    const connectionStartedAt = performance.now();
     providerSession = await provider.doOpen({
       abortSignal: abortController.signal,
-      language: "en-US",
+      ...(options.language === undefined ? {} : { language: options.language }),
+      ...(options.vocabulary.length === 0
+        ? {}
+        : { vocabulary: options.vocabulary }),
+      ...(options.endpointing === undefined
+        ? {}
+        : { endpointing: options.endpointing }),
     });
+    const connectedAt = performance.now();
     const streamResult = collectStream(providerSession.stream).then(
-      (parts) => ({ parts }),
+      (result) => ({ result }),
       (error) => ({ error }),
     );
-    const chunks = await createSpeechPcm(provider.sampleRate);
+    const { chunks, audioDurationMs } = await createSpeechPcm(
+      provider.sampleRate,
+      options.chunkMs,
+      options.trailingSilenceMs,
+      options.internalSilenceMs,
+    );
+    const audioStartedAt = performance.now();
     for (const chunk of chunks) {
       await providerSession.sendAudio(chunk);
-      await delay(20, undefined, { signal: abortController.signal });
+      await delay(options.chunkMs, undefined, {
+        signal: abortController.signal,
+      });
     }
+    const finishStartedAt = performance.now();
     await providerSession.finish();
     const outcome = await streamResult;
     if ("error" in outcome) {
       throw outcome.error;
     }
-    const finalTranscript = outcome.parts
+    const finalTranscript = outcome.result.parts
       .filter((part) => part.type === "final")
       .map((part) => part.text)
       .join(" ")
@@ -122,15 +146,52 @@ async function runSmokeCase(smokeCase) {
       throw new Error("Provider returned no committed final transcript.");
     }
 
-    if (!tokenIssued) {
+    if (tokenMetadata === undefined) {
       throw new Error(
         "The server token handler did not report a minted token.",
       );
     }
 
+    const completedAt = performance.now();
+    const result = {
+      provider: smokeCase.name,
+      model: provider.modelId,
+      reference: "BY HARRY QUILTER M A",
+      transcript: finalTranscript,
+      wordErrorRate: wordErrorRate("BY HARRY QUILTER M A", finalTranscript),
+      chunkMs: options.chunkMs,
+      audioDurationMs: Math.round(audioDurationMs),
+      internalSilenceMs: options.internalSilenceMs,
+      trailingSilenceMs: options.trailingSilenceMs,
+      endpointing:
+        options.endpointing === undefined
+          ? smokeCase.defaultEndpointing
+          : options.endpointing === false
+            ? "manual"
+            : options.endpointing.silenceMs,
+      connectionMs: milliseconds(connectedAt - connectionStartedAt),
+      firstInterimMs:
+        outcome.result.firstInterimAt === undefined
+          ? null
+          : milliseconds(outcome.result.firstInterimAt - audioStartedAt),
+      firstFinalMs:
+        outcome.result.firstFinalAt === undefined
+          ? null
+          : milliseconds(outcome.result.firstFinalAt - audioStartedAt),
+      finalizationMs: milliseconds(completedAt - finishStartedAt),
+      interimParts: outcome.result.parts.filter(
+        (part) => part.type === "interim",
+      ).length,
+      finalParts: outcome.result.parts.filter((part) => part.type === "final")
+        .length,
+      tokenExpiresIn:
+        "expiresIn" in tokenMetadata ? tokenMetadata.expiresIn : null,
+    };
     abortController.abort("credential-smoke-complete");
     console.log(
-      `${smokeCase.name}: token minted, speech streamed, committed final received (${JSON.stringify(finalTranscript)})`,
+      options.json
+        ? JSON.stringify(result)
+        : `${smokeCase.name}: token minted, speech streamed, committed final received (${JSON.stringify(finalTranscript)}); WER ${result.wordErrorRate.toFixed(3)}, connection ${result.connectionMs} ms, first interim ${result.firstInterimMs ?? "none"} ms, finalization ${result.finalizationMs} ms`,
     );
   } catch (error) {
     providerSession?.abort("credential-smoke-failed");
@@ -157,7 +218,12 @@ function createHandlerFetch(handler) {
   };
 }
 
-async function createSpeechPcm(sampleRate) {
+async function createSpeechPcm(
+  sampleRate,
+  chunkMs,
+  trailingSilenceMs,
+  internalSilenceMs,
+) {
   const wav = await readFile(
     new URL(
       "../fixtures/audio/librispeech-1272-128104-0014.wav",
@@ -165,13 +231,40 @@ async function createSpeechPcm(sampleRate) {
     ),
   );
   const source = readPcm16Wav(wav);
-  const samples = resamplePcm16(source.samples, source.sampleRate, sampleRate);
-  const chunkLength = Math.round(sampleRate / 50);
+  const resampled = resamplePcm16(
+    source.samples,
+    source.sampleRate,
+    sampleRate,
+  );
+  const speech = insertSilence(resampled, sampleRate, 1_294, internalSilenceMs);
+  const samples = new Int16Array(
+    speech.length + Math.round((sampleRate * trailingSilenceMs) / 1_000),
+  );
+  samples.set(speech);
+  const chunkLength = Math.max(1, Math.round((sampleRate * chunkMs) / 1_000));
   const chunks = [];
   for (let offset = 0; offset < samples.length; offset += chunkLength) {
     chunks.push(samples.slice(offset, offset + chunkLength));
   }
-  return chunks;
+  return {
+    chunks,
+    audioDurationMs: (samples.length / sampleRate) * 1_000,
+  };
+}
+
+function insertSilence(samples, sampleRate, atMs, durationMs) {
+  if (durationMs === 0) {
+    return samples;
+  }
+  const split = Math.min(
+    samples.length,
+    Math.round((sampleRate * atMs) / 1_000),
+  );
+  const silenceLength = Math.round((sampleRate * durationMs) / 1_000);
+  const output = new Int16Array(samples.length + silenceLength);
+  output.set(samples.subarray(0, split));
+  output.set(samples.subarray(split), split + silenceLength);
+  return output;
 }
 
 function readPcm16Wav(wav) {
@@ -232,21 +325,32 @@ function resamplePcm16(samples, sourceRate, targetRate) {
 
 async function collectStream(stream) {
   const parts = [];
+  let firstInterimAt;
+  let firstFinalAt;
   const reader = stream.getReader();
   try {
     while (true) {
       const result = await reader.read();
       if (result.done) {
-        return parts;
+        return { parts, firstInterimAt, firstFinalAt };
       }
       if (result.value.type === "error") {
         throw result.value.error;
+      }
+      if (result.value.type === "interim") {
+        firstInterimAt ??= performance.now();
+      } else if (result.value.type === "final") {
+        firstFinalAt ??= performance.now();
       }
       parts.push(result.value);
     }
   } finally {
     reader.releaseLock();
   }
+}
+
+function milliseconds(value) {
+  return Math.round(value * 10) / 10;
 }
 
 function safeErrorMessage(error) {

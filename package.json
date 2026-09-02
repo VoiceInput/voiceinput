@@ -19,7 +19,7 @@
     "lint": "turbo run lint && oxlint --config .oxlintrc.json e2e scripts playwright.config.ts playwright.safari.config.ts tsdown.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "turbo run test && vitest run scripts/release.test.ts",
+    "test": "turbo run test && vitest run scripts/release.test.ts scripts/provider-smoke.test.mjs",
     "test:browser": "turbo run test:browser",
     "test:e2e": "pnpm build && playwright test",
     "test:e2e:browserstack": "pnpm build && browserstack-node-sdk playwright test && playwright test --config playwright.safari.config.ts",

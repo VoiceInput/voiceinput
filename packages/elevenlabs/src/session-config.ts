@@ -5,6 +5,7 @@ import {
 
 export const ELEVENLABS_DEFAULT_MODEL = "scribe_v2_realtime";
 export const ELEVENLABS_SAMPLE_RATE = 16_000;
+const ELEVENLABS_DEFAULT_ENDPOINTING_MS = 650;
 
 export interface ElevenLabsRealtimeSettings {
   readonly vadThreshold?: number;
@@ -33,7 +34,11 @@ export function validateElevenLabsConfiguration(
   const model = nonEmptyString(value.model, "model");
   const language = normalizeLanguage(value.language);
   const vocabulary = validateVocabulary(value.vocabulary);
-  const endpointing = validateEndpointing(value.endpointing);
+  const endpointing = validateEndpointing(
+    value.endpointing === undefined
+      ? { silenceMs: ELEVENLABS_DEFAULT_ENDPOINTING_MS }
+      : value.endpointing,
+  );
   const vadThreshold = optionalNumber(
     value.vadThreshold,
     "vadThreshold",

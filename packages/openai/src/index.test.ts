@@ -63,9 +63,9 @@ describe("openai", () => {
         audio: {
           input: {
             transcription: {
-              model: "gpt-transcribe",
-              language: "en",
-              prompt: "Expected vocabulary: VoiceInput.",
+              model: "gpt-live-transcribe",
+              languages: ["en"],
+              keywords: ["VoiceInput"],
             },
             turn_detection: {
               type: "server_vad",

@@ -80,7 +80,7 @@ describe("elevenlabs", () => {
     expect(socket.closeReason).toBe("finished");
   });
 
-  it("preserves provider endpointing defaults and validates VAD ranges", async () => {
+  it("uses a responsive VAD default and validates VAD ranges", async () => {
     const defaultTransport = createTransport();
     const defaultSession = Promise.resolve(
       createProvider(defaultTransport).doOpen({
@@ -88,7 +88,10 @@ describe("elevenlabs", () => {
       }),
     );
     const defaultSocket = await defaultTransport.waitForSocket();
-    expect(defaultSocket.url.searchParams.has("commit_strategy")).toBe(false);
+    expect(defaultSocket.url.searchParams.get("commit_strategy")).toBe("vad");
+    expect(
+      defaultSocket.url.searchParams.get("vad_silence_threshold_secs"),
+    ).toBe("0.65");
     defaultSocket.open();
     (await defaultSession).abort();
 
@@ -112,6 +115,11 @@ describe("elevenlabs", () => {
     ).toThrowError(expect.objectContaining({ code: "invalid-configuration" }));
     expect(() =>
       elevenlabs({ tokenEndpoint: "/token", minSilenceDurationMs: 2_001 }),
+    ).toThrowError(expect.objectContaining({ code: "invalid-configuration" }));
+    expect(() =>
+      createProvider(createTransport()).validateOptions({
+        endpointing: null as never,
+      }),
     ).toThrowError(expect.objectContaining({ code: "invalid-configuration" }));
     expect(() =>
       elevenlabs({
