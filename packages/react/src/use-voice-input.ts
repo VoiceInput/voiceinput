@@ -88,6 +88,10 @@ export function useVoiceInput(
   const heldPointerRef = useRef<number | null>(null);
   const heldKeyRef = useRef<string | null>(null);
   const targetNodeRef = useRef<VoiceInputTextTarget | null>(null);
+  const controlledRequestRef = useRef<{ value: string } | null>(null);
+  const controlledRequest = controlled ? controlledRequestRef.current : null;
+  const controlledEcho =
+    controlledRequest?.value === options.value ? controlledRequest : null;
 
   const browserAudioSource = useMemo(() => createBrowserAudioSource(), []);
   const audioSource =
@@ -120,8 +124,10 @@ export function useVoiceInput(
         ? {
             controlled: {
               getValue: () => latest.current.value ?? "",
-              onValueChange: (value: string) =>
-                latest.current.onValueChange?.(value),
+              onValueChange: (value: string) => {
+                controlledRequestRef.current = { value };
+                latest.current.onValueChange?.(value);
+              },
             },
           }
         : {}),
@@ -211,8 +217,27 @@ export function useVoiceInput(
 
   useIsomorphicLayoutEffect(() => {
     if (controlled) {
-      textEngine.reconcileControlledValue(latest.current.value ?? "");
+      const value = latest.current.value ?? "";
+      if (controlledEcho !== null) {
+        const textSnapshot = textEngine.getSnapshot();
+        restoreTextTarget(targetNodeRef.current, textSnapshot);
+        if (value !== textSnapshot.value) {
+          if (controlledRequestRef.current === controlledEcho) {
+            controlledRequestRef.current = null;
+          }
+          return;
+        }
+        if (controlledRequestRef.current === controlledEcho) {
+          controlledRequestRef.current = null;
+        }
+      } else if (controlledRequestRef.current === controlledRequest) {
+        controlledRequestRef.current = null;
+      }
+
+      textEngine.reconcileControlledValue(value);
     }
+    // Request tokens annotate value renders; they must not trigger reconciliation
+    // when only an internal session snapshot causes a render.
   }, [controlled, options.value, textEngine]);
 
   useEffect(() => {
@@ -496,6 +521,23 @@ function composeEventHandlers<E extends { readonly defaultPrevented: boolean }>(
 
 function isStartable(status: VoiceInputStatus): boolean {
   return status === "idle" || status === "error";
+}
+
+function restoreTextTarget(
+  target: VoiceInputTextTarget | null,
+  snapshot: ReturnType<UseVoiceInputResult["getTextSnapshot"]>,
+): void {
+  if (target === null) {
+    return;
+  }
+  target.value = snapshot.value;
+  if (snapshot.selection !== null) {
+    target.setSelectionRange(
+      snapshot.selection.start,
+      snapshot.selection.end,
+      snapshot.selection.direction,
+    );
+  }
 }
 
 function dispatchCallback(

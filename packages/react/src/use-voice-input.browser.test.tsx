@@ -74,6 +74,77 @@ describe("useVoiceInput", () => {
     ]);
   });
 
+  it("preserves ownership when a deferred controlled echo commits", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const changes: string[] = [];
+    let commitValue: (value: string) => void = () => {};
+    let readSnapshot: (() => VoiceInputTextEngineSnapshot) | undefined;
+    render(
+      <VoiceInputProvider
+        provider={fake.provider}
+        audioSource={createFakeAudioSource()}
+      >
+        <DeferredControlledField
+          exposeCommit={(commit) => (commitValue = commit)}
+          exposeSnapshot={(read) => (readSnapshot = read)}
+          onValueChange={(value) => changes.push(value)}
+        />
+      </VoiceInputProvider>,
+    );
+    const textarea = getTextarea("deferred controlled");
+    const button = getButton("deferred controlled trigger");
+    await waitForEnabled(button);
+
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({ type: "interim", text: "a" });
+      fake.controller.emit({ type: "interim", text: "ab" });
+      fake.controller.emit({ type: "interim", text: "a" });
+      fake.controller.emit({ type: "final", text: "alpha" });
+    });
+    await vi.waitFor(() => expect(changes).toHaveLength(4));
+
+    act(() => commitValue(changes.at(-1) ?? ""));
+    expect(textarea.value).toBe("alpha");
+    expect(readSnapshot?.().spans).toMatchObject([
+      { state: "finalized", text: "alpha" },
+    ]);
+  });
+
+  it("forgets a rejected echo before the value is reused", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const changes: string[] = [];
+    let commitValue: (value: string) => void = () => {};
+    render(
+      <VoiceInputProvider
+        provider={fake.provider}
+        audioSource={createFakeAudioSource()}
+      >
+        <DeferredControlledField
+          exposeCommit={(commit) => (commitValue = commit)}
+          exposeSnapshot={() => {}}
+          onValueChange={(value) => changes.push(value)}
+        />
+      </VoiceInputProvider>,
+    );
+    const textarea = getTextarea("deferred controlled");
+    const button = getButton("deferred controlled trigger");
+    await waitForEnabled(button);
+
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({ type: "final", text: "alpha" });
+    });
+    await vi.waitFor(() => expect(changes).toEqual(["alpha"]));
+
+    act(() => commitValue("external"));
+    expect(textarea.value).toBe("external");
+    act(() => commitValue("alpha"));
+    expect(textarea.value).toBe("alpha");
+  });
+
   it("updates uncontrolled fields and dispatches a native input event", async () => {
     const fake = createFakeVoiceInputProvider();
     const inputEvents = vi.fn<() => void>();
@@ -651,6 +722,40 @@ function ControlledField({
         onChange={(event) => setValue(event.currentTarget.value)}
       />
       <button aria-label="controlled trigger" {...triggerProps}>
+        Speak
+      </button>
+    </>
+  );
+}
+
+function DeferredControlledField({
+  exposeCommit,
+  exposeSnapshot,
+  onValueChange,
+}: {
+  exposeCommit: (commit: (value: string) => void) => void;
+  exposeSnapshot: (read: () => VoiceInputTextEngineSnapshot) => void;
+  onValueChange: (value: string) => void;
+}): React.JSX.Element {
+  const [value, setValue] = useState("");
+  const { getTextSnapshot, targetRef, triggerProps } = useVoiceInput({
+    value,
+    onValueChange,
+  });
+  useEffect(() => exposeCommit(setValue), [exposeCommit]);
+  useEffect(
+    () => exposeSnapshot(getTextSnapshot),
+    [exposeSnapshot, getTextSnapshot],
+  );
+  return (
+    <>
+      <textarea
+        aria-label="deferred controlled"
+        ref={targetRef}
+        value={value}
+        onChange={() => {}}
+      />
+      <button aria-label="deferred controlled trigger" {...triggerProps}>
         Speak
       </button>
     </>
