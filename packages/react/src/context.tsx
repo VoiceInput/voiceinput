@@ -30,13 +30,14 @@ export function VoiceInputProvider({
 }: VoiceInputProviderProps): ReactNode {
   const browserAudioSource = useMemo(() => createBrowserAudioSource(), []);
   const resolvedAudioSource = audioSource ?? browserAudioSource;
+  const coordinator = useMemo(() => new VoiceInputCoordinator(), []);
   const value = useMemo<VoiceInputContextValue>(
     () => ({
       provider,
       audioSource: resolvedAudioSource,
-      coordinator: new VoiceInputCoordinator(),
+      coordinator,
     }),
-    [provider, resolvedAudioSource],
+    [coordinator, provider, resolvedAudioSource],
   );
 
   return (

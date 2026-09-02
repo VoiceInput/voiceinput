@@ -254,8 +254,14 @@ describe("useVoiceInput", () => {
     );
     const first = getButton("first trigger");
     const second = getButton("second trigger");
+    const firstTextarea = getTextarea("first");
     await waitForEnabled(first);
     await waitForEnabled(second);
+    firstTextarea.focus();
+    firstTextarea.setSelectionRange(
+      firstTextarea.value.length,
+      firstTextarea.value.length,
+    );
 
     await act(async () => {
       first.click();
@@ -263,19 +269,25 @@ describe("useVoiceInput", () => {
     });
     await act(async () => {
       second.click();
-      await secondFake.controller.waitForSession();
+      await Promise.resolve();
     });
 
     expect(firstFake.controller.sessions[0]?.finishCallCount).toBe(1);
-    expect(secondFake.controller.sessions).toHaveLength(1);
-    expect(second.getAttribute("aria-pressed")).toBe("true");
+    expect(secondFake.controller.sessions).toHaveLength(0);
+    expect(audioSource.prepareCallCount).toBe(1);
 
     await act(async () => {
+      firstFake.controller.emit({ type: "final", text: "preserved" });
       firstFake.controller.close();
+      await secondFake.controller.waitForSession();
     });
     await vi.waitFor(() =>
       expect(first.getAttribute("aria-pressed")).toBe("false"),
     );
+    expect(secondFake.controller.sessions).toHaveLength(1);
+    expect(second.getAttribute("aria-pressed")).toBe("true");
+    expect(audioSource.prepareCallCount).toBe(2);
+    expect(firstTextarea.value).toBe("hello preserved");
   });
 
   it("does not freeze provisional text when a real toggle gesture stops", async () => {
@@ -363,7 +375,7 @@ describe("useVoiceInput", () => {
     expect(contextAudio.prepareCallCount).toBe(0);
   });
 
-  it("isolates a replacement provider from delayed events on the old session", async () => {
+  it("serializes provider replacement and isolates the old final", async () => {
     const firstFake = createFakeVoiceInputProvider({
       autoCloseOnFinish: false,
     });
@@ -387,14 +399,53 @@ describe("useVoiceInput", () => {
     await waitForEnabled(trigger);
     await act(async () => {
       trigger.click();
-      await secondFake.controller.waitForSession();
-      secondFake.controller.emit({ type: "final", text: "new" });
+      await Promise.resolve();
     });
-    await vi.waitFor(() => expect(textarea.value).toBe("new"));
+    expect(secondFake.controller.sessions).toHaveLength(0);
 
     await act(async () => {
       firstFake.controller.emit({ type: "final", text: "old" });
       firstFake.controller.close();
+      await secondFake.controller.waitForSession();
+      secondFake.controller.emit({ type: "final", text: "new" });
+    });
+
+    await vi.waitFor(() => expect(textarea.value).toBe("new"));
+  });
+
+  it("retains provider-context ownership across a provider change", async () => {
+    const firstFake = createFakeVoiceInputProvider({
+      autoCloseOnFinish: false,
+    });
+    const secondFake = createFakeVoiceInputProvider();
+    render(
+      <ReconfigurableProviderField
+        firstProvider={firstFake.provider}
+        secondProvider={secondFake.provider}
+        audioSource={createFakeAudioSource()}
+      />,
+    );
+    const textarea = getTextarea("context reconfigured");
+    const trigger = getButton("context reconfigured trigger");
+    await waitForEnabled(trigger);
+
+    await act(async () => {
+      trigger.click();
+      await firstFake.controller.waitForSession();
+      getButton("switch context provider").click();
+    });
+    await waitForEnabled(trigger);
+    await act(async () => {
+      trigger.click();
+      await Promise.resolve();
+    });
+    expect(secondFake.controller.sessions).toHaveLength(0);
+
+    await act(async () => {
+      firstFake.controller.emit({ type: "final", text: "old" });
+      firstFake.controller.close();
+      await secondFake.controller.waitForSession();
+      secondFake.controller.emit({ type: "final", text: "new" });
     });
 
     await vi.waitFor(() => expect(textarea.value).toBe("new"));
@@ -675,6 +726,32 @@ function ReconfigurableField({
       <button
         type="button"
         aria-label="switch provider"
+        onClick={() => setProvider(secondProvider)}
+      >
+        Switch
+      </button>
+    </>
+  );
+}
+
+function ReconfigurableProviderField({
+  firstProvider,
+  secondProvider,
+  audioSource,
+}: {
+  firstProvider: VoiceInputProviderV1;
+  secondProvider: VoiceInputProviderV1;
+  audioSource: VoiceAudioSource;
+}): React.JSX.Element {
+  const [provider, setProvider] = useState(firstProvider);
+  return (
+    <>
+      <VoiceInputProvider provider={provider} audioSource={audioSource}>
+        <UncontrolledField name="context reconfigured" initialValue="" />
+      </VoiceInputProvider>
+      <button
+        type="button"
+        aria-label="switch context provider"
         onClick={() => setProvider(secondProvider)}
       >
         Switch

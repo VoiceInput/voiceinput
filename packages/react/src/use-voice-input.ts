@@ -221,7 +221,10 @@ export function useVoiceInput(
         captureSelection();
       }
       selectionCapturedRef.current = false;
-      coordinator.activate(coordinatedSession);
+      const acquired = await coordinator.activate(coordinatedSession);
+      if (!acquired) {
+        return;
+      }
       if (disabledRef.current || disposedRef.current) {
         coordinator.release(coordinatedSession);
         return;
@@ -272,8 +275,11 @@ export function useVoiceInput(
     disposedRef.current = false;
     return () => {
       disposedRef.current = true;
-      coordinator.release(coordinatedSession);
-      void session.stop("replaced");
+      coordinator.cancel(coordinatedSession);
+      void session.stop("replaced").then(
+        () => coordinator.release(coordinatedSession),
+        () => coordinator.release(coordinatedSession),
+      );
     };
   }, [coordinatedSession, coordinator, session]);
 
