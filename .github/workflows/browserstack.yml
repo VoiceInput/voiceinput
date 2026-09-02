@@ -22,9 +22,9 @@ jobs:
       BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
       BUILD_NUMBER: ${{ github.run_number }}-${{ github.run_attempt }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22.22.0
           cache: pnpm
@@ -38,7 +38,7 @@ jobs:
         run: pnpm exec browserstack-node-sdk playwright test
       - name: Upload Chromium and real-device evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: browserstack-playwright-${{ github.sha }}
           path: |
@@ -51,7 +51,7 @@ jobs:
         run: pnpm exec playwright test --config playwright.safari.config.ts
       - name: Upload branded desktop evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: browserstack-branded-desktop-${{ github.sha }}
           path: |

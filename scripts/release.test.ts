@@ -77,7 +77,7 @@ describe("release gate", () => {
     expect(() => createReleasePlan(pending)).toThrow("has not been consumed");
   });
 
-  it("blocks an implicit dist-tag and a prerelease latest tag", () => {
+  it("blocks an implicit dist-tag and a prerelease tag other than next", () => {
     const missing = validState();
     missing.distTag = "";
     expect(() => createReleasePlan(missing)).toThrow(
@@ -87,7 +87,13 @@ describe("release gate", () => {
     const latest = validState();
     latest.distTag = "latest";
     expect(() => createReleasePlan(latest)).toThrow(
-      "prerelease versions cannot use the latest",
+      "prerelease versions must use the next",
+    );
+
+    const beta = validState();
+    beta.distTag = "beta";
+    expect(() => createReleasePlan(beta)).toThrow(
+      "prerelease versions must use the next",
     );
   });
 

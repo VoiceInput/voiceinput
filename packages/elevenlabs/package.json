@@ -1,8 +1,26 @@
 {
   "name": "@voiceinput/elevenlabs",
   "version": "0.0.0",
+  "description": "ElevenLabs Realtime Scribe adapter and secure token handler for VoiceInput.",
+  "keywords": [
+    "voice-input",
+    "speech-to-text",
+    "transcription",
+    "elevenlabs"
+  ],
+  "homepage": "https://github.com/VoiceInput/voiceinput#readme",
+  "bugs": {
+    "url": "https://github.com/VoiceInput/voiceinput/issues"
+  },
+  "author": "VoiceInput contributors",
+  "maintainers": [
+    "Hirad Arshadi (https://github.com/hiradary)"
+  ],
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VoiceInput/voiceinput.git",

@@ -28,8 +28,8 @@ const packages = [
 ];
 const providerPackages = ["openai", "elevenlabs", "deepgram"];
 const reactVersions = [
-  { runtime: "18.3.1", types: "18.3.31" },
-  { runtime: "19.2.8", types: "19.2.18" },
+  { runtime: "18.3.1", types: "18.3.31", typescript: "5.7.3" },
+  { runtime: "19.2.8", types: "19.2.18", typescript: "7.0.2" },
 ];
 const nextVersion = "16.3.2";
 
@@ -480,6 +480,7 @@ for (const reactVersion of reactVersions) {
         `react@${reactVersion.runtime}`,
         `react-dom@${reactVersion.runtime}`,
         `@types/react@${reactVersion.types}`,
+        `typescript@${reactVersion.typescript}`,
         ...(reactVersion.runtime.startsWith("19.")
           ? [`next@${nextVersion}`]
           : []),
@@ -509,9 +510,13 @@ for (const reactVersion of reactVersions) {
       cwd: consumerDirectory,
     });
     run(
-      "pnpm",
-      ["exec", "tsc", "--project", join(consumerDirectory, "tsconfig.json")],
-      { cwd: rootDirectory },
+      "node",
+      [
+        join(consumerDirectory, "node_modules/typescript/bin/tsc"),
+        "--project",
+        join(consumerDirectory, "tsconfig.json"),
+      ],
+      { cwd: consumerDirectory },
     );
     run(
       "pnpm",

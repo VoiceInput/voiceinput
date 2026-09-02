@@ -192,7 +192,9 @@ requires HTTPS except for browser localhost exceptions. Use `isSupported` to
 disable custom UI. The packaged controls do this automatically.
 
 See [troubleshooting](docs/troubleshooting.md) for permissions, Safari,
-backgrounding, expiring credentials, and network failures.
+backgrounding, expiring credentials, and network failures. The
+[support policy](docs/support-policy.md) records the Node, TypeScript, React,
+and browser compatibility contract.
 
 ## Documentation
 
@@ -206,6 +208,8 @@ backgrounding, expiring credentials, and network failures.
 - [Minimal golden paths](docs/golden-paths.md)
 - [Authentication and durable quota recipes](docs/authentication-recipes.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Support policy](docs/support-policy.md)
+- [Security policy and private reporting](SECURITY.md)
 
 ## Local development
 

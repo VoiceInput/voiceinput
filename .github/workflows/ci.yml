@@ -24,7 +24,9 @@ jobs:
       BROWSERSTACK_ACCESS_KEY: voiceinput-security-browserstack-canary
       VOICEINPUT_DEV_AUTH_SECRET: voiceinput-security-auth-canary
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
       - name: Verify artifact-free checkout
         shell: bash
         run: |
@@ -34,8 +36,19 @@ jobs:
             echo "Generated artifacts were present before validation."
             exit 1
           fi
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - name: Install Gitleaks 8.30.1
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --fail --location --silent --show-error \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$archive"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - run: node scripts/scan-secrets.mjs repository
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22.22.0
           cache: pnpm
@@ -48,11 +61,23 @@ jobs:
       - run: pnpm test:browser
       - run: pnpm build
       - run: pnpm validate:packages
+      - run: node scripts/scan-secrets.mjs tarballs
       - run: pnpm test:e2e
       - if: always()
         run: pnpm test:security
+      - name: Store immutable package candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-candidate-${{ github.sha }}
+          path: |
+            .release-manifest.json
+            packages/*/*.tgz
+          if-no-files-found: error
+          include-hidden-files: true
+          compression-level: 0
+          retention-days: 30
       - if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: playground-e2e-report
           path: |
@@ -60,3 +85,22 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  consumer-runtime:
+    name: Package runtime (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.22.3, 24.20.0, 26.8.1]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test:node-compat

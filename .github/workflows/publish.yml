@@ -11,6 +11,10 @@ on:
         description: Full approved commit SHA from the completed release checks
         required: true
         type: string
+      artifact_run_id:
+        description: CI run ID containing the approved immutable package set
+        required: true
+        type: string
       version:
         description: Exact version shared by all six packages
         required: true
@@ -41,11 +45,11 @@ jobs:
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.candidate_sha }}
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22.22.0
           cache: pnpm
@@ -62,6 +66,7 @@ jobs:
     timeout-minutes: 40
     environment: npm
     permissions:
+      actions: read
       contents: read
       id-token: write
     env:
@@ -70,15 +75,37 @@ jobs:
       VOICEINPUT_RELEASE_TAG: ${{ inputs.dist_tag }}
       VOICEINPUT_RELEASE_VERSION: ${{ inputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.candidate_sha }}
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22.22.2
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - name: Verify the approved CI run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          ARTIFACT_RUN_ID: ${{ inputs.artifact_run_id }}
+        shell: bash
+        run: |
+          if [[ ! "$ARTIFACT_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "Artifact run ID must be numeric."
+            exit 1
+          fi
+          workflow_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml" --jq .id)"
+          IFS=$'\t' read -r run_sha run_branch run_event run_status run_conclusion run_workflow_id <<< "$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ARTIFACT_RUN_ID" \
+              --jq '[.head_sha, .head_branch, .event, .status, .conclusion, (.workflow_id | tostring)] | @tsv'
+          )"
+          if [[ "$run_sha" != "$CANDIDATE_SHA" || "$run_branch" != "main" || \
+                "$run_event" != "push" || "$run_status" != "completed" || \
+                "$run_conclusion" != "success" || "$run_workflow_id" != "$workflow_id" ]]; then
+            echo "Artifact must come from the successful CI push run for the approved main commit."
+            exit 1
+          fi
       - run: npm install --global npm@12.0.2
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
@@ -90,6 +117,34 @@ jobs:
       - run: pnpm validate:packages
       - run: pnpm test:e2e
       - run: pnpm test:security
+      - name: Remove locally rebuilt package candidates
+        run: |
+          find packages -type f -name '*.tgz' -delete
+          rm -f .release-manifest.json
+      - name: Restore the approved immutable package set
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-candidate-${{ inputs.candidate_sha }}
+          path: .
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.artifact_run_id }}
+      - name: Install Gitleaks 8.30.1
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --fail --location --silent --show-error \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$archive"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Scan approved package set and completed candidate logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/scan-secrets.mjs tarballs
+          node scripts/scan-workflow-logs.mjs "${{ inputs.candidate_sha }}"
       - name: Restore Next.js generated declaration
         run: git restore apps/playground-next/next-env.d.ts
       - name: Print and verify the immutable release plan

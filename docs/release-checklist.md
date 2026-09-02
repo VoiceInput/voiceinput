@@ -16,6 +16,8 @@ from ordinary CI.
   Deepgram. The Deepgram credential needs Member-or-higher permission for
   `/v1/auth/grant`.
 - `pnpm test:security` after the playground production builds
+- Gitleaks scans of full history, the tracked tree (including docs and
+  workflows), extracted package tarballs, and completed candidate workflow logs
 
 Record the immutable candidate SHA, run date, BrowserStack run URLs, provider
 smoke run URL, and the uploaded compatibility artifacts in the release record.
@@ -72,13 +74,17 @@ enforce the `main` ref as defense in depth. Publishing uses OIDC
 
 When every gate is green, merge the Changesets version PR. Confirm that it
 removed the pending release Changeset and added the intended version to every
-public package changelog. Manually run `Publish packages` from `main` and enter:
+public package changelog. Fill in the
+[release record](release-record-template.md), then manually run
+`Publish packages` from `main` and enter:
 
 - `PUBLISH` as the confirmation
 - the full approved candidate commit SHA
+- the CI run ID containing `release-candidate-<candidate SHA>`
 - the exact shared package version
 - the explicit npm dist-tag (`next` for the beta)
 
-The workflow validates and hashes the tarballs, prints the complete immutable
-package/version/tag plan, and publishes those exact files without rebuilding
-them. Do not publish directly from a developer machine.
+The workflow reruns the gates, restores the exact hashed tarballs from the
+approved CI artifact, scans that set and the candidate workflow logs, prints the
+complete immutable package/version/tag plan, and publishes those files without
+rebuilding them. Do not publish directly from a developer machine.

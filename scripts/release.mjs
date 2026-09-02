@@ -37,8 +37,8 @@ export function createReleasePlan(state) {
   }
   if (distTag === "" || !distTagPattern.test(distTag)) {
     errors.push("npm dist-tag must be explicit and start with a letter");
-  } else if (version.includes("-") && distTag === "latest") {
-    errors.push("prerelease versions cannot use the latest dist-tag");
+  } else if (version.includes("-") && distTag !== "next") {
+    errors.push("prerelease versions must use the next dist-tag");
   }
   if (state.manifestSha !== approvedSha) {
     errors.push("artifact manifest was not created for the approved candidate");
