@@ -300,7 +300,7 @@ function LabWorkspace({
   }, [log]);
 
   const runStartFailure = useCallback(
-    (failure: "connection" | "validation"): void => {
+    (failure: "connection" | "token" | "validation"): void => {
       fakeOnly(() => {
         const handle = getActiveHandle();
         if (handle === undefined) {
@@ -314,6 +314,8 @@ function LabWorkspace({
         }
         if (failure === "connection") {
           fakeRuntime.rejectNextConnection();
+        } else if (failure === "token") {
+          fakeRuntime.rejectNextToken();
         } else {
           fakeRuntime.rejectNextValidation();
         }
@@ -554,6 +556,12 @@ function LabWorkspace({
             </button>
             <button
               type="button"
+              onClick={() => void getActiveHandle()?.stop()}
+            >
+              Stop active
+            </button>
+            <button
+              type="button"
               onClick={() =>
                 fakeOnly(() => {
                   fakeRuntime.emit({ type: "speech-start" });
@@ -596,6 +604,9 @@ function LabWorkspace({
             <button type="button" onClick={() => runStartFailure("connection")}>
               Connection error
             </button>
+            <button type="button" onClick={() => runStartFailure("token")}>
+              Token error
+            </button>
             <button type="button" onClick={() => runStartFailure("validation")}>
               Unsupported option
             </button>
@@ -604,6 +615,12 @@ function LabWorkspace({
               onClick={() => void getActiveHandle()?.cancel()}
             >
               Cancel active
+            </button>
+            <button
+              type="button"
+              onClick={() => fakeOnly(() => fakeRuntime.disconnect())}
+            >
+              Disconnect active
             </button>
             <button
               type="button"

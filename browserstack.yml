@@ -22,18 +22,16 @@ platforms:
     osVersion: 11
     browserName: edge
     browserVersion: latest-1
-  - os: OS X
-    osVersion: Tahoe
-    browserName: playwright-firefox
-    playwrightVersion: 1.latest
-  - os: OS X
-    osVersion: Tahoe
-    browserName: playwright-firefox
-    playwrightVersion: 1.latest-1
   - deviceName: iPhone 17 Pro
     osVersion: 26
     browserName: safari
   - deviceName: iPhone 16 Pro
+    osVersion: 18
+    browserName: safari
+  - deviceName: iPad Pro 13 2025
+    osVersion: 26
+    browserName: safari
+  - deviceName: iPad Pro 11 2021
     osVersion: 18
     browserName: safari
 

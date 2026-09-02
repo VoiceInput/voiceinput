@@ -8,7 +8,7 @@ import browserstack from "browserstack-local";
 
 const userName = requiredEnvironmentVariable("BROWSERSTACK_USERNAME");
 const accessKey = requiredEnvironmentVariable("BROWSERSTACK_ACCESS_KEY");
-const localIdentifier = `voiceinput-safari-${process.pid}-${Date.now()}`;
+const localIdentifier = `voiceinput-desktop-${process.pid}-${Date.now()}`;
 const authorization = `Basic ${Buffer.from(`${userName}:${accessKey}`).toString("base64")}`;
 const webdriverEndpoint = "https://hub-cloud.browserstack.com/wd/hub";
 const testResultsDirectory = fileURLToPath(
@@ -21,7 +21,36 @@ const playgrounds = [
   { name: "Next.js App Router", url: "http://127.0.0.1:3000" },
   { name: "Vite + Hono", url: "http://127.0.0.1:5173" },
 ] as const;
-const browserVersions = ["latest", "latest-1"] as const;
+const desktopBrowsers = [
+  {
+    name: "Safari 26.4 / macOS Tahoe",
+    browserName: "safari",
+    browserVersion: "26.4",
+    os: "OS X",
+    osVersion: "Tahoe",
+  },
+  {
+    name: "Safari 18.4 / macOS Sequoia",
+    browserName: "safari",
+    browserVersion: "18.4",
+    os: "OS X",
+    osVersion: "Sequoia",
+  },
+  {
+    name: "Firefox 154 / Windows 11",
+    browserName: "firefox",
+    browserVersion: "154",
+    os: "Windows",
+    osVersion: "11",
+  },
+  {
+    name: "Firefox 153 / Windows 11",
+    browserName: "firefox",
+    browserVersion: "153",
+    os: "Windows",
+    osVersion: "11",
+  },
+] as const;
 
 test.beforeAll(async () => {
   await new Promise<void>((resolve, reject) => {
@@ -44,13 +73,13 @@ test.afterAll(async () => {
   await new Promise<void>((resolve) => local.stop(resolve));
 });
 
-for (const browserVersion of browserVersions) {
+for (const desktopBrowser of desktopBrowsers) {
   for (const playground of playgrounds) {
-    test(`branded Safari ${browserVersion} runs ${playground.name}`, async () => {
-      const sessionName = `Safari ${browserVersion} / ${playground.name}`;
+    test(`${desktopBrowser.name} runs ${playground.name}`, async () => {
+      const sessionName = `${desktopBrowser.name} / ${playground.name}`;
       let sessionId: string | undefined;
       try {
-        sessionId = await createSession(browserVersion, sessionName);
+        sessionId = await createSession(desktopBrowser, sessionName);
         await webdriverRequest(`session/${sessionId}/url`, {
           method: "POST",
           body: { url: playground.url },
@@ -116,7 +145,7 @@ for (const browserVersion of browserVersions) {
 }
 
 async function createSession(
-  browserVersion: string,
+  desktopBrowser: (typeof desktopBrowsers)[number],
   sessionName: string,
 ): Promise<string> {
   const value = await webdriverRequest("session", {
@@ -124,13 +153,13 @@ async function createSession(
     body: {
       capabilities: {
         alwaysMatch: {
-          browserName: "safari",
-          browserVersion,
+          browserName: desktopBrowser.browserName,
+          browserVersion: desktopBrowser.browserVersion,
           "bstack:options": {
-            os: "OS X",
-            osVersion: "Tahoe",
+            os: desktopBrowser.os,
+            osVersion: desktopBrowser.osVersion,
             projectName: "VoiceInput",
-            buildName: "branded Safari playgrounds",
+            buildName: "branded desktop playgrounds",
             buildIdentifier: process.env["BUILD_NUMBER"] ?? "local",
             sessionName,
             local: true,
@@ -235,7 +264,7 @@ async function webdriverRequest(
 function requiredEnvironmentVariable(name: string): string {
   const value = process.env[name];
   if (value === undefined || value.trim().length === 0) {
-    throw new Error(`${name} is required for branded Safari tests.`);
+    throw new Error(`${name} is required for branded desktop tests.`);
   }
   return value;
 }
@@ -247,5 +276,5 @@ function readRecord(value: unknown): Record<string, unknown> {
 }
 
 function safeErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown Safari failure.";
+  return error instanceof Error ? error.message : "Unknown browser failure.";
 }

@@ -18,7 +18,9 @@ export interface LabFakeRuntime {
   readonly controller: FakeVoiceInputProviderController;
   emit(part: VoiceInputProviderV1StreamPart): void;
   close(): void;
+  disconnect(): void;
   rejectNextConnection(): void;
+  rejectNextToken(): void;
   rejectNextValidation(): void;
   keepNextFinishOpen(): void;
   captureCurrentSession(): LabFakeSessionControl;
@@ -35,6 +37,7 @@ export function createLabFakeRuntime(): LabFakeRuntime {
     autoCloseOnFinish: false,
   });
   let connectionFailure = false;
+  let tokenFailure = false;
   let validationFailure = false;
   let keepFinishOpen = false;
 
@@ -57,7 +60,18 @@ export function createLabFakeRuntime(): LabFakeRuntime {
       const index = fake.controller.sessions.length;
       const sessionPromise = Promise.resolve(fake.provider.doOpen(options));
       await fake.controller.waitForSession(index);
-      if (connectionFailure) {
+      if (tokenFailure) {
+        tokenFailure = false;
+        fake.controller.rejectOpen(
+          new VoiceInputError({
+            code: "token-error",
+            message: "Synthetic token request failed.",
+            provider: "fake",
+            retryable: true,
+          }),
+          index,
+        );
+      } else if (connectionFailure) {
         connectionFailure = false;
         fake.controller.rejectOpen(
           new VoiceInputError({
@@ -110,8 +124,22 @@ export function createLabFakeRuntime(): LabFakeRuntime {
     close() {
       fake.controller.close(currentIndex());
     },
+    disconnect() {
+      fake.controller.fail(
+        new VoiceInputError({
+          code: "network-error",
+          message: "Synthetic provider disconnected.",
+          provider: "fake",
+          retryable: true,
+        }),
+        currentIndex(),
+      );
+    },
     rejectNextConnection() {
       connectionFailure = true;
+    },
+    rejectNextToken() {
+      tokenFailure = true;
     },
     rejectNextValidation() {
       validationFailure = true;

@@ -33,6 +33,31 @@ jobs:
         run: |
           test -n "$BROWSERSTACK_USERNAME"
           test -n "$BROWSERSTACK_ACCESS_KEY"
-      - run: pnpm test:e2e:browserstack
+      - run: pnpm build
+      - name: Run Chromium and real-device matrix
+        run: pnpm exec browserstack-node-sdk playwright test
+      - name: Upload Chromium and real-device evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browserstack-playwright-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Run branded Safari and Firefox matrix
+        if: ${{ !cancelled() }}
+        run: pnpm exec playwright test --config playwright.safari.config.ts
+      - name: Upload branded desktop evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browserstack-branded-desktop-${{ github.sha }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: warn
+          retention-days: 30
       - if: always()
         run: pnpm test:security

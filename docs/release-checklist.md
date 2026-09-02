@@ -16,17 +16,32 @@ from ordinary CI.
   `/v1/auth/grant`.
 - `pnpm test:security` after the playground production builds
 
+Record the immutable candidate SHA, run date, BrowserStack run URLs, provider
+smoke run URL, and the uploaded compatibility artifacts in the release record.
+The BrowserStack matrix covers current and previous Chrome, Edge, branded
+Firefox, macOS Safari, and real-device iOS Safari on both iPhone and iPad.
+
 ## Physical iPhone and iPad pass
 
-Run this pass in Safari on one current iPhone and one current iPad using the
-release-candidate playground deployment and real provider credentials.
+Run this pass in Safari on physical iPhone and iPad hardware for both the
+current and previous supported iOS releases, using the release-candidate
+playground deployment and real provider credentials. Record the device model,
+OS/Safari version, provider, date, candidate SHA, tester, and result for every
+row; a blank row is not a pass.
 
-- Start from a fresh Safari site permission state. Confirm Allow begins
-  dictation, Deny produces a recoverable permission error, and a later Allow
-  succeeds without reloading the page.
+- Start from fresh, already-granted, denied, and dismissed Safari microphone
+  states. Confirm Allow begins dictation and denial/dismissal produces a clear,
+  recoverable state.
+- Change a denied site to Allow in Safari Settings, reload the page, and confirm
+  dictation starts. VoiceInput does not promise that a browser notices a
+  settings change without a reload.
 - Exercise both toggle and hold-to-talk activation with the device microphone.
+- Confirm start, interim, final, graceful stop, cancel, token error, provider
+  disconnect, and retry behavior.
 - Replace a selection, move the caret, and type while interim text is present;
-  confirm final text does not overwrite the user's edits.
+  confirm final text does not overwrite the user's edits in both controlled and
+  uncontrolled fields. Switch fields during recording and confirm the previous
+  session relinquishes ownership.
 - Switch to another app while listening, then return. Confirm the session either
   resumes safely or ends with a clear recoverable state—never a stuck microphone
   indicator or duplicated final text.
@@ -34,11 +49,16 @@ release-candidate playground deployment and real provider credentials.
   Confirm a delayed final is applied at most once and only to its owned span.
 - Lock and unlock the device during a session. Confirm the app can start a new
   session afterward without a reload.
-- Repeat once with a Bluetooth headset if it is part of the supported release
-  setup.
+- Rotate between portrait and landscape during a session and verify the field,
+  focus, selection, and controls remain usable.
+- Interrupt capture with an incoming call, Siri, or another audio session;
+  confirm recovery is explicit and a new session can start.
+- Change between the built-in microphone and a Bluetooth headset while idle and
+  while listening; confirm the app never remains stuck or duplicates a final.
 
-Record device model, OS version, Safari version, provider, and result in the
-release notes. Any failure blocks the release.
+Any failure blocks the release. BrowserStack real-device automation is useful
+compatibility evidence, but it does not replace this physical microphone and
+route-change pass.
 
 ## Publishing setup (one-time)
 
