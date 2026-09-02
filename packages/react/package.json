@@ -1,6 +1,6 @@
 {
   "name": "@voiceinput/react",
-  "version": "0.0.0",
+  "version": "0.1.0-beta.0",
   "description": "Headless React voice input with cursor-safe editing and accessible controls.",
   "keywords": [
     "voice-input",
