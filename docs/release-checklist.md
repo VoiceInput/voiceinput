@@ -8,6 +8,7 @@ from ordinary CI.
 
 - `pnpm format:check`, `pnpm lint`, and `pnpm typecheck`
 - `pnpm test` and `pnpm test:browser`
+- `pnpm test:a11y`
 - `pnpm validate:packages`
 - `pnpm test:e2e`
 - A successful BrowserStack compatibility run

@@ -649,7 +649,12 @@ function LabWorkspace({
           </div>
 
           <SectionLabel index="06" label="Normalized event stream" />
-          <div className="voice-lab__events">
+          {/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- The fixed-height event log must be keyboard-scrollable. */}
+          <section
+            aria-label="Normalized event stream"
+            className="voice-lab__events"
+            tabIndex={0}
+          >
             {events.length === 0 ? (
               <p className="voice-lab__empty">Waiting for an interaction.</p>
             ) : (
@@ -664,7 +669,8 @@ function LabWorkspace({
                 </div>
               ))
             )}
-          </div>
+          </section>
+          {/* oxlint-enable jsx-a11y/no-noninteractive-tabindex */}
         </aside>
       </div>
     </main>

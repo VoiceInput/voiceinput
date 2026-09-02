@@ -53,6 +53,11 @@ summary:focus-visible {
   outline-offset: 3px;
 }
 
+.voice-lab__events:focus-visible {
+  outline: 2px solid var(--lab-accent);
+  outline-offset: 3px;
+}
+
 .voice-lab {
   min-height: 100svh;
   background: var(--lab-bg);
@@ -605,7 +610,6 @@ summary:focus-visible {
 
 @keyframes lab-enter {
   from {
-    opacity: 0;
     transform: translateY(8px);
   }
 }
