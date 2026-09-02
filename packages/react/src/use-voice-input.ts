@@ -10,6 +10,7 @@ import {
   type VoiceInputTextTarget,
 } from "@voiceinput/core";
 import {
+  type ButtonHTMLAttributes,
   useCallback,
   useContext,
   useEffect,
@@ -47,6 +48,21 @@ export function useVoiceInput(
         "useVoiceInput requires a provider option or a parent VoiceInputProvider.",
     });
   }
+
+  const previousProviderRef = useRef(provider);
+  const providerWarningShownRef = useRef(false);
+  useEffect(() => {
+    if (
+      previousProviderRef.current !== provider &&
+      !providerWarningShownRef.current
+    ) {
+      providerWarningShownRef.current = true;
+      console.warn(
+        "VoiceInput provider identity changed. Create providers once outside render or memoize them; replacing a provider stops the current session.",
+      );
+    }
+    previousProviderRef.current = provider;
+  }, [provider]);
 
   const controlled =
     options.value !== undefined || options.onValueChange !== undefined;
@@ -405,12 +421,18 @@ export function useVoiceInput(
       toggle,
     ],
   );
+  const getTriggerProps = useCallback(
+    (props: ButtonHTMLAttributes<HTMLButtonElement> = {}) =>
+      composeTriggerProps(triggerProps, props),
+    [triggerProps],
+  );
 
   return useMemo(
     () => ({
       ...snapshot,
       targetRef,
       triggerProps,
+      getTriggerProps,
       isSupported,
       getTextSnapshot,
       start,
@@ -420,6 +442,7 @@ export function useVoiceInput(
     }),
     [
       cancel,
+      getTriggerProps,
       getTextSnapshot,
       isSupported,
       snapshot,
@@ -430,6 +453,45 @@ export function useVoiceInput(
       triggerProps,
     ],
   );
+}
+
+function composeTriggerProps(
+  trigger: VoiceInputTriggerProps,
+  props: ButtonHTMLAttributes<HTMLButtonElement>,
+): ButtonHTMLAttributes<HTMLButtonElement> & VoiceInputTriggerProps {
+  return {
+    ...props,
+    type: props.type ?? trigger.type,
+    disabled: props.disabled === true || trigger.disabled,
+    "aria-pressed": trigger["aria-pressed"],
+    onBlur: composeEventHandlers(props.onBlur, trigger.onBlur),
+    onClick: composeEventHandlers(props.onClick, trigger.onClick),
+    onKeyDown: composeEventHandlers(props.onKeyDown, trigger.onKeyDown),
+    onKeyUp: composeEventHandlers(props.onKeyUp, trigger.onKeyUp),
+    onLostPointerCapture: composeEventHandlers(
+      props.onLostPointerCapture,
+      trigger.onLostPointerCapture,
+    ),
+    onPointerCancel: composeEventHandlers(
+      props.onPointerCancel,
+      trigger.onPointerCancel,
+    ),
+    onPointerDown: composeEventHandlers(
+      props.onPointerDown,
+      trigger.onPointerDown,
+    ),
+    onPointerUp: composeEventHandlers(props.onPointerUp, trigger.onPointerUp),
+  };
+}
+
+function composeEventHandlers<E extends { readonly defaultPrevented: boolean }>(
+  consumer: ((event: E) => void) | undefined,
+  internal: (event: E) => void,
+): (event: E) => void {
+  return (event) => {
+    consumer?.(event);
+    if (!event.defaultPrevented) internal(event);
+  };
 }
 
 function isStartable(status: VoiceInputStatus): boolean {

@@ -26,6 +26,7 @@ afterEach(async () => {
     }
   });
   document.body.replaceChildren();
+  vi.restoreAllMocks();
 });
 
 describe("useVoiceInput", () => {
@@ -102,6 +103,31 @@ describe("useVoiceInput", () => {
 
     await vi.waitFor(() => expect(textarea.value).toBe("world, again 今天"));
     expect(inputEvents).toHaveBeenCalledTimes(5);
+  });
+
+  it("composes headless trigger handlers without unsafe spread ordering", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const onClick = vi.fn<React.MouseEventHandler<HTMLButtonElement>>((event) =>
+      event.preventDefault(),
+    );
+    render(
+      <VoiceInputProvider
+        provider={fake.provider}
+        audioSource={createFakeAudioSource()}
+      >
+        <ComposedTriggerField onClick={onClick} />
+      </VoiceInputProvider>,
+    );
+    const button = getButton("composed trigger");
+    await waitForEnabled(button);
+
+    await act(async () => {
+      button.click();
+      await Promise.resolve();
+    });
+
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(fake.controller.sessions).toHaveLength(0);
   });
 
   it("distinguishes raw final parts from cumulative transcript callbacks", async () => {
@@ -381,6 +407,7 @@ describe("useVoiceInput", () => {
   });
 
   it("serializes provider replacement and isolates the old final", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     const firstFake = createFakeVoiceInputProvider({
       autoCloseOnFinish: false,
     });
@@ -406,6 +433,9 @@ describe("useVoiceInput", () => {
     await act(async () => {
       getButton("switch provider").click();
     });
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining("provider identity changed"),
+    );
     await waitForEnabled(trigger);
     await act(async () => {
       trigger.click();
@@ -424,6 +454,7 @@ describe("useVoiceInput", () => {
   });
 
   it("retains provider-context ownership across a provider change", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const firstFake = createFakeVoiceInputProvider({
       autoCloseOnFinish: false,
     });
@@ -580,6 +611,24 @@ describe("useVoiceInput", () => {
     );
   });
 });
+
+function ComposedTriggerField({
+  onClick,
+}: {
+  readonly onClick: React.MouseEventHandler<HTMLButtonElement>;
+}): React.JSX.Element {
+  const voice = useVoiceInput();
+  return (
+    <button
+      {...voice.getTriggerProps({
+        "aria-label": "composed trigger",
+        onClick,
+      })}
+    >
+      Speak
+    </button>
+  );
+}
 
 function ControlledField({
   onStatus,

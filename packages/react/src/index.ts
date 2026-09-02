@@ -1,3 +1,16 @@
+"use client";
+
+export { VoiceInputError } from "@voiceinput/core";
+export type {
+  VoiceInputSessionEvent,
+  VoiceInputSnapshot,
+  VoiceInputStatus,
+  VoiceInputStopReason,
+} from "@voiceinput/core";
+export type {
+  VoiceEndpointingOptions,
+  VoiceInputProviderV1,
+} from "@voiceinput/provider";
 export { VoiceInputProvider, type VoiceInputProviderProps } from "./context.js";
 export {
   VoiceButton,

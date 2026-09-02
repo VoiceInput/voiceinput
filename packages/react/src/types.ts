@@ -25,11 +25,9 @@ import type {
 
 export type VoiceInputActivationMode = "toggle" | "hold";
 
-export interface UseVoiceInputOptions {
+interface UseVoiceInputCommonOptions {
   provider?: VoiceInputProviderV1;
   audioSource?: VoiceAudioSource;
-  value?: string;
-  onValueChange?: (value: string) => void;
   language?: string;
   vocabulary?: readonly string[];
   endpointing?: false | VoiceEndpointingOptions;
@@ -54,6 +52,18 @@ export interface UseVoiceInputOptions {
   onError?: (error: VoiceInputError) => void;
 }
 
+export type UseVoiceInputOptions = UseVoiceInputCommonOptions &
+  (
+    | {
+        readonly value: string;
+        readonly onValueChange: (value: string) => void;
+      }
+    | {
+        readonly value?: never;
+        readonly onValueChange?: never;
+      }
+  );
+
 export interface VoiceInputTriggerProps extends Pick<
   ButtonHTMLAttributes<HTMLButtonElement>,
   "aria-pressed" | "disabled" | "type"
@@ -70,8 +80,13 @@ export interface VoiceInputTriggerProps extends Pick<
 
 export interface UseVoiceInputResult extends VoiceInputSnapshot {
   readonly targetRef: RefCallback<VoiceInputTextTarget>;
+  /** Prefer getTriggerProps when adding application event handlers. */
   readonly triggerProps: VoiceInputTriggerProps;
   readonly isSupported: boolean;
+  getTriggerProps(
+    this: void,
+    props?: ButtonHTMLAttributes<HTMLButtonElement>,
+  ): ButtonHTMLAttributes<HTMLButtonElement> & VoiceInputTriggerProps;
   getTextSnapshot(this: void): VoiceInputTextEngineSnapshot;
   start(this: void): Promise<void>;
   stop(this: void, reason?: VoiceInputStopReason): Promise<void>;

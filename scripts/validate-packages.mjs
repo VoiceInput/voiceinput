@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -29,6 +30,7 @@ const reactVersions = [
   { runtime: "18.3.1", types: "18.3.31" },
   { runtime: "19.2.8", types: "19.2.18" },
 ];
+const nextVersion = "16.3.2";
 
 function run(command, arguments_, options = {}) {
   execFileSync(command, arguments_, {
@@ -370,6 +372,35 @@ try {
 const reactBrowserHtml = `<!doctype html>
 <html><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>`;
 
+const nextLayoutConsumer = `
+export default function RootLayout({ children }) {
+  return <html lang="en"><body>{children}</body></html>;
+}
+`;
+
+const nextConfigConsumer = `
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const directory = dirname(fileURLToPath(import.meta.url));
+
+export default {
+  turbopack: { root: join(directory, "..") },
+};
+`;
+
+const nextPageConsumer = `
+import { VoiceInputProvider } from "@voiceinput/react";
+
+export default function Page() {
+  return (
+    <VoiceInputProvider provider={null}>
+      <main>Packed client boundary</main>
+    </VoiceInputProvider>
+  );
+}
+`;
+
 const tsconfig = JSON.stringify(
   {
     compilerOptions: {
@@ -421,11 +452,28 @@ for (const reactVersion of reactVersions) {
         `react@${reactVersion.runtime}`,
         `react-dom@${reactVersion.runtime}`,
         `@types/react@${reactVersion.types}`,
+        ...(reactVersion.runtime.startsWith("19.")
+          ? [`next@${nextVersion}`]
+          : []),
         ...tarballs.values(),
       ],
       { cwd: consumerDirectory },
     );
     run("npm", ["ls", "react"], { cwd: consumerDirectory });
+    const installedReactEntry = readFileSync(
+      join(
+        consumerDirectory,
+        "node_modules",
+        "@voiceinput",
+        "react",
+        "dist",
+        "index.js",
+      ),
+      "utf8",
+    );
+    if (!installedReactEntry.startsWith('"use client";')) {
+      throw new Error("The packed React entry lost its client boundary");
+    }
     run("node", ["consumer.mjs"], { cwd: consumerDirectory });
     run("node", ["consumer.cjs"], { cwd: consumerDirectory });
     run("node", ["ssr.mjs"], { cwd: consumerDirectory });
@@ -453,6 +501,23 @@ for (const reactVersion of reactVersions) {
       { cwd: rootDirectory },
     );
     await validateReactBrowserConsumer(consumerDirectory);
+    if (reactVersion.runtime.startsWith("19.")) {
+      const nextDirectory = join(consumerDirectory, "next-app");
+      const appDirectory = join(nextDirectory, "app");
+      mkdirSync(appDirectory, { recursive: true });
+      writeFileSync(
+        join(nextDirectory, "package.json"),
+        `${JSON.stringify({ name: "packed-next-consumer", private: true })}\n`,
+      );
+      writeFileSync(join(nextDirectory, "next.config.mjs"), nextConfigConsumer);
+      writeFileSync(join(appDirectory, "layout.jsx"), nextLayoutConsumer);
+      writeFileSync(join(appDirectory, "page.jsx"), nextPageConsumer);
+      run(
+        "node",
+        [join(consumerDirectory, "node_modules/next/dist/bin/next"), "build"],
+        { cwd: nextDirectory },
+      );
+    }
   } finally {
     rmSync(consumerDirectory, { force: true, recursive: true });
   }

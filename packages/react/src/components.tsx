@@ -40,26 +40,38 @@ export interface VoiceFieldButtonProps extends Omit<
   readonly getAnnouncement?: (voice: UseVoiceInputResult) => string;
 }
 
-interface SharedVoiceFieldProps {
+interface SharedVoiceFieldOptions {
   /** Options passed directly to the underlying useVoiceInput call. */
   readonly voice?: Omit<UseVoiceInputOptions, "value" | "onValueChange">;
-  readonly value?: string;
-  readonly onValueChange?: (value: string) => void;
   readonly containerClassName?: string;
   readonly voiceButtonProps?: VoiceFieldButtonProps;
 }
 
-export interface VoiceInputProps
-  extends
-    Omit<InputHTMLAttributes<HTMLInputElement>, "children" | "type" | "value">,
-    SharedVoiceFieldProps {
-  readonly type?: "search" | "tel" | "text" | "url";
-}
+type VoiceFieldBinding =
+  | {
+      readonly value: string;
+      readonly onValueChange: (value: string) => void;
+    }
+  | {
+      readonly value?: never;
+      readonly onValueChange?: never;
+    };
 
-export interface VoiceTextareaProps
-  extends
-    Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "children" | "value">,
-    SharedVoiceFieldProps {}
+export type VoiceInputProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "children" | "type" | "value"
+> &
+  SharedVoiceFieldOptions &
+  VoiceFieldBinding & {
+    readonly type?: "search" | "tel" | "text" | "url";
+  };
+
+export type VoiceTextareaProps = Omit<
+  TextareaHTMLAttributes<HTMLTextAreaElement>,
+  "children" | "value"
+> &
+  SharedVoiceFieldOptions &
+  VoiceFieldBinding;
 
 const visuallyHiddenStyle: CSSProperties = {
   border: 0,

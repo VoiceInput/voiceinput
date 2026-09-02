@@ -30,6 +30,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 ```
 
+Create provider objects once at module scope, as above, or memoize them.
+Changing provider identity replaces the underlying session; the hook warns when
+that happens so an inline provider factory cannot silently restart recording on
+every render.
+
 `VoiceInputProvider` accepts `provider`, an optional custom `audioSource`, and
 `children`. It coordinates descendants so only one microphone session is active
 in that context. Context is optional: pass `provider` and optionally
@@ -59,15 +64,31 @@ export function Composer() {
         value={value}
         onChange={(event) => setValue(event.currentTarget.value)}
       />
-      <button {...voice.triggerProps}>Speak</button>
+      <button {...voice.getTriggerProps()}>Speak</button>
     </>
   );
 }
 ```
 
-Spread `triggerProps` onto a native `<button>`. It captures selection before
-focus changes and supplies click, pointer, keyboard, blur, disabled, type, and
-`aria-pressed` behavior.
+`getTriggerProps()` supplies click, pointer, keyboard, blur, disabled, type, and
+`aria-pressed` behavior while capturing selection before focus changes. Pass
+application button props to it instead of relying on object-spread order:
+
+```tsx
+<button
+  {...voice.getTriggerProps({
+    onClick(event) {
+      if (!formIsReady) event.preventDefault();
+    },
+  })}
+>
+  Speak
+</button>
+```
+
+Application handlers run first. Calling `preventDefault()` skips VoiceInput's
+handler. The lower-level `triggerProps` object remains available when no event
+handlers need to be composed.
 
 For an uncontrolled target, omit both `value` and `onValueChange`. Supplying
 only one is an invalid configuration. VoiceInput updates the DOM value and
@@ -103,12 +124,18 @@ dispatches a bubbling native `input` event.
 The hook returns:
 
 - `targetRef`, `triggerProps`, and `isSupported`
+- `getTriggerProps(buttonProps?)` for safe application-handler composition
 - `status`, `transcript`, `interimTranscript`, `finalTranscript`, and `error`
 - `start()`, `stop(reason?)`, `cancel()`, and `toggle()`
 - `getTextSnapshot()` for the current selection and voice-owned spans
 
 Status values are `idle`, `requesting-permission`, `connecting`, `listening`,
 `stopping`, `processing`, and `error`.
+
+Transcript names are intentionally distinct: `onInterimTranscript` and
+`onFinalTranscriptPart` receive raw provider parts, while `transcript`,
+`finalTranscript`, `onFinalTranscript`, and `onTranscriptChange` expose
+cumulative normalized state.
 
 ## Optional controls
 
@@ -211,6 +238,9 @@ Type exports:
 - `VoiceInputActivationMode`, `VoiceInputTriggerProps`
 - `VoiceButtonChildren`, `VoiceButtonProps`, `VoiceFieldButtonProps`
 - `VoiceInputProps`, `VoiceTextareaProps`
+- `VoiceInputError`, `VoiceInputStatus`, `VoiceInputStopReason`
+- `VoiceInputSessionEvent`, `VoiceInputSnapshot`
+- `VoiceInputProviderV1`, `VoiceEndpointingOptions`
 
 ## Security
 
