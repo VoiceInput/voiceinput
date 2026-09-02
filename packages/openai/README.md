@@ -35,8 +35,8 @@ Pass `provider` to `VoiceInputProvider` or directly to `useVoiceInput`.
   server VAD with `silence_duration_ms`
 
 Vocabulary accepts at most 100 trimmed terms, each at most 200 characters and
-without angle brackets or line breaks. Invalid settings fail before microphone
-permission.
+without angle brackets or line breaks. Invalid or unsupported settings fail
+before microphone permission with distinct error codes.
 
 ### `OpenAIVoiceInputProviderOptions`
 

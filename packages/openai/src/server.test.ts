@@ -1,3 +1,4 @@
+import { VoiceInputError } from "@voiceinput/provider";
 import { describe, expect, it, vi } from "vitest";
 
 import { createOpenAITokenHandler } from "./server.js";
@@ -132,11 +133,38 @@ describe("createOpenAITokenHandler", () => {
     expect(response.headers.get("Allow")).toBe("POST");
   });
 
+  it("preserves unsupported token-request errors", async () => {
+    const upstream = vi.fn<typeof fetch>();
+    const handler = createOpenAITokenHandler({
+      apiKey: "sk-server",
+      authorize: () => ({ subject: "user-1" }),
+      fetch: upstream,
+    });
+
+    const response = await handler(tokenRequest({ language: "haw" }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "unsupported-feature" },
+    });
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
   it("does not classify server and upstream failures as client errors", async () => {
     const authorizationFailure = createOpenAITokenHandler({
       apiKey: "sk-server",
       authorize: () => {
         throw new TypeError("internal authorization failure");
+      },
+      fetch: vi.fn<typeof fetch>(),
+    });
+    const typedAuthorizationFailure = createOpenAITokenHandler({
+      apiKey: "sk-server",
+      authorize: () => {
+        throw new VoiceInputError({
+          code: "unsupported-feature",
+          message: "private authorization detail",
+        });
       },
       fetch: vi.fn<typeof fetch>(),
     });
@@ -153,6 +181,9 @@ describe("createOpenAITokenHandler", () => {
     });
 
     expect((await authorizationFailure(tokenRequest({}))).status).toBe(500);
+    const typedFailure = await typedAuthorizationFailure(tokenRequest({}));
+    expect(typedFailure.status).toBe(500);
+    expect(await typedFailure.text()).not.toContain("private authorization");
     expect((await invalidUpstreamJson(tokenRequest({}))).status).toBe(500);
   });
 });

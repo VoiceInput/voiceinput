@@ -33,7 +33,8 @@ const provider = elevenlabs({
   VAD with a 300–3000 ms silence threshold
 
 Vocabulary accepts at most 50 trimmed terms, each at most 20 characters and
-without line breaks. Invalid settings fail before microphone permission.
+without line breaks. Invalid or unsupported settings fail before microphone
+permission with distinct error codes.
 
 ### `ElevenLabsVoiceInputProviderOptions`
 

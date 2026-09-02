@@ -286,6 +286,13 @@ export interface VoiceInputProviderV1ConformanceCase {
 
 export interface VoiceInputProviderV1ConformanceOptions {
   createHarness(): VoiceInputProviderV1ConformanceHarness;
+  errorTaxonomy?: {
+    readonly createProvider?: () => VoiceInputProviderV1;
+    readonly createUnsupportedBrowserProvider: () => VoiceInputProviderV1;
+    readonly invalidOptions: VoiceTranscriptionOptions;
+    readonly malformedUnsupportedOptions: VoiceTranscriptionOptions;
+    readonly unsupportedOptions: VoiceTranscriptionOptions;
+  };
 }
 
 export class VoiceInputProviderConformanceError extends Error {
@@ -453,5 +460,114 @@ export function createVoiceInputProviderV1ConformanceCases(
         );
       },
     },
+    ...(options.errorTaxonomy === undefined
+      ? []
+      : [
+          {
+            name: "classifies malformed portable options as invalid configuration",
+            async run() {
+              const provider =
+                options.errorTaxonomy?.createProvider?.() ??
+                options.createHarness().provider;
+              const error = captureValidationError(
+                provider,
+                options.errorTaxonomy?.invalidOptions ?? {},
+              );
+              assert(
+                error.code === "invalid-configuration",
+                `Expected invalid-configuration, received ${error.code}.`,
+              );
+              assert(
+                error.provider === provider.provider,
+                "Validation errors must identify their provider.",
+              );
+              assert(
+                error.cause instanceof Error,
+                "Invalid configuration must preserve its validation cause.",
+              );
+            },
+          },
+          {
+            name: "classifies valid unavailable options as unsupported features",
+            async run() {
+              const provider =
+                options.errorTaxonomy?.createProvider?.() ??
+                options.createHarness().provider;
+              const error = captureValidationError(
+                provider,
+                options.errorTaxonomy?.unsupportedOptions ?? {},
+              );
+              assert(
+                error.code === "unsupported-feature",
+                `Expected unsupported-feature, received ${error.code}.`,
+              );
+              assert(
+                error.provider === provider.provider,
+                "Unsupported-feature errors must identify their provider.",
+              );
+            },
+          },
+          {
+            name: "reports malformed options before capability limits",
+            async run() {
+              const provider =
+                options.errorTaxonomy?.createProvider?.() ??
+                options.createHarness().provider;
+              const error = captureValidationError(
+                provider,
+                options.errorTaxonomy?.malformedUnsupportedOptions ?? {},
+              );
+              assert(
+                error.code === "invalid-configuration",
+                `Expected malformed precedence, received ${error.code}.`,
+              );
+            },
+          },
+          {
+            name: "classifies missing runtime APIs as unsupported browser",
+            async run() {
+              const provider =
+                options.errorTaxonomy?.createUnsupportedBrowserProvider();
+              assert(provider !== undefined, "Expected a provider fixture.");
+              let caught: unknown;
+              try {
+                await provider.doOpen({
+                  abortSignal: new AbortController().signal,
+                });
+              } catch (error) {
+                caught = error;
+              }
+              assert(
+                VoiceInputError.isInstance(caught),
+                "Missing browser APIs must produce VoiceInputError.",
+              );
+              assert(
+                caught.code === "unsupported-browser",
+                `Expected unsupported-browser, received ${caught.code}.`,
+              );
+              assert(
+                caught.provider === provider.provider,
+                "Unsupported-browser errors must identify their provider.",
+              );
+            },
+          },
+        ]),
   ];
+}
+
+function captureValidationError(
+  provider: VoiceInputProviderV1,
+  options: VoiceTranscriptionOptions,
+): VoiceInputError {
+  let caught: unknown;
+  try {
+    provider.validateOptions(options);
+  } catch (error) {
+    caught = error;
+  }
+  assert(
+    VoiceInputError.isInstance(caught),
+    "Validation failures must use VoiceInputError.",
+  );
+  return caught;
 }

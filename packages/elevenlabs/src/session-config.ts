@@ -1,4 +1,7 @@
-import type { VoiceTranscriptionOptions } from "@voiceinput/provider";
+import {
+  VoiceInputError,
+  type VoiceTranscriptionOptions,
+} from "@voiceinput/provider";
 
 export const ELEVENLABS_DEFAULT_MODEL = "scribe_v2_realtime";
 export const ELEVENLABS_SAMPLE_RATE = 16_000;
@@ -131,7 +134,7 @@ function normalizeLanguage(value: string | undefined): string | undefined {
     throw new TypeError("language must be a valid BCP 47 language tag.");
   }
   if (!/^[a-z]{2,3}$/u.test(language)) {
-    throw new TypeError(
+    throw unsupportedFeature(
       "ElevenLabs requires an ISO 639-1 or ISO 639-3 language code.",
     );
   }
@@ -144,25 +147,33 @@ function validateVocabulary(
   if (value === undefined) {
     return undefined;
   }
-  if (!Array.isArray(value) || value.length > 50) {
-    throw new TypeError("vocabulary must contain at most 50 terms.");
+  if (!Array.isArray(value)) {
+    throw new TypeError("vocabulary must be an array of strings.");
   }
-  return Object.freeze(
-    value.map((term) => {
-      if (
-        typeof term !== "string" ||
-        term.length === 0 ||
-        term !== term.trim() ||
-        term.length > 20 ||
-        /[\r\n]/u.test(term)
-      ) {
-        throw new TypeError(
-          "ElevenLabs vocabulary terms must be trimmed strings of at most 20 characters without line breaks.",
-        );
-      }
-      return term;
-    }),
-  );
+  const vocabulary = value.map((term) => {
+    if (typeof term !== "string" || term.length === 0) {
+      throw new TypeError(
+        "ElevenLabs vocabulary terms must be non-empty strings.",
+      );
+    }
+    if (term !== term.trim() || /[\r\n]/u.test(term)) {
+      throw new TypeError(
+        "ElevenLabs vocabulary terms must be trimmed strings without line breaks.",
+      );
+    }
+    return term;
+  });
+  if (vocabulary.length > 50) {
+    throw unsupportedFeature(
+      "ElevenLabs vocabulary supports at most 50 terms.",
+    );
+  }
+  if (vocabulary.some((term) => term.length > 20)) {
+    throw unsupportedFeature(
+      "ElevenLabs vocabulary terms support at most 20 characters.",
+    );
+  }
+  return Object.freeze(vocabulary);
 }
 
 function validateEndpointing(
@@ -176,11 +187,15 @@ function validateEndpointing(
     value === null ||
     Object.keys(value).some((key) => key !== "silenceMs") ||
     !Number.isInteger(value.silenceMs) ||
-    value.silenceMs < 300 ||
-    value.silenceMs > 3_000
+    value.silenceMs <= 0
   ) {
     throw new TypeError(
-      "ElevenLabs endpointing silenceMs must be an integer from 300 to 3000.",
+      "ElevenLabs endpointing silenceMs must be a positive integer.",
+    );
+  }
+  if (value.silenceMs < 300 || value.silenceMs > 3_000) {
+    throw unsupportedFeature(
+      "ElevenLabs endpointing supports silenceMs from 300 to 3000.",
     );
   }
   return Object.freeze({ silenceMs: value.silenceMs });
@@ -239,4 +254,12 @@ function setOptional(
   if (value !== undefined) {
     url.searchParams.set(key, String(value));
   }
+}
+
+function unsupportedFeature(message: string): VoiceInputError {
+  return new VoiceInputError({
+    code: "unsupported-feature",
+    message,
+    provider: "elevenlabs",
+  });
 }

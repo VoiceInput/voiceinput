@@ -60,6 +60,9 @@ export function deepgram(
         ...transcriptionOptions,
       });
     } catch (cause) {
+      if (VoiceInputError.isInstance(cause)) {
+        throw cause;
+      }
       throw invalidConfiguration(cause);
     }
   };
@@ -416,7 +419,7 @@ function invalidConfiguration(cause: unknown): VoiceInputError {
 function requireBrowserFunction(value: unknown, feature: string): void {
   if (typeof value !== "function") {
     throw new VoiceInputError({
-      code: "unsupported-feature",
+      code: "unsupported-browser",
       message: `Deepgram voice input requires browser ${feature} support.`,
       provider: "deepgram",
     });

@@ -1,4 +1,7 @@
-import { VoiceInputError } from "@voiceinput/provider";
+import {
+  VoiceInputError,
+  type VoiceTranscriptionOptions,
+} from "@voiceinput/provider";
 import {
   createVoiceInputProviderV1ConformanceCases,
   type FakeVoiceInputProviderController,
@@ -430,19 +433,19 @@ describe("elevenlabs", () => {
       provider.validateOptions({ endpointing: { silenceMs: 250 } }),
     ).toThrowError(
       expect.objectContaining({
-        code: "invalid-configuration",
+        code: "unsupported-feature",
         provider: "elevenlabs",
       }),
     );
     expect(() =>
       provider.validateOptions({ vocabulary: ["x".repeat(21)] }),
-    ).toThrowError(expect.objectContaining({ code: "invalid-configuration" }));
+    ).toThrowError(expect.objectContaining({ code: "unsupported-feature" }));
     await expect(
       provider.doOpen({
         abortSignal: new AbortController().signal,
         endpointing: { silenceMs: 250 },
       }),
-    ).rejects.toMatchObject({ code: "invalid-configuration" });
+    ).rejects.toMatchObject({ code: "unsupported-feature" });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -489,6 +492,19 @@ describe("elevenlabs", () => {
 describe("ElevenLabs provider conformance", () => {
   const cases = createVoiceInputProviderV1ConformanceCases({
     createHarness: createConformanceHarness,
+    errorTaxonomy: {
+      createUnsupportedBrowserProvider: () =>
+        elevenlabs({
+          tokenEndpoint: "/token",
+          fetch: vi.fn<typeof fetch>(),
+          webSocket: 0 as unknown as typeof WebSocket,
+        }),
+      invalidOptions: { language: "not a tag" },
+      malformedUnsupportedOptions: {
+        vocabulary: Array.from({ length: 51 }, () => 42),
+      } as unknown as VoiceTranscriptionOptions,
+      unsupportedOptions: { endpointing: { silenceMs: 250 } },
+    },
   });
 
   it("passes every public provider case", async () => {

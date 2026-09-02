@@ -87,6 +87,9 @@ function validateOptions(
       ...options,
     });
   } catch (cause) {
+    if (VoiceInputError.isInstance(cause)) {
+      throw cause;
+    }
     throw new VoiceInputError({
       code: "invalid-configuration",
       message:
@@ -617,7 +620,7 @@ function validateFactoryString(value: string, name: string): string {
 
 function unsupportedBrowserFeature(feature: string): VoiceInputError {
   return new VoiceInputError({
-    code: "unsupported-feature",
+    code: "unsupported-browser",
     message: `OpenAI voice input requires browser ${feature} support.`,
     provider: "openai",
   });

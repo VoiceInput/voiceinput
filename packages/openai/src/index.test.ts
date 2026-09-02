@@ -1,4 +1,7 @@
-import { VoiceInputError } from "@voiceinput/provider";
+import {
+  VoiceInputError,
+  type VoiceTranscriptionOptions,
+} from "@voiceinput/provider";
 import {
   createVoiceInputProviderV1ConformanceCases,
   type FakeVoiceInputProviderController,
@@ -15,10 +18,21 @@ describe("openai", () => {
     expect(() => provider.validateOptions({ language: "en-CA" })).not.toThrow();
     expect(() => provider.validateOptions({ language: "haw" })).toThrowError(
       expect.objectContaining({
-        code: "invalid-configuration",
+        code: "unsupported-feature",
         provider: "openai",
       }),
     );
+    expect(() =>
+      provider.validateOptions({
+        vocabulary: Array.from({ length: 101 }, () => "term"),
+      }),
+    ).toThrowError(expect.objectContaining({ code: "unsupported-feature" }));
+    expect(() =>
+      provider.validateOptions({ vocabulary: ["x".repeat(201)] }),
+    ).toThrowError(expect.objectContaining({ code: "unsupported-feature" }));
+    expect(() =>
+      provider.validateOptions({ vocabulary: [" untrimmed"] }),
+    ).toThrowError(expect.objectContaining({ code: "invalid-configuration" }));
   });
 
   it("streams accumulated deltas, ordered finals, speech boundaries, and PCM16", async () => {
@@ -346,6 +360,19 @@ describe("openai", () => {
 describe("OpenAI provider conformance", () => {
   const cases = createVoiceInputProviderV1ConformanceCases({
     createHarness: createConformanceHarness,
+    errorTaxonomy: {
+      createUnsupportedBrowserProvider: () =>
+        openai({
+          tokenEndpoint: "/token",
+          fetch: vi.fn<typeof fetch>(),
+          webSocket: 0 as unknown as typeof WebSocket,
+        }),
+      invalidOptions: { language: "not a tag" },
+      malformedUnsupportedOptions: {
+        vocabulary: Array.from({ length: 101 }, () => 42),
+      } as unknown as VoiceTranscriptionOptions,
+      unsupportedOptions: { language: "haw" },
+    },
   });
 
   it("passes every public provider case", async () => {

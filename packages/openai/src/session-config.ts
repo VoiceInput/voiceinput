@@ -1,6 +1,7 @@
-import type {
-  VoiceEndpointingOptions,
-  VoiceTranscriptionOptions,
+import {
+  VoiceInputError,
+  type VoiceEndpointingOptions,
+  type VoiceTranscriptionOptions,
 } from "@voiceinput/provider";
 
 export const OPENAI_DEFAULT_MODEL = "gpt-transcribe";
@@ -95,7 +96,7 @@ function normalizeLanguage(value: unknown): string | undefined {
     throw new TypeError("language must be a valid BCP 47 language tag.");
   }
   if (!/^[a-z]{2}$/u.test(primaryLanguage)) {
-    throw new TypeError(
+    throw unsupportedFeature(
       "OpenAI requires a language tag with an ISO 639-1 primary language subtag.",
     );
   }
@@ -121,15 +122,14 @@ function validateVocabulary(value: unknown): readonly string[] | undefined {
   if (value === undefined) {
     return undefined;
   }
-  if (!Array.isArray(value) || value.length > 100) {
-    throw new TypeError("vocabulary must contain at most 100 strings.");
+  if (!Array.isArray(value)) {
+    throw new TypeError("vocabulary must be an array of strings.");
   }
   const vocabulary = value.map((term) => {
     if (
       typeof term !== "string" ||
       term.trim().length === 0 ||
       term !== term.trim() ||
-      term.length > 200 ||
       /[<>\r\n]/u.test(term)
     ) {
       throw new TypeError(
@@ -138,6 +138,14 @@ function validateVocabulary(value: unknown): readonly string[] | undefined {
     }
     return term;
   });
+  if (vocabulary.length > 100) {
+    throw unsupportedFeature("OpenAI vocabulary supports at most 100 terms.");
+  }
+  if (vocabulary.some((term) => term.length > 200)) {
+    throw unsupportedFeature(
+      "OpenAI vocabulary terms support at most 200 characters.",
+    );
+  }
   return Object.freeze(vocabulary);
 }
 
@@ -162,4 +170,12 @@ function validateEndpointing(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function unsupportedFeature(message: string): VoiceInputError {
+  return new VoiceInputError({
+    code: "unsupported-feature",
+    message,
+    provider: "openai",
+  });
 }

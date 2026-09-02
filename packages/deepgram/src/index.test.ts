@@ -1,4 +1,7 @@
-import { VoiceInputError } from "@voiceinput/provider";
+import {
+  VoiceInputError,
+  type VoiceTranscriptionOptions,
+} from "@voiceinput/provider";
 import {
   createVoiceInputProviderV1ConformanceCases,
   type FakeVoiceInputProviderController,
@@ -81,7 +84,7 @@ describe("deepgram", () => {
       provider.validateOptions({ vocabulary: ["VoiceInput"] }),
     ).toThrowError(
       expect.objectContaining({
-        code: "invalid-configuration",
+        code: "unsupported-feature",
         provider: "deepgram",
       }),
     );
@@ -90,7 +93,7 @@ describe("deepgram", () => {
         abortSignal: new AbortController().signal,
         vocabulary: ["VoiceInput"],
       }),
-    ).rejects.toMatchObject({ code: "invalid-configuration" });
+    ).rejects.toMatchObject({ code: "unsupported-feature" });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -118,7 +121,7 @@ describe("deepgram", () => {
 
     const monolingual = deepgram({ tokenEndpoint: "/token", model: "base" });
     expect(() => monolingual.validateOptions({})).toThrowError(
-      expect.objectContaining({ code: "invalid-configuration" }),
+      expect.objectContaining({ code: "unsupported-feature" }),
     );
     expect(() => monolingual.validateOptions({ language: "en" })).not.toThrow();
     const medical = deepgram({
@@ -126,7 +129,7 @@ describe("deepgram", () => {
       model: "nova-3-medical",
     });
     expect(() => medical.validateOptions({})).toThrowError(
-      expect.objectContaining({ code: "invalid-configuration" }),
+      expect.objectContaining({ code: "unsupported-feature" }),
     );
   });
 
@@ -225,6 +228,21 @@ describe("deepgram", () => {
 describe("Deepgram provider conformance", () => {
   const cases = createVoiceInputProviderV1ConformanceCases({
     createHarness: createConformanceHarness,
+    errorTaxonomy: {
+      createUnsupportedBrowserProvider: () =>
+        deepgram({
+          tokenEndpoint: "/token",
+          fetch: vi.fn<typeof fetch>(),
+          webSocket: 0 as unknown as typeof WebSocket,
+        }),
+      createProvider: () =>
+        deepgram({ tokenEndpoint: "/token", model: "nova-2" }),
+      invalidOptions: { language: "not a tag" },
+      malformedUnsupportedOptions: {
+        vocabulary: [42],
+      } as unknown as VoiceTranscriptionOptions,
+      unsupportedOptions: { vocabulary: ["VoiceInput"] },
+    },
   });
 
   it("passes every public provider case", async () => {

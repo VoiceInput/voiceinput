@@ -76,6 +76,9 @@ export function elevenlabs(
         ...transcriptionOptions,
       });
     } catch (cause) {
+      if (VoiceInputError.isInstance(cause)) {
+        throw cause;
+      }
       throw invalidConfiguration(cause);
     }
   };
@@ -583,7 +586,7 @@ function readText(value: Record<string, unknown>): string {
 function requireBrowserFunction(value: unknown, feature: string): void {
   if (typeof value !== "function") {
     throw new VoiceInputError({
-      code: "unsupported-feature",
+      code: "unsupported-browser",
       message: `ElevenLabs voice input requires browser ${feature} support.`,
       provider: "elevenlabs",
     });

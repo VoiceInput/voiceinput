@@ -1,4 +1,7 @@
-import type { VoiceTranscriptionOptions } from "@voiceinput/provider";
+import {
+  VoiceInputError,
+  type VoiceTranscriptionOptions,
+} from "@voiceinput/provider";
 
 export const DEEPGRAM_DEFAULT_MODEL = "nova-3";
 export const DEEPGRAM_SAMPLE_RATE = 16_000;
@@ -93,7 +96,7 @@ function validateLanguage(value: string | undefined, model: string): string {
     if (supportsMultilingual(model)) {
       return "multi";
     }
-    throw new TypeError(
+    throw unsupportedFeature(
       `language is required for Deepgram model ${model} because it does not support multilingual transcription.`,
     );
   }
@@ -120,29 +123,28 @@ function validateVocabulary(
   if (value === undefined) {
     return undefined;
   }
-  if (!model.startsWith("nova-3")) {
-    throw new TypeError(
-      "Deepgram vocabulary requires a Nova-3 model because it maps to keyterm prompting.",
-    );
-  }
   if (!Array.isArray(value)) {
     throw new TypeError("vocabulary must be an array of strings.");
   }
-  return Object.freeze(
-    value.map((term) => {
-      if (
-        typeof term !== "string" ||
-        term.length === 0 ||
-        term !== term.trim() ||
-        /[\r\n]/u.test(term)
-      ) {
-        throw new TypeError(
-          "Deepgram vocabulary terms must be non-empty trimmed strings without line breaks.",
-        );
-      }
-      return term;
-    }),
-  );
+  const vocabulary = value.map((term) => {
+    if (
+      typeof term !== "string" ||
+      term.length === 0 ||
+      term !== term.trim() ||
+      /[\r\n]/u.test(term)
+    ) {
+      throw new TypeError(
+        "Deepgram vocabulary terms must be non-empty trimmed strings without line breaks.",
+      );
+    }
+    return term;
+  });
+  if (!model.startsWith("nova-3")) {
+    throw unsupportedFeature(
+      "Deepgram vocabulary requires a Nova-3 model because it maps to keyterm prompting.",
+    );
+  }
+  return Object.freeze(vocabulary);
 }
 
 function supportsMultilingual(model: string): boolean {
@@ -195,4 +197,12 @@ function setOptional(url: URL, key: string, value: boolean | undefined): void {
   if (value !== undefined) {
     url.searchParams.set(key, String(value));
   }
+}
+
+function unsupportedFeature(message: string): VoiceInputError {
+  return new VoiceInputError({
+    code: "unsupported-feature",
+    message,
+    provider: "deepgram",
+  });
 }

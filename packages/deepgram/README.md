@@ -36,7 +36,8 @@ const provider = deepgram({
   supplied positive integer silence threshold
 - `smartFormat` and `punctuate`: both default to `true`
 
-Invalid or unsupported settings fail before microphone permission.
+Invalid or unsupported settings fail before microphone permission with distinct
+error codes.
 
 ### `DeepgramVoiceInputProviderOptions`
 

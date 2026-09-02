@@ -1,3 +1,5 @@
+import { VoiceInputError } from "@voiceinput/provider";
+
 import {
   OPENAI_DEFAULT_MODEL,
   createOpenAITranscriptionSession,
@@ -166,7 +168,7 @@ export function createOpenAITokenHandler(
       if (error instanceof InvalidTokenRequestError) {
         return jsonError(
           400,
-          "invalid-configuration",
+          error.code,
           error.message || "Invalid token request.",
         );
       }
@@ -197,12 +199,23 @@ async function readTokenRequest(
     if (cause instanceof SyntaxError || cause instanceof TypeError) {
       throw new InvalidTokenRequestError(cause.message);
     }
+    if (
+      VoiceInputError.isInstance(cause) &&
+      (cause.code === "invalid-configuration" ||
+        cause.code === "unsupported-feature")
+    ) {
+      throw new InvalidTokenRequestError(cause.message, cause.code);
+    }
     throw cause;
   }
 }
 
 class InvalidTokenRequestError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code:
+      "invalid-configuration" | "unsupported-feature" = "invalid-configuration",
+  ) {
     super(message);
     this.name = "InvalidTokenRequestError";
   }

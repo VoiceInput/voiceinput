@@ -107,9 +107,14 @@ untrusted provisional text if graceful provider finalization times out.
 ## An option fails before the permission prompt
 
 This is intentional. Core and adapter validation runs before audio preparation.
-`invalid-configuration` means the value is malformed or outside the provider's
-documented limits. `unsupported-feature` means the selected model/provider
-cannot implement that portable option faithfully.
+`invalid-configuration` means the value is malformed. `unsupported-feature`
+means the value is well formed but the selected model/provider cannot implement
+that portable option faithfully, including provider-specific capability limits.
+
+Treat `code` as the stable branching contract; messages are diagnostic and may
+improve between releases. `provider`, `retryable`, and `retryAfterMs` add
+provider identity and retry guidance, while `cause` is for debugging rather than
+application control flow.
 
 Review the selected provider README:
 

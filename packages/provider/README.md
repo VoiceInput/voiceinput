@@ -80,6 +80,12 @@ Error codes are `unsupported-browser`, `permission-denied`, `device-not-found`,
 `provider-error`, `unsupported-feature`, `invalid-configuration`, `audio-error`,
 and `transform-error`.
 
+Branch on `code`, never on the message. `invalid-configuration` means the value
+is malformed; `unsupported-feature` means the value is valid but the selected
+provider or model cannot implement it faithfully. Adapters and core preserve an
+existing `VoiceInputError`, including `provider`, `retryable`, `retryAfterMs`,
+and safe causes, instead of recategorizing it.
+
 ## Test export
 
 Import deterministic utilities from the separate test entry point:
@@ -100,6 +106,12 @@ The conformance runner is framework-independent:
 ```ts
 const cases = createVoiceInputProviderV1ConformanceCases({
   createHarness: createMyDeterministicAdapterHarness,
+  errorTaxonomy: {
+    createUnsupportedBrowserProvider: createMissingRuntimeAdapter,
+    invalidOptions: { language: "not a tag" },
+    malformedUnsupportedOptions: malformedUnavailableOptions,
+    unsupportedOptions: { vocabulary: ["valid-but-unavailable"] },
+  },
 });
 
 for (const testCase of cases) {
