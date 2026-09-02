@@ -71,11 +71,11 @@ describe("text ownership", () => {
 
     engine.setTarget(target);
     target.focus();
-    target.setSelectionRange(4, 7);
+    target.setSelectionRange(4, 7, "backward");
     expect(engine.captureSelection()).toEqual({
       start: 4,
       end: 7,
-      direction: "none",
+      direction: "backward",
     });
     trigger.focus();
     engine.begin();
