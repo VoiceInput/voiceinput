@@ -55,6 +55,22 @@ describe("text ownership model", () => {
     ]);
   });
 
+  it("ignores browser direction normalization for a collapsed caret", () => {
+    const model = new TextOwnershipModel("inline");
+    model.replaceTarget("");
+    model.captureSelection({ start: 0, end: 0, direction: "none" });
+    model.begin();
+    model.applyInterim("draft", true);
+
+    model.selectionChanged({ start: 5, end: 5, direction: "forward" });
+    model.applyInterim("final draft", true);
+
+    expect(model.value).toBe("final draft");
+    expect(model.getSnapshot().spans).toEqual([
+      expect.objectContaining({ text: "final draft", state: "provisional" }),
+    ]);
+  });
+
   it("abandons an overlapping provisional range and re-anchors", () => {
     const model = new TextOwnershipModel("inline");
     model.replaceTarget("alpha omega");

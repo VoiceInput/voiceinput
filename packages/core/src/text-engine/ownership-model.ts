@@ -670,6 +670,6 @@ function sameSelection(
     current !== null &&
     current.start === next.start &&
     current.end === next.end &&
-    current.direction === next.direction
+    (current.start === current.end || current.direction === next.direction)
   );
 }
