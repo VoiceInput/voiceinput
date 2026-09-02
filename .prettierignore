@@ -6,5 +6,6 @@ coverage/
 .next/
 playwright-report/
 test-results/
+apps/playground-next/AGENTS.md
 pnpm-lock.yaml
 *.tgz
