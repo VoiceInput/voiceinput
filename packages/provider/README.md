@@ -98,14 +98,18 @@ import {
 ```
 
 The fake provider returns `{ provider, controller }`. The controller can wait
-for sessions, resolve or reject opening, emit normalized parts, close or fail a
-stream, and inspect immutable session snapshots.
+for sessions, resolve or reject opening, emit normalized parts, close, fail, or
+time out a stream, and inspect immutable session snapshots.
 
 The conformance runner is framework-independent:
 
 ```ts
+import { createVoiceInputSession } from "@voiceinput/core";
+
 const cases = createVoiceInputProviderV1ConformanceCases({
   createHarness: createMyDeterministicAdapterHarness,
+  createAccumulatorSession: (provider, audioSource) =>
+    createVoiceInputSession({ provider, audioSource }),
   errorTaxonomy: {
     createUnsupportedBrowserProvider: createMissingRuntimeAdapter,
     invalidOptions: { language: "not a tag" },
@@ -118,6 +122,14 @@ for (const testCase of cases) {
   await testCase.run();
 }
 ```
+
+The cases require ordered normalized output, multiple final chunks through the
+shared core accumulator, delayed final drain after `finish()`, no
+interim-to-final promotion, terminal timeout mapping, no output after completion
+or abort, idempotent finish/abort cleanup, opening abort, PCM16 delivery, and
+the shared error taxonomy. A harness's `timeout()` method must induce its
+adapter's real timeout or equivalent terminal transport condition; the resulting
+stream error must be a retryable `network-error`.
 
 Your harness supplies the adapter under test and a controller for its fake
 transport. See the

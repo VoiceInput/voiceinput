@@ -1,3 +1,4 @@
+import { createVoiceInputSession } from "@voiceinput/core";
 import {
   VoiceInputError,
   type VoiceTranscriptionOptions,
@@ -412,6 +413,8 @@ describe("openai", () => {
 describe("OpenAI provider conformance", () => {
   const cases = createVoiceInputProviderV1ConformanceCases({
     createHarness: createConformanceHarness,
+    createAccumulatorSession: (provider, audioSource) =>
+      createVoiceInputSession({ provider, audioSource }),
     errorTaxonomy: {
       createUnsupportedBrowserProvider: () =>
         openai({
@@ -427,10 +430,8 @@ describe("OpenAI provider conformance", () => {
     },
   });
 
-  it("passes every public provider case", async () => {
-    for (const testCase of cases) {
-      await expect(testCase.run()).resolves.toBeUndefined();
-    }
+  it.each(cases)("$name", async (testCase) => {
+    await expect(testCase.run()).resolves.toBeUndefined();
   });
 });
 
@@ -544,7 +545,6 @@ function createConformanceHarness(): {
   let socket: MockWebSocket | undefined;
   let interim = "";
   let itemId = 0;
-  let closed = false;
   const getSocket = async (): Promise<MockWebSocket> => {
     socket ??= await transport.waitForSocket();
     return socket;
@@ -584,9 +584,6 @@ function createConformanceHarness(): {
       requireSocket().fail();
     },
     emit(part) {
-      if (closed) {
-        throw new Error("Cannot emit after the OpenAI test stream closed.");
-      }
       const activeSocket = requireSocket();
       if (part.type === "interim") {
         const delta = part.text.startsWith(interim)
@@ -617,7 +614,6 @@ function createConformanceHarness(): {
       }
     },
     close() {
-      closed = true;
       requireSocket().remoteClose();
     },
     fail(error) {
@@ -625,6 +621,9 @@ function createConformanceHarness(): {
         type: "error",
         error: { code: error.code, message: error.message },
       });
+    },
+    timeout() {
+      requireSocket().remoteClose(1006);
     },
   };
   return { provider, controller };

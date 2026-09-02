@@ -41,6 +41,9 @@
   "dependencies": {
     "@voiceinput/provider": "workspace:*"
   },
+  "devDependencies": {
+    "@voiceinput/core": "workspace:*"
+  },
   "publishConfig": {
     "access": "public"
   },

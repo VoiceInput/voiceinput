@@ -1,3 +1,4 @@
+import { createVoiceInputSession } from "@voiceinput/core";
 import {
   VoiceInputError,
   type VoiceTranscriptionOptions,
@@ -263,6 +264,8 @@ describe("deepgram", () => {
 describe("Deepgram provider conformance", () => {
   const cases = createVoiceInputProviderV1ConformanceCases({
     createHarness: createConformanceHarness,
+    createAccumulatorSession: (provider, audioSource) =>
+      createVoiceInputSession({ provider, audioSource }),
     errorTaxonomy: {
       createUnsupportedBrowserProvider: () =>
         deepgram({
@@ -280,10 +283,8 @@ describe("Deepgram provider conformance", () => {
     },
   });
 
-  it("passes every public provider case", async () => {
-    for (const testCase of cases) {
-      await expect(testCase.run()).resolves.toBeUndefined();
-    }
+  it.each(cases)("$name", async (testCase) => {
+    await expect(testCase.run()).resolves.toBeUndefined();
   });
 });
 
@@ -414,7 +415,6 @@ function createConformanceHarness(): {
   const transport = createTransport();
   const provider = createProvider(transport);
   let socket: MockWebSocket | undefined;
-  let closed = false;
   let resultStart = 0;
   const getSocket = async (): Promise<MockWebSocket> =>
     (socket ??= await transport.waitForSocket());
@@ -451,9 +451,6 @@ function createConformanceHarness(): {
       requireSocket().fail();
     },
     emit(part) {
-      if (closed) {
-        throw new Error("Cannot emit after the Deepgram test stream closed.");
-      }
       if (part.type === "speech-start") {
         requireSocket().message({ type: "SpeechStarted", timestamp: 0 });
       } else if (part.type === "speech-end") {
@@ -471,7 +468,6 @@ function createConformanceHarness(): {
       }
     },
     close() {
-      closed = true;
       requireSocket().remoteClose();
     },
     fail(error) {
@@ -480,6 +476,9 @@ function createConformanceHarness(): {
         code: error.code,
         description: error.message,
       });
+    },
+    timeout() {
+      requireSocket().remoteClose(1006, "Connection timed out.");
     },
   };
   return { provider, controller };

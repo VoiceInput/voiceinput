@@ -100,6 +100,14 @@ import "@voiceinput/deepgram/server";
 const fake = createFakeVoiceInputProvider({ sampleRate: 24_000 });
 const cases = createVoiceInputProviderV1ConformanceCases({
   createHarness: () => createFakeVoiceInputProvider({ autoOpen: false }),
+  createAccumulatorSession: (provider, audioSource) =>
+    createVoiceInputSession({ provider, audioSource }),
+  errorTaxonomy: {
+    createUnsupportedBrowserProvider: () => fake.provider,
+    invalidOptions: {},
+    malformedUnsupportedOptions: {},
+    unsupportedOptions: {},
+  },
 });
 
 if (
@@ -140,6 +148,14 @@ require("@voiceinput/deepgram/server");
 const fake = createFakeVoiceInputProvider({ sampleRate: 24_000 });
 const cases = createVoiceInputProviderV1ConformanceCases({
   createHarness: () => createFakeVoiceInputProvider({ autoOpen: false }),
+  createAccumulatorSession: (provider, audioSource) =>
+    createVoiceInputSession({ provider, audioSource }),
+  errorTaxonomy: {
+    createUnsupportedBrowserProvider: () => fake.provider,
+    invalidOptions: {},
+    malformedUnsupportedOptions: {},
+    unsupportedOptions: {},
+  },
 });
 
 if (
@@ -200,6 +216,17 @@ hookResult.stop("user");
 createFakeVoiceInputProvider({ sampleRate: 16_000 });
 createVoiceInputProviderV1ConformanceCases({
   createHarness: () => createFakeVoiceInputProvider({ autoOpen: false }),
+  createAccumulatorSession: (candidate, conformanceAudioSource) =>
+    createVoiceInputSession({
+      provider: candidate,
+      audioSource: conformanceAudioSource,
+    }),
+  errorTaxonomy: {
+    createUnsupportedBrowserProvider: () => provider,
+    invalidOptions: {},
+    malformedUnsupportedOptions: {},
+    unsupportedOptions: {},
+  },
 });
 `;
 

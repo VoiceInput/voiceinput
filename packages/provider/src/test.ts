@@ -35,6 +35,7 @@ export interface FakeVoiceInputProviderController {
   emit(part: VoiceInputProviderV1StreamPart, index?: number): void;
   close(index?: number): void;
   fail(error: VoiceInputError, index?: number): void;
+  timeout(index?: number): PromiseLike<void> | void;
 }
 
 export interface FakeVoiceInputProvider {
@@ -104,7 +105,7 @@ export function createFakeVoiceInputProvider(
     const session = getSession(index);
 
     if (session.closed) {
-      throw new Error("Cannot emit after the fake provider stream closed.");
+      return;
     }
 
     session.streamController.enqueue(part);
@@ -142,6 +143,22 @@ export function createFakeVoiceInputProvider(
     fail(error, index) {
       emit({ type: "error", error }, index);
       close(getSession(index));
+    },
+    timeout(index) {
+      const session = getSession(index);
+      emit(
+        {
+          type: "error",
+          error: new VoiceInputError({
+            code: "network-error",
+            message: "The fake provider timed out.",
+            provider: options.provider ?? "fake",
+            retryable: true,
+          }),
+        },
+        index,
+      );
+      close(session);
     },
   };
 
@@ -286,7 +303,22 @@ export interface VoiceInputProviderV1ConformanceCase {
 
 export interface VoiceInputProviderV1ConformanceOptions {
   createHarness(): VoiceInputProviderV1ConformanceHarness;
-  errorTaxonomy?: {
+  createAccumulatorSession(
+    provider: VoiceInputProviderV1,
+    audioSource: {
+      prepare(): PromiseLike<{
+        readonly stream: ReadableStream<Int16Array>;
+        start(): PromiseLike<void> | void;
+        stop(): PromiseLike<void> | void;
+        abort(reason?: unknown): void;
+      }>;
+    },
+  ): {
+    getSnapshot(): { readonly finalTranscript: string };
+    start(): PromiseLike<void> | void;
+    cancel(): PromiseLike<void> | void;
+  };
+  errorTaxonomy: {
     readonly createProvider?: () => VoiceInputProviderV1;
     readonly createUnsupportedBrowserProvider: () => VoiceInputProviderV1;
     readonly invalidOptions: VoiceTranscriptionOptions;
@@ -333,6 +365,41 @@ async function openSession(
   return await sessionPromise;
 }
 
+function createConformanceAudioSource() {
+  return {
+    prepare() {
+      let closed = false;
+      let streamController:
+        ReadableStreamDefaultController<Int16Array> | undefined;
+      const stream = new ReadableStream<Int16Array>({
+        start(controller) {
+          streamController = controller;
+        },
+      });
+      const close = (): void => {
+        if (!closed) {
+          closed = true;
+          streamController?.close();
+        }
+      };
+      return Promise.resolve({ stream, start() {}, stop: close, abort: close });
+    },
+  };
+}
+
+async function waitFor(
+  condition: () => boolean,
+  message: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (condition()) {
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  throw new VoiceInputProviderConformanceError(message);
+}
+
 export function createVoiceInputProviderV1ConformanceCases(
   options: VoiceInputProviderV1ConformanceOptions,
 ): readonly VoiceInputProviderV1ConformanceCase[] {
@@ -370,13 +437,14 @@ export function createVoiceInputProviderV1ConformanceCases(
           `Unexpected stream order: ${partTypes.join(",")}`,
         );
 
-        let postCloseThrew = false;
-        try {
-          harness.controller.emit({ type: "final", text: "late" });
-        } catch {
-          postCloseThrew = true;
-        }
-        assert(postCloseThrew, "Output must not be emitted after closure.");
+        harness.controller.emit({ type: "final", text: "late" });
+        const lateReader = session.stream.getReader();
+        const lateResult = await lateReader.read();
+        lateReader.releaseLock();
+        assert(
+          lateResult.done,
+          `Output must not be emitted after closure: ${JSON.stringify(lateResult)}.`,
+        );
       },
     },
     {
@@ -398,17 +466,123 @@ export function createVoiceInputProviderV1ConformanceCases(
       },
     },
     {
+      name: "drains a delayed provider final after finish",
+      async run() {
+        const harness = options.createHarness();
+        const session = await openSession(harness);
+        const partsPromise = readStream(session.stream);
+        await session.sendAudio(new Int16Array([1]));
+        harness.controller.emit({ type: "interim", text: "draft" });
+        const finishPromise = Promise.resolve(session.finish());
+
+        await Promise.resolve();
+        harness.controller.emit({ type: "final", text: "corrected." });
+        harness.controller.close();
+        await finishPromise;
+
+        const parts = await partsPromise;
+        const finals = parts.filter((part) => part.type === "final");
+        assert(finals.length === 1, "Expected one delayed final part.");
+        assert(
+          finals[0]?.text === "corrected.",
+          "finish() must preserve the provider's corrected final text.",
+        );
+      },
+    },
+    {
+      name: "never promotes interim text when finish has no final",
+      async run() {
+        const harness = options.createHarness();
+        const session = await openSession(harness);
+        const partsPromise = readStream(session.stream);
+        await session.sendAudio(new Int16Array([1]));
+        harness.controller.emit({ type: "interim", text: "mutable draft" });
+        const finishPromise = Promise.resolve(session.finish());
+
+        await Promise.resolve();
+        harness.controller.close();
+        await finishPromise;
+
+        const parts = await partsPromise;
+        assert(
+          !parts.some((part) => part.type === "final"),
+          "Interim text must not be relabeled as final during finish().",
+        );
+      },
+    },
+    {
+      name: "feeds multiple final chunks through the shared accumulator",
+      async run() {
+        const harness = options.createHarness();
+        const accumulator = options.createAccumulatorSession(
+          harness.provider,
+          createConformanceAudioSource(),
+        );
+        const startPromise = Promise.resolve(accumulator.start());
+        await harness.controller.waitForSession();
+        harness.controller.resolveOpen();
+        await startPromise;
+        harness.controller.emit({ type: "final", text: "one" });
+        harness.controller.emit({ type: "final", text: "two" });
+        harness.controller.emit({ type: "final", text: "," });
+        harness.controller.emit({ type: "final", text: "three" });
+        await waitFor(
+          () => accumulator.getSnapshot().finalTranscript === "one two, three",
+          `Unexpected accumulated transcript: ${accumulator.getSnapshot().finalTranscript}`,
+        );
+        await accumulator.cancel();
+      },
+    },
+    {
+      name: "maps a terminal timeout and closes the stream",
+      async run() {
+        const harness = options.createHarness();
+        const session = await openSession(harness);
+        const partsPromise = readStream(session.stream);
+        await session.sendAudio(new Int16Array([1]));
+        const finishOutcome = Promise.resolve(session.finish()).then(
+          () => undefined,
+          () => undefined,
+        );
+
+        await harness.controller.timeout();
+        await finishOutcome;
+        const parts = await partsPromise;
+        const errorParts = parts.filter((part) => part.type === "error");
+        assert(errorParts.length === 1, "Expected one terminal timeout error.");
+        assert(
+          errorParts[0]?.error.code === "network-error",
+          `Expected network-error, received ${errorParts[0]?.error.code}.`,
+        );
+        assert(
+          errorParts[0]?.error.retryable,
+          "Provider timeouts must be retryable.",
+        );
+      },
+    },
+    {
       name: "aborts immediately and idempotently",
       async run() {
         const harness = options.createHarness();
         const session = await openSession(harness);
+        const partsPromise = readStream(session.stream);
         session.abort("test");
         session.abort("test-again");
+        await partsPromise;
         const snapshot = harness.controller.sessions[0];
         assert(snapshot?.aborted, "Session was not marked aborted.");
+        assert(snapshot.closed, "Abort must close the provider session.");
         assert(
           snapshot.abortCallCount === 1,
           "abort() must have only one observable effect.",
+        );
+        harness.controller.emit({ type: "final", text: "late" });
+        const lateReader = session.stream.getReader();
+        const lateResult = await lateReader.read();
+        lateReader.releaseLock();
+        assert(
+          lateResult.done,
+          `Output must not be emitted after abort: ${JSON.stringify(lateResult)}.`,
         );
       },
     },
@@ -460,98 +634,93 @@ export function createVoiceInputProviderV1ConformanceCases(
         );
       },
     },
-    ...(options.errorTaxonomy === undefined
-      ? []
-      : [
-          {
-            name: "classifies malformed portable options as invalid configuration",
-            async run() {
-              const provider =
-                options.errorTaxonomy?.createProvider?.() ??
-                options.createHarness().provider;
-              const error = captureValidationError(
-                provider,
-                options.errorTaxonomy?.invalidOptions ?? {},
-              );
-              assert(
-                error.code === "invalid-configuration",
-                `Expected invalid-configuration, received ${error.code}.`,
-              );
-              assert(
-                error.provider === provider.provider,
-                "Validation errors must identify their provider.",
-              );
-              assert(
-                error.cause instanceof Error,
-                "Invalid configuration must preserve its validation cause.",
-              );
-            },
-          },
-          {
-            name: "classifies valid unavailable options as unsupported features",
-            async run() {
-              const provider =
-                options.errorTaxonomy?.createProvider?.() ??
-                options.createHarness().provider;
-              const error = captureValidationError(
-                provider,
-                options.errorTaxonomy?.unsupportedOptions ?? {},
-              );
-              assert(
-                error.code === "unsupported-feature",
-                `Expected unsupported-feature, received ${error.code}.`,
-              );
-              assert(
-                error.provider === provider.provider,
-                "Unsupported-feature errors must identify their provider.",
-              );
-            },
-          },
-          {
-            name: "reports malformed options before capability limits",
-            async run() {
-              const provider =
-                options.errorTaxonomy?.createProvider?.() ??
-                options.createHarness().provider;
-              const error = captureValidationError(
-                provider,
-                options.errorTaxonomy?.malformedUnsupportedOptions ?? {},
-              );
-              assert(
-                error.code === "invalid-configuration",
-                `Expected malformed precedence, received ${error.code}.`,
-              );
-            },
-          },
-          {
-            name: "classifies missing runtime APIs as unsupported browser",
-            async run() {
-              const provider =
-                options.errorTaxonomy?.createUnsupportedBrowserProvider();
-              assert(provider !== undefined, "Expected a provider fixture.");
-              let caught: unknown;
-              try {
-                await provider.doOpen({
-                  abortSignal: new AbortController().signal,
-                });
-              } catch (error) {
-                caught = error;
-              }
-              assert(
-                VoiceInputError.isInstance(caught),
-                "Missing browser APIs must produce VoiceInputError.",
-              );
-              assert(
-                caught.code === "unsupported-browser",
-                `Expected unsupported-browser, received ${caught.code}.`,
-              );
-              assert(
-                caught.provider === provider.provider,
-                "Unsupported-browser errors must identify their provider.",
-              );
-            },
-          },
-        ]),
+    {
+      name: "classifies malformed portable options as invalid configuration",
+      async run() {
+        const provider =
+          options.errorTaxonomy.createProvider?.() ??
+          options.createHarness().provider;
+        const error = captureValidationError(
+          provider,
+          options.errorTaxonomy.invalidOptions,
+        );
+        assert(
+          error.code === "invalid-configuration",
+          `Expected invalid-configuration, received ${error.code}.`,
+        );
+        assert(
+          error.provider === provider.provider,
+          "Validation errors must identify their provider.",
+        );
+        assert(
+          error.cause instanceof Error,
+          "Invalid configuration must preserve its validation cause.",
+        );
+      },
+    },
+    {
+      name: "classifies valid unavailable options as unsupported features",
+      async run() {
+        const provider =
+          options.errorTaxonomy.createProvider?.() ??
+          options.createHarness().provider;
+        const error = captureValidationError(
+          provider,
+          options.errorTaxonomy.unsupportedOptions,
+        );
+        assert(
+          error.code === "unsupported-feature",
+          `Expected unsupported-feature, received ${error.code}.`,
+        );
+        assert(
+          error.provider === provider.provider,
+          "Unsupported-feature errors must identify their provider.",
+        );
+      },
+    },
+    {
+      name: "reports malformed options before capability limits",
+      async run() {
+        const provider =
+          options.errorTaxonomy.createProvider?.() ??
+          options.createHarness().provider;
+        const error = captureValidationError(
+          provider,
+          options.errorTaxonomy.malformedUnsupportedOptions,
+        );
+        assert(
+          error.code === "invalid-configuration",
+          `Expected malformed precedence, received ${error.code}.`,
+        );
+      },
+    },
+    {
+      name: "classifies missing runtime APIs as unsupported browser",
+      async run() {
+        const provider =
+          options.errorTaxonomy.createUnsupportedBrowserProvider();
+        let caught: unknown;
+        try {
+          await provider.doOpen({
+            abortSignal: new AbortController().signal,
+          });
+        } catch (error) {
+          caught = error;
+        }
+        assert(
+          VoiceInputError.isInstance(caught),
+          "Missing browser APIs must produce VoiceInputError.",
+        );
+        assert(
+          caught.code === "unsupported-browser",
+          `Expected unsupported-browser, received ${caught.code}.`,
+        );
+        assert(
+          caught.provider === provider.provider,
+          "Unsupported-browser errors must identify their provider.",
+        );
+      },
+    },
   ];
 }
 

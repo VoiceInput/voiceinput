@@ -264,6 +264,9 @@ async function createSession(
     }
   };
   const handleMessage = (event: MessageEvent): void => {
+    if (closed) {
+      return;
+    }
     try {
       const value = JSON.parse(String(event.data)) as unknown;
       if (!isRecord(value) || !nonEmpty(value["type"])) {

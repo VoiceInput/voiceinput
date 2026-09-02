@@ -1,3 +1,4 @@
+import { createVoiceInputSession } from "@voiceinput/core";
 import {
   VoiceInputError,
   type VoiceTranscriptionOptions,
@@ -538,6 +539,8 @@ describe("elevenlabs", () => {
 describe("ElevenLabs provider conformance", () => {
   const cases = createVoiceInputProviderV1ConformanceCases({
     createHarness: createConformanceHarness,
+    createAccumulatorSession: (provider, audioSource) =>
+      createVoiceInputSession({ provider, audioSource }),
     errorTaxonomy: {
       createUnsupportedBrowserProvider: () =>
         elevenlabs({
@@ -553,10 +556,8 @@ describe("ElevenLabs provider conformance", () => {
     },
   });
 
-  it("passes every public provider case", async () => {
-    for (const testCase of cases) {
-      await expect(testCase.run()).resolves.toBeUndefined();
-    }
+  it.each(cases)("$name", async (testCase) => {
+    await expect(testCase.run()).resolves.toBeUndefined();
   });
 });
 
@@ -664,18 +665,25 @@ function createConformanceHarness(): {
   controller: FakeVoiceInputProviderController;
 } {
   const transport = createTransport();
-  const provider = createProvider(transport);
+  const provider = elevenlabs({
+    tokenEndpoint: "/token",
+    fetch: transport.fetch,
+    webSocket: MockWebSocket as unknown as typeof WebSocket,
+    finishTimeoutMs: 300,
+  });
   let socket: MockWebSocket | undefined;
-  let closed = false;
+  let autoCommit = true;
   const getSocket = async (): Promise<MockWebSocket> => {
     socket ??= await transport.waitForSocket();
     socket.onSend = (value) => {
       if (value["commit"] === true) {
         queueMicrotask(() => {
-          socket?.message({
-            message_type: "committed_transcript",
-            text: "",
-          });
+          if (autoCommit) {
+            socket?.message({
+              message_type: "committed_transcript",
+              text: "",
+            });
+          }
         });
       }
     };
@@ -722,9 +730,6 @@ function createConformanceHarness(): {
       requireSocket().fail();
     },
     emit(part) {
-      if (closed) {
-        throw new Error("Cannot emit after the ElevenLabs test stream closed.");
-      }
       if (part.type === "interim") {
         requireSocket().message({
           message_type: "partial_transcript",
@@ -743,7 +748,6 @@ function createConformanceHarness(): {
       }
     },
     close() {
-      closed = true;
       requireSocket().remoteClose();
     },
     fail(error) {
@@ -751,6 +755,10 @@ function createConformanceHarness(): {
         message_type: "transcriber_error",
         error: error.message,
       });
+    },
+    async timeout() {
+      autoCommit = false;
+      await new Promise((resolve) => setTimeout(resolve, 325));
     },
   };
   return { provider, controller };

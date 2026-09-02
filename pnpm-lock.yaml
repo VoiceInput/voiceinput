@@ -197,18 +197,30 @@ importers:
       '@voiceinput/provider':
         specifier: workspace:*
         version: link:../provider
+    devDependencies:
+      '@voiceinput/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/elevenlabs:
     dependencies:
       '@voiceinput/provider':
         specifier: workspace:*
         version: link:../provider
+    devDependencies:
+      '@voiceinput/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/openai:
     dependencies:
       '@voiceinput/provider':
         specifier: workspace:*
         version: link:../provider
+    devDependencies:
+      '@voiceinput/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/provider: {}
 

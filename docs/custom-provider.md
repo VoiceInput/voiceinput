@@ -186,12 +186,21 @@ the official provider packages.
 ## 4. Run deterministic conformance cases
 
 ```ts
+import { createVoiceInputSession } from "@voiceinput/core";
 import { createVoiceInputProviderV1ConformanceCases } from "@voiceinput/provider/test";
 import { describe, expect, it } from "vitest";
 
 describe("Acme provider conformance", () => {
   const cases = createVoiceInputProviderV1ConformanceCases({
     createHarness: createAcmeConformanceHarness,
+    createAccumulatorSession: (provider, audioSource) =>
+      createVoiceInputSession({ provider, audioSource }),
+    errorTaxonomy: {
+      createUnsupportedBrowserProvider: createMissingRuntimeAdapter,
+      invalidOptions: { language: "not a tag" },
+      malformedUnsupportedOptions: malformedUnavailableOptions,
+      unsupportedOptions: { vocabulary: ["valid-but-unavailable"] },
+    },
   });
 
   for (const testCase of cases) {
@@ -204,9 +213,13 @@ describe("Acme provider conformance", () => {
 
 `createAcmeConformanceHarness` should construct the real adapter against a fake
 token endpoint and fake transport, then expose a controller implementing
-`FakeVoiceInputProviderController`. The public cases verify metadata, ordered
-normalized output, PCM16 delivery, idempotent finish/abort, normalized errors,
-and terminal closure.
+`FakeVoiceInputProviderController`. Its `timeout()` method should exercise the
+adapter's real timeout or equivalent terminal transport condition. The public
+cases verify metadata, ordered normalized output, multiple finals through the
+shared session accumulator, PCM16 delivery, delayed final drain, no interim
+promotion, idempotent finish/abort cleanup, terminal timeout mapping, normalized
+errors, and no output after closure or abort. Taxonomy fixtures are required so
+every adapter proves the portable error contract.
 
 Add provider-specific tests for event mapping, option limits, credential
 responses, close codes, rate limits, and delayed final results. The official
