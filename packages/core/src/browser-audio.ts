@@ -179,6 +179,8 @@ async function prepareBrowserAudio(
       stopTracks();
     }
     throwIfAborted(abortSignal);
+    prepareOptions.onAcquired?.();
+    throwIfAborted(abortSignal);
 
     const AudioContextConstructor = getAudioContextConstructor();
     audioContext = createAudioContext(AudioContextConstructor, sampleRate);

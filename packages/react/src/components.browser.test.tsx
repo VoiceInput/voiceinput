@@ -183,6 +183,11 @@ describe("React controls", () => {
     await act(async () => {
       button.dispatchEvent(keyboardEvent("keydown", " "));
       await fake.controller.waitForSession();
+    });
+    await vi.waitFor(() =>
+      expect(button.getAttribute("aria-pressed")).toBe("true"),
+    );
+    await act(async () => {
       fake.controller.emit({ type: "final", text: "world" });
       button.dispatchEvent(keyboardEvent("keyup", " "));
     });

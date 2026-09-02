@@ -1,6 +1,7 @@
 import {
   VoiceInputError,
   type VoiceInputProviderV1,
+  type VoiceInputProviderV1Session,
   type VoiceTranscriptionOptions,
 } from "@voiceinput/provider";
 import {
@@ -30,6 +31,7 @@ interface AudioInspection {
   prepared: PreparedVoiceAudioSource;
   resolvePrepare: (prepared: PreparedVoiceAudioSource) => void;
   rejectPrepare: (error: unknown) => void;
+  resolveStart: () => void;
   resolveStop: () => void;
 }
 
@@ -39,6 +41,7 @@ interface FakeAudioSource {
   prepareCallCount: number;
   resolvePrepare(index?: number): void;
   rejectPrepare(error: unknown, index?: number): void;
+  resolveStart(index?: number): void;
   resolveStop(index?: number): void;
   emitChunk(chunk: Int16Array, index?: number): void;
   emitInvalidChunk(index?: number): void;
@@ -47,6 +50,7 @@ interface FakeAudioSource {
 function createFakeAudioSource(
   options: {
     autoPrepare?: boolean;
+    autoStart?: boolean;
     autoStop?: boolean;
     startError?: unknown;
     stopError?: unknown;
@@ -54,6 +58,7 @@ function createFakeAudioSource(
 ): FakeAudioSource {
   const sessions: AudioInspection[] = [];
   const autoPrepare = options.autoPrepare ?? true;
+  const autoStart = options.autoStart ?? true;
   const autoStop = options.autoStop ?? true;
 
   const getSession = (index = sessions.length - 1): AudioInspection => {
@@ -103,6 +108,10 @@ function createFakeAudioSource(
         const stopPromise = new Promise<void>((resolve) => {
           resolveStop = resolve;
         });
+        let resolveStart: () => void = () => {};
+        const startPromise = new Promise<void>((resolve) => {
+          resolveStart = resolve;
+        });
         const inspection: AudioInspection = {
           prepareOptions,
           streamController,
@@ -113,14 +122,18 @@ function createFakeAudioSource(
           prepared: undefined as unknown as PreparedVoiceAudioSource,
           resolvePrepare,
           rejectPrepare,
+          resolveStart,
           resolveStop,
         };
         const prepared: PreparedVoiceAudioSource = {
           stream,
-          start() {
+          async start() {
             inspection.startCallCount += 1;
             if (options.startError !== undefined) {
               throw options.startError;
+            }
+            if (!autoStart) {
+              await startPromise;
             }
           },
           async stop() {
@@ -157,6 +170,9 @@ function createFakeAudioSource(
     rejectPrepare(error, index) {
       getSession(index).rejectPrepare(error);
     },
+    resolveStart(index) {
+      getSession(index).resolveStart();
+    },
     resolveStop(index) {
       getSession(index).resolveStop();
     },
@@ -178,6 +194,7 @@ function createSession(
     provider?: FakeVoiceInputProvider;
     audio?: FakeAudioSource;
     maxDurationMs?: number;
+    connectionTimeoutMs?: number;
     language?: string;
     vocabulary?: readonly string[];
     textEngine?: VoiceInputTextEngine;
@@ -196,6 +213,9 @@ function createSession(
     ...(options.maxDurationMs === undefined
       ? {}
       : { maxDurationMs: options.maxDurationMs }),
+    ...(options.connectionTimeoutMs === undefined
+      ? {}
+      : { connectionTimeoutMs: options.connectionTimeoutMs }),
     ...(options.language === undefined ? {} : { language: options.language }),
     ...(options.vocabulary === undefined
       ? {}
@@ -268,6 +288,13 @@ describe("configuration", () => {
         maxDurationMs: 0,
       }),
     ).toThrow(/maxDurationMs/);
+    expect(() =>
+      createVoiceInputSession({
+        provider: provider.provider,
+        audioSource: audio.audioSource,
+        connectionTimeoutMs: 0,
+      }),
+    ).toThrow(/connectionTimeoutMs/);
   });
 
   it("runs provider validation before preparing audio", async () => {
@@ -411,7 +438,7 @@ describe("session lifecycle", () => {
 
   it("aborts a provider connection that is still opening", async () => {
     const provider = createFakeVoiceInputProvider({ autoOpen: false });
-    const { session } = createSession({ provider });
+    const { session, audio } = createSession({ provider });
     const startPromise = session.start();
     await provider.controller.waitForSession();
     expect(session.getSnapshot().status).toBe("connecting");
@@ -424,6 +451,7 @@ describe("session lifecycle", () => {
       aborted: true,
       abortCallCount: 1,
     });
+    expect(audio.sessions[0]?.abortCallCount).toBe(1);
   });
 
   it("stops cleanly while permission is pending", async () => {
@@ -576,6 +604,164 @@ describe("session lifecycle", () => {
   });
 });
 
+describe("connection deadline", () => {
+  it("cannot be rearmed by a late acquisition callback", async () => {
+    vi.useFakeTimers();
+    const audio = createFakeAudioSource();
+    const { session } = createSession({
+      audio,
+      connectionTimeoutMs: 100,
+    });
+
+    await session.start();
+    audio.sessions[0]?.prepareOptions.onAcquired?.();
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(session.getSnapshot().status).toBe("listening");
+    await session.cancel();
+  });
+
+  it("starts when audio is acquired during pending preparation", async () => {
+    vi.useFakeTimers();
+    const audio = createFakeAudioSource({ autoPrepare: false });
+    const { session } = createSession({
+      audio,
+      connectionTimeoutMs: 100,
+    });
+
+    const start = session.start();
+    audio.sessions[0]?.prepareOptions.onAcquired?.();
+    await vi.advanceTimersByTimeAsync(100);
+    await start;
+
+    expect(session.getSnapshot().error?.code).toBe("network-error");
+    expect(audio.sessions[0]?.prepareOptions.abortSignal.aborted).toBe(true);
+    audio.resolvePrepare();
+    await Promise.resolve();
+    expect(audio.sessions[0]?.abortCallCount).toBe(1);
+  });
+
+  it("bounds a token request that ignores cancellation", async () => {
+    vi.useFakeTimers();
+    const fake = createFakeVoiceInputProvider();
+    let signal: AbortSignal | undefined;
+    const provider: VoiceInputProviderV1 = {
+      ...fake.provider,
+      doOpen(options) {
+        signal = options.abortSignal;
+        return new Promise<VoiceInputProviderV1Session>(() => {});
+      },
+    };
+    const audio = createFakeAudioSource();
+    const session = createVoiceInputSession({
+      provider,
+      audioSource: audio.audioSource,
+      connectionTimeoutMs: 1_000,
+    });
+
+    const start = session.start();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(session.getSnapshot().status).toBe("connecting");
+    await vi.advanceTimersByTimeAsync(1);
+    await start;
+
+    expect(session.getSnapshot()).toMatchObject({
+      status: "error",
+      error: {
+        code: "network-error",
+        provider: "fake",
+        retryable: true,
+      },
+    });
+    expect(signal?.aborted).toBe(true);
+    expect(audio.sessions[0]?.abortCallCount).toBe(1);
+  });
+
+  it("aborts a socket that never opens", async () => {
+    vi.useFakeTimers();
+    const provider = createFakeVoiceInputProvider({ autoOpen: false });
+    const { session, audio } = createSession({
+      provider,
+      connectionTimeoutMs: 250,
+    });
+
+    const start = session.start();
+    await provider.controller.waitForSession();
+    await vi.advanceTimersByTimeAsync(250);
+    await start;
+
+    expect(provider.controller.sessions[0]).toMatchObject({
+      aborted: true,
+      abortCallCount: 1,
+    });
+    expect(audio.sessions[0]?.abortCallCount).toBe(1);
+    expect(session.getSnapshot().error?.code).toBe("network-error");
+  });
+
+  it("uses one deadline across provider opening and audio activation", async () => {
+    vi.useFakeTimers();
+    const provider = createFakeVoiceInputProvider({ autoOpen: false });
+    const audio = createFakeAudioSource({ autoStart: false });
+    const { session } = createSession({
+      provider,
+      audio,
+      connectionTimeoutMs: 100,
+    });
+
+    const start = session.start();
+    await provider.controller.waitForSession();
+    await vi.advanceTimersByTimeAsync(90);
+    provider.controller.resolveOpen();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(audio.sessions[0]?.startCallCount).toBe(1);
+    await vi.advanceTimersByTimeAsync(10);
+    await start;
+
+    expect(session.getSnapshot().error?.code).toBe("network-error");
+    expect(audio.sessions[0]?.abortCallCount).toBe(1);
+    expect(provider.controller.sessions[0]?.abortCallCount).toBe(1);
+  });
+
+  it("aborts a late session and retries successfully", async () => {
+    vi.useFakeTimers();
+    const retryProvider = createFakeVoiceInputProvider();
+    let resolveLate: (session: VoiceInputProviderV1Session) => void = () => {};
+    const lateSession = createAbortOnlyProviderSession();
+    let openCount = 0;
+    const provider: VoiceInputProviderV1 = {
+      ...retryProvider.provider,
+      doOpen(options) {
+        openCount += 1;
+        if (openCount === 1) {
+          return new Promise<VoiceInputProviderV1Session>((resolve) => {
+            resolveLate = resolve;
+          });
+        }
+        return retryProvider.provider.doOpen(options);
+      },
+    };
+    const audio = createFakeAudioSource();
+    const session = createVoiceInputSession({
+      provider,
+      audioSource: audio.audioSource,
+      connectionTimeoutMs: 100,
+    });
+
+    const firstStart = session.start();
+    await vi.advanceTimersByTimeAsync(100);
+    await firstStart;
+    resolveLate(lateSession.session);
+    await Promise.resolve();
+    expect(lateSession.abort).toHaveBeenCalledOnce();
+
+    await session.start();
+    expect(session.getSnapshot().status).toBe("listening");
+    expect(audio.sessions[0]?.abortCallCount).toBe(1);
+    expect(audio.sessions[1]?.startCallCount).toBe(1);
+    await session.cancel();
+  });
+});
+
 describe("graceful finalization", () => {
   it("accepts late finals before stream completion", async () => {
     const provider = createFakeVoiceInputProvider({
@@ -679,6 +865,22 @@ function overrideProviderSession(
     async doOpen(options) {
       const session = await fake.provider.doOpen(options);
       return { ...session, ...overrides };
+    },
+  };
+}
+
+function createAbortOnlyProviderSession(): {
+  session: VoiceInputProviderV1Session;
+  abort: ReturnType<typeof vi.fn<(reason?: unknown) => void>>;
+} {
+  const abort = vi.fn<(reason?: unknown) => void>();
+  return {
+    abort,
+    session: {
+      stream: new ReadableStream<never>(),
+      sendAudio() {},
+      finish() {},
+      abort,
     },
   };
 }

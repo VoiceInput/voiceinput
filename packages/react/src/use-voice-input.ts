@@ -137,6 +137,9 @@ export function useVoiceInput(
       ...(options.maxDurationMs === undefined
         ? {}
         : { maxDurationMs: options.maxDurationMs }),
+      ...(options.connectionTimeoutMs === undefined
+        ? {}
+        : { connectionTimeoutMs: options.connectionTimeoutMs }),
     });
     return { session: nextSession, textEngine: nextTextEngine };
   }, [
@@ -146,6 +149,7 @@ export function useVoiceInput(
     hasTransform,
     options.interimBehavior,
     options.language,
+    options.connectionTimeoutMs,
     options.maxDurationMs,
     options.transformTimeoutMs,
     provider,

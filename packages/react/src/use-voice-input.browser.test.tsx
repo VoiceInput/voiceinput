@@ -223,6 +223,11 @@ describe("useVoiceInput", () => {
     await act(async () => {
       button.dispatchEvent(pointerEvent("pointerdown", 7));
       await fake.controller.waitForSession();
+    });
+    await vi.waitFor(() =>
+      expect(button.getAttribute("aria-pressed")).toBe("true"),
+    );
+    await act(async () => {
       fake.controller.emit({ type: "final", text: "held" });
       button.dispatchEvent(pointerEvent("pointerup", 7));
     });
@@ -394,6 +399,11 @@ describe("useVoiceInput", () => {
     await act(async () => {
       trigger.click();
       await firstFake.controller.waitForSession();
+    });
+    await vi.waitFor(() =>
+      expect(trigger.getAttribute("aria-pressed")).toBe("true"),
+    );
+    await act(async () => {
       getButton("switch provider").click();
     });
     await waitForEnabled(trigger);
@@ -432,6 +442,11 @@ describe("useVoiceInput", () => {
     await act(async () => {
       trigger.click();
       await firstFake.controller.waitForSession();
+    });
+    await vi.waitFor(() =>
+      expect(trigger.getAttribute("aria-pressed")).toBe("true"),
+    );
+    await act(async () => {
       getButton("switch context provider").click();
     });
     await waitForEnabled(trigger);
@@ -497,6 +512,11 @@ describe("useVoiceInput", () => {
     await act(async () => {
       trigger.dispatchEvent(pointerEvent("pointerdown", 11));
       await fake.controller.waitForSession();
+    });
+    await vi.waitFor(() =>
+      expect(trigger.getAttribute("aria-pressed")).toBe("true"),
+    );
+    await act(async () => {
       disable.click();
     });
 
@@ -522,6 +542,11 @@ describe("useVoiceInput", () => {
     await act(async () => {
       trigger.dispatchEvent(pointerEvent("pointerdown", 12));
       await fake.controller.waitForSession();
+    });
+    await vi.waitFor(() =>
+      expect(trigger.getAttribute("aria-pressed")).toBe("true"),
+    );
+    await act(async () => {
       trigger.dispatchEvent(pointerEvent("lostpointercapture", 12));
     });
 

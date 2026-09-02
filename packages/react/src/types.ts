@@ -34,6 +34,7 @@ export interface UseVoiceInputOptions {
   vocabulary?: readonly string[];
   endpointing?: false | VoiceEndpointingOptions;
   maxDurationMs?: number;
+  connectionTimeoutMs?: number;
   interimBehavior?: VoiceInputInterimBehavior;
   transformTranscript?: VoiceInputTransformTranscript;
   transformTimeoutMs?: number;

@@ -18,6 +18,7 @@ export type {
 } from "@voiceinput/provider";
 
 const DEFAULT_MAX_DURATION_MS = 300_000;
+const DEFAULT_CONNECTION_TIMEOUT_MS = 15_000;
 const DURATION_WARNING_MS = 30_000;
 const FINALIZATION_TIMEOUT_MS = 5_000;
 
@@ -49,6 +50,7 @@ const sessionConfigurationSchema = z
     vocabulary: vocabularySchema.optional(),
     endpointing: endpointingSchema.optional(),
     maxDurationMs: z.number().int().positive().optional(),
+    connectionTimeoutMs: z.number().int().positive().optional(),
   })
   .strict();
 
@@ -104,6 +106,7 @@ export type VoiceInputSessionEvent =
 export interface VoiceAudioSourcePrepareOptions {
   sampleRate: number;
   abortSignal: AbortSignal;
+  onAcquired?(): void;
 }
 
 export interface PreparedVoiceAudioSource {
@@ -124,6 +127,7 @@ export interface CreateVoiceInputSessionOptions extends VoiceTranscriptionOption
   audioSource: VoiceAudioSource;
   textEngine?: VoiceInputTextEngine;
   maxDurationMs?: number;
+  connectionTimeoutMs?: number;
 }
 
 export interface VoiceInputSession {
@@ -137,6 +141,7 @@ export interface VoiceInputSession {
 
 interface SessionConfiguration extends VoiceTranscriptionOptions {
   maxDurationMs: number;
+  connectionTimeoutMs: number;
 }
 
 interface ActiveRun {
@@ -148,6 +153,8 @@ interface ActiveRun {
   stopPromise?: Promise<void>;
   warningTimer?: ReturnType<typeof setTimeout>;
   durationTimer?: ReturnType<typeof setTimeout>;
+  connectionTimer?: ReturnType<typeof setTimeout>;
+  connectionDeadlineStarted?: boolean;
 }
 
 export function createVoiceInputSession(
@@ -164,6 +171,7 @@ export function createVoiceInputSession(
     vocabulary: options.vocabulary,
     endpointing: options.endpointing,
     maxDurationMs: options.maxDurationMs,
+    connectionTimeoutMs: options.connectionTimeoutMs,
   });
 
   if (!result.success) {
@@ -177,6 +185,8 @@ export function createVoiceInputSession(
   const configuration: SessionConfiguration = {
     ...getTranscriptionOptions(result.data),
     maxDurationMs: result.data.maxDurationMs ?? DEFAULT_MAX_DURATION_MS,
+    connectionTimeoutMs:
+      result.data.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS,
   };
 
   return new VoiceInputSessionController(
@@ -254,12 +264,33 @@ class VoiceInputSessionController implements VoiceInputSession {
       return;
     }
 
+    const startConnectionDeadline = (): void => {
+      if (this.#isActive(run)) {
+        this.#scheduleConnectionDeadline(run);
+      }
+    };
     let audio: PreparedVoiceAudioSource;
     try {
-      audio = await this.#audioSource.prepare({
-        sampleRate: this.#provider.sampleRate,
-        abortSignal: run.abortController.signal,
-      });
+      const preparation = Promise.resolve(
+        this.#audioSource.prepare({
+          sampleRate: this.#provider.sampleRate,
+          abortSignal: run.abortController.signal,
+          onAcquired: startConnectionDeadline,
+        }),
+      );
+      void preparation.then(
+        (lateAudio) => {
+          if (!this.#isActive(run)) {
+            safely(() =>
+              lateAudio.abort(
+                run.abortController.signal.reason ?? "stale-session",
+              ),
+            );
+          }
+        },
+        () => {},
+      );
+      audio = await untilAborted(preparation, run.abortController.signal);
     } catch (error) {
       if (this.#isActive(run)) {
         this.#failRun(run, this.#normalizeError(error, "audio-error"));
@@ -273,6 +304,7 @@ class VoiceInputSessionController implements VoiceInputSession {
     }
 
     run.audio = audio;
+    startConnectionDeadline();
     this.#transition("connecting");
 
     if (!this.#isActive(run)) {
@@ -281,10 +313,25 @@ class VoiceInputSessionController implements VoiceInputSession {
 
     let providerSession: VoiceInputProviderV1Session;
     try {
-      providerSession = await this.#provider.doOpen({
-        ...transcriptionOptions,
-        abortSignal: run.abortController.signal,
-      });
+      const opening = Promise.resolve(
+        this.#provider.doOpen({
+          ...transcriptionOptions,
+          abortSignal: run.abortController.signal,
+        }),
+      );
+      void opening.then(
+        (lateSession) => {
+          if (!this.#isActive(run)) {
+            safely(() =>
+              lateSession.abort(
+                run.abortController.signal.reason ?? "stale-session",
+              ),
+            );
+          }
+        },
+        () => {},
+      );
+      providerSession = await untilAborted(opening, run.abortController.signal);
     } catch (error) {
       if (this.#isActive(run)) {
         this.#failRun(run, this.#normalizeError(error, "provider-error"));
@@ -303,7 +350,10 @@ class VoiceInputSessionController implements VoiceInputSession {
     run.audioTask = this.#pumpAudio(run, audio.stream, providerSession);
 
     try {
-      await audio.start();
+      await untilAborted(
+        Promise.resolve(audio.start()),
+        run.abortController.signal,
+      );
     } catch (error) {
       if (this.#isActive(run)) {
         this.#failRun(run, this.#normalizeError(error, "audio-error"));
@@ -315,6 +365,7 @@ class VoiceInputSessionController implements VoiceInputSession {
       return;
     }
 
+    this.#clearConnectionTimer(run);
     this.#transition("listening");
 
     if (this.#isListening(run)) {
@@ -600,6 +651,28 @@ class VoiceInputSessionController implements VoiceInputSession {
     }, maxDurationMs);
   }
 
+  #scheduleConnectionDeadline(run: ActiveRun): void {
+    if (run.connectionDeadlineStarted === true) {
+      return;
+    }
+    run.connectionDeadlineStarted = true;
+    const { connectionTimeoutMs } = this.#configuration;
+    run.connectionTimer = setTimeout(() => {
+      if (!this.#isActive(run)) {
+        return;
+      }
+      this.#failRun(
+        run,
+        new VoiceInputError({
+          code: "network-error",
+          message: `${this.#provider.provider} did not connect within ${connectionTimeoutMs} ms. Check the network and try again.`,
+          provider: this.#provider.provider,
+          retryable: true,
+        }),
+      );
+    }, connectionTimeoutMs);
+  }
+
   #setPreflightError(error: VoiceInputError): void {
     this.#setSnapshot({
       transcript: "",
@@ -704,6 +777,7 @@ class VoiceInputSessionController implements VoiceInputSession {
   }
 
   #clearRunTimers(run: ActiveRun): void {
+    this.#clearConnectionTimer(run);
     if (run.warningTimer !== undefined) {
       clearTimeout(run.warningTimer);
       delete run.warningTimer;
@@ -711,6 +785,13 @@ class VoiceInputSessionController implements VoiceInputSession {
     if (run.durationTimer !== undefined) {
       clearTimeout(run.durationTimer);
       delete run.durationTimer;
+    }
+  }
+
+  #clearConnectionTimer(run: ActiveRun): void {
+    if (run.connectionTimer !== undefined) {
+      clearTimeout(run.connectionTimer);
+      delete run.connectionTimer;
     }
   }
 
@@ -843,6 +924,30 @@ function reportUnhandledError(error: unknown): void {
     queueMicrotask(() => {
       throw error;
     });
+  }
+}
+
+async function untilAborted<T>(
+  promise: PromiseLike<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) {
+    throw signal.reason;
+  }
+
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(signal.reason);
+        signal.addEventListener("abort", onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    if (onAbort !== undefined) {
+      signal.removeEventListener("abort", onAbort);
+    }
   }
 }
 

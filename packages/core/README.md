@@ -27,6 +27,7 @@ const session = createVoiceInputSession({
   language: "en-CA",
   vocabulary: ["VoiceInput"],
   endpointing: { silenceMs: 650 },
+  connectionTimeoutMs: 15_000,
   maxDurationMs: 5 * 60 * 1_000,
 });
 
@@ -43,6 +44,11 @@ Actions are `start`, `stop`, `cancel`, and `toggle`. `stop` is graceful and
 preserves trusted final text; `cancel` aborts immediately. The default maximum
 duration is five minutes, with one warning 30 seconds before cutoff.
 
+Once microphone audio is acquired, provider connection and audio activation must
+complete within `connectionTimeoutMs` (15 seconds by default). Expiry aborts the
+full run, releases acquired audio, reports a retryable `network-error`, and
+permits a fresh `start()`.
+
 The immutable snapshot exposes `status`, `transcript`, `interimTranscript`,
 `finalTranscript`, and `error`. Status values are `idle`,
 `requesting-permission`, `connecting`, `listening`, `stopping`, `processing`,
@@ -57,10 +63,12 @@ provider part as `text` and the cumulative normalized value as `transcript`.
 
 ## Audio source lifecycle
 
-`VoiceAudioSource.prepare({ sampleRate, abortSignal })` returns a
+`VoiceAudioSource.prepare({ sampleRate, abortSignal, onAcquired })` returns a
 `PreparedVoiceAudioSource` with a PCM16 stream plus `start`, `stop`, and
 `abort`. Preparation can request permission, but audio delivery starts only
-after the provider connects.
+after the provider connects. Custom sources must call the optional
+`onAcquired()` callback as soon as they hold live audio resources; this starts
+the connection deadline even if later preparation is still pending.
 
 `createBrowserAudioSource` supplies the production browser implementation:
 

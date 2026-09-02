@@ -48,6 +48,52 @@ describe("browser audio errors", () => {
 });
 
 describe("browser audio lifecycle", () => {
+  it("releases acquired resources when post-permission setup stalls", async () => {
+    const track = new FakeTrack();
+    const mediaStream = {
+      getAudioTracks: () => [track],
+      getTracks: () => [track],
+    };
+    let markModuleStarted: () => void = () => {};
+    const moduleStarted = new Promise<void>((resolve) => {
+      markModuleStarted = resolve;
+    });
+    class HangingAudioContext extends FakeAudioContext {
+      override get audioWorklet(): AudioWorklet {
+        return {
+          addModule: (url: string) => {
+            this.moduleUrls.push(url);
+            markModuleStarted();
+            return new Promise<void>(() => {});
+          },
+        } as AudioWorklet;
+      }
+    }
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: async () => mediaStream },
+      userActivation: { isActive: true },
+    });
+    vi.stubGlobal("AudioContext", HangingAudioContext);
+    vi.stubGlobal("AudioWorkletNode", FakeAudioWorkletNode);
+    const abortController = new AbortController();
+    const onAcquired = vi.fn<() => void>();
+    const source = createBrowserAudioSource();
+
+    void source.prepare({
+      sampleRate: 16_000,
+      abortSignal: abortController.signal,
+      onAcquired,
+    });
+    await moduleStarted;
+    expect(onAcquired).toHaveBeenCalledOnce();
+    abortController.abort("connection-timeout");
+    await Promise.resolve();
+
+    expect(track.stopCallCount).toBe(1);
+    expect(HangingAudioContext.instance?.closeCallCount).toBe(1);
+  });
+
   it("resumes Safari-style suspended contexts and tears everything down", async () => {
     const track = new FakeTrack();
     const mediaStream = {
