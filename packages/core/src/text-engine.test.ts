@@ -30,6 +30,9 @@ describe("text ownership model", () => {
     );
     expect(normalizeInsertion("call(", ")", " me ")).toBe("me");
     expect(normalizeInsertion("", "", "  field  ")).toBe("field");
+    expect(normalizeInsertion("你", "", "好")).toBe("好");
+    expect(normalizeInsertion("今日は", "。", "晴れ")).toBe("晴れ");
+    expect(normalizeInsertion("안녕하세요", "", "세계")).toBe(" 세계");
   });
 
   it("shifts a provisional range through disjoint external edits", () => {

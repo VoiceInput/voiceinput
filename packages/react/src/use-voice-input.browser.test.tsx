@@ -54,8 +54,9 @@ describe("useVoiceInput", () => {
     await act(async () => {
       fake.controller.emit({ type: "interim", text: "hel" });
       fake.controller.emit({ type: "final", text: "hello" });
+      fake.controller.emit({ type: "final", text: "world" });
     });
-    await vi.waitFor(() => expect(textarea.value).toBe("Say hello now"));
+    await vi.waitFor(() => expect(textarea.value).toBe("Say hello world now"));
 
     await act(async () => {
       button.click();
@@ -80,7 +81,7 @@ describe("useVoiceInput", () => {
         provider={fake.provider}
         audioSource={createFakeAudioSource()}
       >
-        <UncontrolledField onInput={inputEvents} />
+        <UncontrolledField initialValue="" onInput={inputEvents} />
       </VoiceInputProvider>,
     );
     const textarea = getTextarea("uncontrolled");
@@ -92,10 +93,81 @@ describe("useVoiceInput", () => {
       button.click();
       await fake.controller.waitForSession();
       fake.controller.emit({ type: "final", text: "world" });
+      fake.controller.emit({ type: "final", text: "," });
+      fake.controller.emit({ type: "final", text: "again" });
+      fake.controller.emit({ type: "final", text: "今" });
+      fake.controller.emit({ type: "final", text: "天" });
+      fake.controller.emit({ type: "final", text: "" });
     });
 
-    await vi.waitFor(() => expect(textarea.value).toBe("hello world"));
-    expect(inputEvents).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(textarea.value).toBe("world, again 今天"));
+    expect(inputEvents).toHaveBeenCalledTimes(5);
+  });
+
+  it("distinguishes raw final parts from cumulative transcript callbacks", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const finalParts: string[] = [];
+    const finals: string[] = [];
+    const changes: string[] = [];
+    render(
+      <VoiceInputProvider
+        provider={fake.provider}
+        audioSource={createFakeAudioSource()}
+      >
+        <CallbackField
+          onFinalPart={(text) => finalParts.push(text)}
+          onFinal={(text) => finals.push(text)}
+          onChange={(text) => changes.push(text)}
+        />
+      </VoiceInputProvider>,
+    );
+    const button = getButton("callback trigger");
+    await waitForEnabled(button);
+
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({ type: "final", text: "hello" });
+      fake.controller.emit({ type: "interim", text: "  wor  " });
+      fake.controller.emit({ type: "final", text: "world" });
+      fake.controller.emit({ type: "final", text: "," });
+      fake.controller.emit({ type: "final", text: "again" });
+      fake.controller.emit({ type: "final", text: "" });
+      fake.controller.emit({ type: "final", text: "今" });
+      fake.controller.emit({ type: "final", text: "天" });
+    });
+
+    await vi.waitFor(() => expect(finals).toHaveLength(6));
+    expect(finalParts).toEqual([
+      "hello",
+      "world",
+      ",",
+      "again",
+      "",
+      "今",
+      "天",
+    ]);
+    expect(finals).toEqual([
+      "hello",
+      "hello world",
+      "hello world,",
+      "hello world, again",
+      "hello world, again 今",
+      "hello world, again 今天",
+    ]);
+    expect(changes).toEqual([
+      "hello",
+      "hello wor",
+      "hello world",
+      "hello world,",
+      "hello world, again",
+      "hello world, again 今",
+      "hello world, again 今天",
+    ]);
+    expect(getTextarea("callback").value).toBe("hello world, again 今天");
+    expect(getOutput("callback transcript").textContent).toBe(
+      "hello world, again 今天",
+    );
   });
 
   it("exposes exact text ownership snapshots", async () => {
@@ -481,6 +553,39 @@ function InspectableField({
   );
 }
 
+function CallbackField({
+  onFinalPart,
+  onFinal,
+  onChange,
+}: {
+  onFinalPart: (text: string) => void;
+  onFinal: (text: string) => void;
+  onChange: (text: string) => void;
+}): React.JSX.Element {
+  const [value, setValue] = useState("");
+  const { targetRef, triggerProps, transcript } = useVoiceInput({
+    value,
+    onValueChange: setValue,
+    onFinalTranscriptPart: onFinalPart,
+    onFinalTranscript: onFinal,
+    onTranscriptChange: onChange,
+  });
+  return (
+    <>
+      <textarea
+        aria-label="callback"
+        ref={targetRef}
+        value={value}
+        onChange={(event) => setValue(event.currentTarget.value)}
+      />
+      <button aria-label="callback trigger" {...triggerProps}>
+        Speak
+      </button>
+      <output aria-label="callback transcript">{transcript}</output>
+    </>
+  );
+}
+
 function UncontrolledField({
   name = "uncontrolled",
   initialValue = "hello",
@@ -649,6 +754,16 @@ function getTextarea(label: string): HTMLTextAreaElement {
     throw new Error(`Textarea ${label} was not rendered.`);
   }
   return element;
+}
+
+function getOutput(label: string): HTMLOutputElement {
+  const output = document.querySelector<HTMLOutputElement>(
+    `output[aria-label="${label}"]`,
+  );
+  if (output === null) {
+    throw new Error(`Missing output: ${label}`);
+  }
+  return output;
 }
 
 function getButton(label: string): HTMLButtonElement {

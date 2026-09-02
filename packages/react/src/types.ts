@@ -45,7 +45,9 @@ export interface UseVoiceInputOptions {
     previousStatus: VoiceInputStatus,
   ) => void;
   onInterimTranscript?: (text: string) => void;
-  onFinalTranscript?: (text: string) => void;
+  onFinalTranscriptPart?: (text: string) => void;
+  onFinalTranscript?: (transcript: string) => void;
+  onTranscriptChange?: (transcript: string) => void;
   onDurationWarning?: (remainingMs: number, maxDurationMs: number) => void;
   onStop?: (reason: VoiceInputStopReason) => void;
   onError?: (error: VoiceInputError) => void;

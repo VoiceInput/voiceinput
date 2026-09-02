@@ -312,7 +312,7 @@ describe("session lifecycle", () => {
     provider.controller.emit({ type: "interim", text: "hel" });
     provider.controller.emit({ type: "interim", text: "hello" });
     provider.controller.emit({ type: "final", text: "hello" });
-    provider.controller.emit({ type: "final", text: " world" });
+    provider.controller.emit({ type: "final", text: "world" });
     provider.controller.emit({ type: "speech-start" });
     provider.controller.emit({ type: "speech-end" });
     await waitFor(() => {
@@ -348,6 +348,28 @@ describe("session lifecycle", () => {
       "idle",
     ]);
     expect(events).toContainEqual({ type: "stop", reason: "user" });
+  });
+
+  it("uses one boundary policy for interim and cumulative final state", async () => {
+    const { session, provider } = createSession();
+
+    await session.start();
+    provider.controller.emit({ type: "final", text: "  hello  " });
+    provider.controller.emit({ type: "final", text: "world" });
+    provider.controller.emit({ type: "final", text: "," });
+    provider.controller.emit({ type: "final", text: "again" });
+    provider.controller.emit({ type: "final", text: "" });
+    provider.controller.emit({ type: "final", text: "今" });
+    provider.controller.emit({ type: "final", text: "天" });
+    provider.controller.emit({ type: "interim", text: "  晴れ  " });
+
+    await waitFor(() => {
+      expect(session.getSnapshot()).toMatchObject({
+        finalTranscript: "hello world, again 今天",
+        interimTranscript: "  晴れ  ",
+        transcript: "hello world, again 今天晴れ",
+      });
+    });
   });
 
   it("cancels immediately while preserving finals and discarding interim", async () => {

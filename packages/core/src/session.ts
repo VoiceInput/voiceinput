@@ -9,6 +9,7 @@ import {
 import { z } from "zod";
 
 import type { VoiceInputTextEngine } from "./text-engine.js";
+import { appendTranscriptPart } from "./transcript-boundary.js";
 
 export { VoiceInputError };
 export type {
@@ -76,8 +77,19 @@ export type VoiceInputSessionEvent =
       previousStatus: VoiceInputStatus;
       status: VoiceInputStatus;
     }
-  | { type: "interim"; text: string }
-  | { type: "final"; text: string }
+  | {
+      type: "interim";
+      text: string;
+      transcript: string;
+      transcriptChanged: boolean;
+    }
+  | {
+      type: "final";
+      text: string;
+      transcript: string;
+      transcriptChanged: boolean;
+      finalTranscriptChanged: boolean;
+    }
   | {
       type: "duration-warning";
       remainingMs: number;
@@ -470,22 +482,43 @@ class VoiceInputSessionController implements VoiceInputSession {
     switch (part.type) {
       case "interim": {
         this.#textEngine?.applyInterim(part.text);
+        const previousTranscript = this.#snapshot.transcript;
+        const transcript = appendTranscriptPart(
+          this.#snapshot.finalTranscript,
+          part.text,
+        );
         this.#setSnapshot({
           interimTranscript: part.text,
-          transcript: `${this.#snapshot.finalTranscript}${part.text}`,
+          transcript,
         });
-        this.#emit({ type: "interim", text: part.text });
+        this.#emit({
+          type: "interim",
+          text: part.text,
+          transcript,
+          transcriptChanged: transcript !== previousTranscript,
+        });
         return false;
       }
       case "final": {
         this.#textEngine?.applyFinal(part.text);
-        const finalTranscript = `${this.#snapshot.finalTranscript}${part.text}`;
+        const previousTranscript = this.#snapshot.transcript;
+        const previousFinalTranscript = this.#snapshot.finalTranscript;
+        const finalTranscript = appendTranscriptPart(
+          previousFinalTranscript,
+          part.text,
+        );
         this.#setSnapshot({
           finalTranscript,
           interimTranscript: "",
           transcript: finalTranscript,
         });
-        this.#emit({ type: "final", text: part.text });
+        this.#emit({
+          type: "final",
+          text: part.text,
+          transcript: finalTranscript,
+          transcriptChanged: finalTranscript !== previousTranscript,
+          finalTranscriptChanged: finalTranscript !== previousFinalTranscript,
+        });
         return false;
       }
       case "error": {

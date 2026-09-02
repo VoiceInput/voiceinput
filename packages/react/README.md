@@ -75,24 +75,27 @@ dispatches a bubbling native `input` event.
 
 ### `UseVoiceInputOptions`
 
-| Option                                     | Purpose                                                          |
-| ------------------------------------------ | ---------------------------------------------------------------- |
-| `provider`, `audioSource`                  | Override context configuration                                   |
-| `value`, `onValueChange`                   | Controlled text binding; supply both or neither                  |
-| `language`                                 | BCP 47 language hint                                             |
-| `vocabulary`                               | Domain terms mapped by the selected adapter                      |
-| `endpointing`                              | Provider default, `false`, or `{ silenceMs }`                    |
-| `maxDurationMs`                            | Positive finite duration; default five minutes                   |
-| `interimBehavior`                          | `"inline"` (default) or `"expose"`                               |
-| `transformTranscript`                      | Sync or async post-stop transform for unedited voice-owned spans |
-| `transformTimeoutMs`                       | Transform deadline; default 10 seconds                           |
-| `activationMode`                           | `"toggle"` (default) or `"hold"`                                 |
-| `disabled`                                 | Prevent activation and release an active hold                    |
-| `onEvent`                                  | Receive every normalized session event                           |
-| `onStatusChange`                           | Receive current and previous status                              |
-| `onInterimTranscript`, `onFinalTranscript` | Transcript callbacks                                             |
-| `onDurationWarning`                        | Called before maximum-duration cutoff                            |
-| `onStop`, `onError`                        | Terminal callbacks                                               |
+| Option                    | Purpose                                                          |
+| ------------------------- | ---------------------------------------------------------------- |
+| `provider`, `audioSource` | Override context configuration                                   |
+| `value`, `onValueChange`  | Controlled text binding; supply both or neither                  |
+| `language`                | BCP 47 language hint                                             |
+| `vocabulary`              | Domain terms mapped by the selected adapter                      |
+| `endpointing`             | Provider default, `false`, or `{ silenceMs }`                    |
+| `maxDurationMs`           | Positive finite duration; default five minutes                   |
+| `interimBehavior`         | `"inline"` (default) or `"expose"`                               |
+| `transformTranscript`     | Sync or async post-stop transform for unedited voice-owned spans |
+| `transformTimeoutMs`      | Transform deadline; default 10 seconds                           |
+| `activationMode`          | `"toggle"` (default) or `"hold"`                                 |
+| `disabled`                | Prevent activation and release an active hold                    |
+| `onEvent`                 | Receive every normalized session event                           |
+| `onStatusChange`          | Receive current and previous status                              |
+| `onInterimTranscript`     | Current raw interim provider part                                |
+| `onFinalTranscriptPart`   | Each raw provider-final part                                     |
+| `onFinalTranscript`       | Cumulative normalized provider-final transcript                  |
+| `onTranscriptChange`      | Cumulative normalized transcript, including interim text         |
+| `onDurationWarning`       | Called before maximum-duration cutoff                            |
+| `onStop`, `onError`       | Terminal callbacks                                               |
 
 ### `UseVoiceInputResult`
 

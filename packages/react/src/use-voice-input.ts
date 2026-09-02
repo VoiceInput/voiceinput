@@ -438,10 +438,19 @@ function dispatchCallback(
     }
     case "interim": {
       callbacks.onInterimTranscript?.(event.text);
+      if (event.transcriptChanged) {
+        callbacks.onTranscriptChange?.(event.transcript);
+      }
       break;
     }
     case "final": {
-      callbacks.onFinalTranscript?.(event.text);
+      callbacks.onFinalTranscriptPart?.(event.text);
+      if (event.finalTranscriptChanged) {
+        callbacks.onFinalTranscript?.(event.transcript);
+      }
+      if (event.transcriptChanged) {
+        callbacks.onTranscriptChange?.(event.transcript);
+      }
       break;
     }
     case "duration-warning": {

@@ -48,6 +48,13 @@ The immutable snapshot exposes `status`, `transcript`, `interimTranscript`,
 `requesting-permission`, `connecting`, `listening`, `stopping`, `processing`,
 and `error`. Stop reasons are `user`, `max-duration`, and `replaced`.
 
+Final parts use the same boundary policy as field insertion: outer provider
+whitespace is normalized, word boundaries are added when needed, punctuation is
+kept adjacent, empty parts are ignored, and consecutive Han, Hiragana, and
+Katakana parts are not separated. `finalTranscript` is cumulative; `transcript`
+adds the current normalized interim part. Session `final` events expose the raw
+provider part as `text` and the cumulative normalized value as `transcript`.
+
 ## Audio source lifecycle
 
 `VoiceAudioSource.prepare({ sampleRate, abortSignal })` returns a
