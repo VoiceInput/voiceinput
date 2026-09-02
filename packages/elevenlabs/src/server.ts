@@ -2,6 +2,7 @@ import { ELEVENLABS_DEFAULT_MODEL } from "./session-config.js";
 
 const DEFAULT_TOKEN_URL =
   "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe";
+const MAX_TOKEN_REQUEST_BYTES = 16 * 1024;
 
 export interface ElevenLabsAuthorization {
   readonly subject: string;
@@ -68,12 +69,15 @@ export function createElevenLabsTokenHandler(
       });
     }
     try {
-      const authorization = await options.authorize(request);
+      const requestBody = await readJsonBody(request);
+      const authorization = await options.authorize(
+        copyRequest(request, requestBody),
+      );
       if (authorization === null) {
         return jsonError(401, "unauthorized", "Unauthorized.");
       }
       const subject = nonEmpty(authorization.subject, "subject");
-      const model = await readModel(request, defaultModel);
+      const model = readModel(requestBody, defaultModel);
       if (!allowedModels.has(model)) {
         return jsonError(
           400,
@@ -82,7 +86,7 @@ export function createElevenLabsTokenHandler(
         );
       }
       const context: ElevenLabsTokenHandlerContext = {
-        request,
+        request: copyRequest(request, requestBody),
         subject,
         model,
       };
@@ -130,7 +134,7 @@ export function createElevenLabsTokenHandler(
         return jsonError(499, "network-error", "The request was cancelled.");
       }
       if (error instanceof InvalidTokenRequestError) {
-        return jsonError(400, "invalid-configuration", error.message);
+        return jsonError(error.status, error.code, error.message);
       }
       return jsonError(
         500,
@@ -141,16 +145,12 @@ export function createElevenLabsTokenHandler(
   };
 }
 
-async function readModel(
-  request: Request,
-  defaultModel: string,
-): Promise<string> {
+function readModel(body: string, defaultModel: string): string {
   try {
-    const text = await request.text();
-    if (text.length === 0) {
+    if (body.length === 0) {
       return defaultModel;
     }
-    const value = JSON.parse(text) as unknown;
+    const value = JSON.parse(body) as unknown;
     if (!isRecord(value) || Object.keys(value).some((key) => key !== "model")) {
       throw new TypeError("The token request must contain only model.");
     }
@@ -165,6 +165,15 @@ async function readModel(
   }
 }
 
+function copyRequest(request: Request, body: string): Request {
+  return new Request(request, {
+    method: "POST",
+    body,
+    referrer: request.referrer,
+    referrerPolicy: request.referrerPolicy,
+  });
+}
+
 function validateToken(value: unknown): { token: string } {
   if (
     !isRecord(value) ||
@@ -177,10 +186,72 @@ function validateToken(value: unknown): { token: string } {
 }
 
 class InvalidTokenRequestError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code:
+      "invalid-configuration" | "invalid-request" = "invalid-configuration",
+    readonly status = 400,
+  ) {
     super(message);
     this.name = "InvalidTokenRequestError";
   }
+}
+
+async function readJsonBody(request: Request): Promise<string> {
+  const contentType = request.headers
+    .get("Content-Type")
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase();
+  if (contentType !== "application/json") {
+    throw new InvalidTokenRequestError(
+      "Content-Type must be application/json.",
+      "invalid-request",
+      415,
+    );
+  }
+  const declaredLength = Number(request.headers.get("Content-Length"));
+  if (declaredLength > MAX_TOKEN_REQUEST_BYTES) throw requestTooLarge();
+  const reader = request.body?.getReader();
+  if (reader === undefined) return "";
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let bytesRead = 0;
+  let text = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytesRead += value.byteLength;
+    if (bytesRead > MAX_TOKEN_REQUEST_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw requestTooLarge();
+    }
+    try {
+      text += decoder.decode(value, { stream: true });
+    } catch {
+      await reader.cancel().catch(() => {});
+      throw invalidUtf8();
+    }
+  }
+  try {
+    return text + decoder.decode();
+  } catch {
+    throw invalidUtf8();
+  }
+}
+
+function requestTooLarge(): InvalidTokenRequestError {
+  return new InvalidTokenRequestError(
+    `Token request body exceeds ${MAX_TOKEN_REQUEST_BYTES} bytes.`,
+    "invalid-request",
+    413,
+  );
+}
+
+function invalidUtf8(): InvalidTokenRequestError {
+  return new InvalidTokenRequestError(
+    "Token request body must be valid UTF-8.",
+    "invalid-request",
+  );
 }
 
 function jsonError(
@@ -191,6 +262,7 @@ function jsonError(
 ): Response {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Cache-Control", "no-store");
+  responseHeaders.set("X-VoiceInput-Error", "1");
   return Response.json(
     { error: { code, message } },
     { status, headers: responseHeaders },

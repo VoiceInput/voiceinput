@@ -143,7 +143,7 @@ async function requestToken(
     });
   }
   if (!response.ok) {
-    throw tokenResponseError(response);
+    throw await tokenResponseError(response);
   }
   let value: unknown;
   try {
@@ -433,7 +433,9 @@ function factoryString(value: string, name: string): string {
   return value;
 }
 
-function tokenResponseError(response: Response): VoiceInputError {
+async function tokenResponseError(
+  response: Response,
+): Promise<VoiceInputError> {
   const retryAfterMs = parseRetryAfter(response.headers.get("Retry-After"));
   if (response.status === 401 || response.status === 403) {
     return new VoiceInputError({
@@ -451,12 +453,76 @@ function tokenResponseError(response: Response): VoiceInputError {
       ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
     });
   }
+  const safeError = await readSafeTokenError(response);
+  if (safeError !== undefined) {
+    return new VoiceInputError({ ...safeError, provider: "deepgram" });
+  }
   return new VoiceInputError({
     code: "token-error",
     message: "The Deepgram token endpoint did not issue a token.",
     provider: "deepgram",
     retryable: response.status >= 500,
   });
+}
+
+async function readSafeTokenError(response: Response): Promise<
+  | {
+      code: "invalid-configuration" | "unsupported-feature";
+      message: string;
+    }
+  | undefined
+> {
+  if (
+    response.status !== 400 ||
+    response.headers.get("X-VoiceInput-Error") !== "1" ||
+    response.headers.get("Content-Type")?.split(";", 1)[0]?.trim() !==
+      "application/json"
+  ) {
+    return undefined;
+  }
+  const text = await readBoundedErrorText(response);
+  if (text === undefined) return undefined;
+  try {
+    const value = JSON.parse(text) as unknown;
+    const error = isRecord(value) ? value["error"] : undefined;
+    if (
+      !isRecord(error) ||
+      (error["code"] !== "invalid-configuration" &&
+        error["code"] !== "unsupported-feature") ||
+      typeof error["message"] !== "string" ||
+      error["message"].length === 0 ||
+      error["message"].length > 1_000
+    ) {
+      return undefined;
+    }
+    return { code: error["code"], message: error["message"] };
+  } catch {
+    return undefined;
+  }
+}
+
+async function readBoundedErrorText(
+  response: Response,
+): Promise<string | undefined> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) return undefined;
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return text + decoder.decode();
+      bytesRead += value.byteLength;
+      if (bytesRead > 4_096) {
+        await reader.cancel().catch(() => {});
+        return undefined;
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 function waitForOpen(

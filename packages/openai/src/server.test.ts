@@ -150,6 +150,102 @@ describe("createOpenAITokenHandler", () => {
     expect(upstream).not.toHaveBeenCalled();
   });
 
+  it("bounds JSON requests and isolates application body readers", async () => {
+    const authorize = async (request: Request) => {
+      expect(request.credentials).toBe("include");
+      expect(request.cache).toBe("no-store");
+      expect(request.redirect).toBe("manual");
+      expect(request.referrerPolicy).toBe("no-referrer");
+      expect(request.integrity).toBe("sha256-example");
+      expect(request.keepalive).toBe(true);
+      expect(await request.json()).toEqual({ model: "gpt-transcribe" });
+      return { subject: "user-1" };
+    };
+    const rateLimit = async ({ request }: { request: Request }) => {
+      expect(await request.json()).toEqual({ model: "gpt-transcribe" });
+      return { allowed: true as const };
+    };
+    const safetyIdentifier = async ({ request }: { request: Request }) => {
+      expect(await request.json()).toEqual({ model: "gpt-transcribe" });
+      return "hashed-user";
+    };
+    const upstream = vi.fn<typeof fetch>(async () =>
+      Response.json({ value: "ephemeral", expires_at: 2_000_000_000 }),
+    );
+    const handler = createOpenAITokenHandler({
+      apiKey: "sk-server",
+      authorize,
+      rateLimit,
+      safetyIdentifier,
+      fetch: upstream,
+    });
+
+    expect(
+      (
+        await handler(
+          tokenRequest(
+            { model: "gpt-transcribe" },
+            {
+              credentials: "include",
+              cache: "no-store",
+              redirect: "manual",
+              referrerPolicy: "no-referrer",
+              integrity: "sha256-example",
+              keepalive: true,
+            },
+          ),
+        )
+      ).status,
+    ).toBe(200);
+    const invalidHandler = createOpenAITokenHandler({
+      apiKey: "sk-server",
+      authorize: () => ({ subject: "user-1" }),
+      fetch: upstream,
+    });
+    const wrongType = await invalidHandler(
+      new Request("https://example.test/token", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: "{}",
+      }),
+    );
+    const oversized = await invalidHandler(
+      tokenRequest({ value: "x".repeat(16_384) }),
+    );
+    const invalidUtf8 = await invalidHandler(
+      new Request("https://example.test/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: new Uint8Array([0xff]),
+      }),
+    );
+
+    expect(wrongType.status).toBe(415);
+    expect(oversized.status).toBe(413);
+    expect(oversized.headers.get("X-VoiceInput-Error")).toBe("1");
+    expect(invalidUtf8.status).toBe(400);
+    expect(await invalidUtf8.json()).toMatchObject({
+      error: { code: "invalid-request" },
+    });
+    expect(upstream).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when token audit persistence fails", async () => {
+    const handler = createOpenAITokenHandler({
+      apiKey: "sk-server",
+      authorize: () => ({ subject: "user-1" }),
+      onTokenIssued: () => {
+        throw new Error("audit unavailable");
+      },
+      fetch: async () =>
+        Response.json({ value: "ephemeral", expires_at: 2_000_000_000 }),
+    });
+
+    const response = await handler(tokenRequest({}));
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain("ephemeral");
+  });
+
   it("does not classify server and upstream failures as client errors", async () => {
     const authorizationFailure = createOpenAITokenHandler({
       apiKey: "sk-server",
@@ -188,8 +284,12 @@ describe("createOpenAITokenHandler", () => {
   });
 });
 
-function tokenRequest(body: Record<string, unknown>): Request {
+function tokenRequest(
+  body: Record<string, unknown>,
+  init: Omit<RequestInit, "body" | "headers" | "method"> = {},
+): Request {
   return new Request("https://example.test/token", {
+    ...init,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

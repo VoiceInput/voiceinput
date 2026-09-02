@@ -1,6 +1,8 @@
 import { DEEPGRAM_DEFAULT_MODEL } from "./session-config.js";
 
 const DEFAULT_GRANT_URL = "https://api.deepgram.com/v1/auth/grant";
+const DEFAULT_TTL_SECONDS = 30;
+const MAX_TOKEN_REQUEST_BYTES = 16 * 1024;
 
 export interface DeepgramAuthorization {
   readonly subject: string;
@@ -56,7 +58,7 @@ export function createDeepgramTokenHandler(
     throw new TypeError("authorize must be a function.");
   }
   const apiKey = nonEmpty(options.apiKey, "apiKey");
-  const ttlSeconds = validateTtl(options.ttlSeconds);
+  const ttlSeconds = validateTtl(options.ttlSeconds ?? DEFAULT_TTL_SECONDS);
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   const grantUrl = options.grantUrl ?? DEFAULT_GRANT_URL;
 
@@ -67,12 +69,15 @@ export function createDeepgramTokenHandler(
       });
     }
     try {
-      const authorization = await options.authorize(request);
+      const requestBody = await readJsonBody(request);
+      const authorization = await options.authorize(
+        copyRequest(request, requestBody),
+      );
       if (authorization === null) {
         return jsonError(401, "unauthorized", "Unauthorized.");
       }
       const subject = nonEmpty(authorization.subject, "subject");
-      const model = await readModel(request, defaultModel);
+      const model = readModel(requestBody, defaultModel);
       if (!allowedModels.has(model)) {
         return jsonError(
           400,
@@ -81,7 +86,7 @@ export function createDeepgramTokenHandler(
         );
       }
       const context: DeepgramTokenHandlerContext = {
-        request,
+        request: copyRequest(request, requestBody),
         subject,
         model,
       };
@@ -101,9 +106,7 @@ export function createDeepgramTokenHandler(
           Authorization: `Token ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(
-          ttlSeconds === undefined ? {} : { ttl_seconds: ttlSeconds },
-        ),
+        body: JSON.stringify({ ttl_seconds: ttlSeconds }),
         signal: request.signal,
       });
       if (!response.ok) {
@@ -136,7 +139,7 @@ export function createDeepgramTokenHandler(
         return jsonError(499, "network-error", "The request was cancelled.");
       }
       if (error instanceof InvalidTokenRequestError) {
-        return jsonError(400, "invalid-configuration", error.message);
+        return jsonError(error.status, error.code, error.message);
       }
       return jsonError(
         500,
@@ -147,16 +150,12 @@ export function createDeepgramTokenHandler(
   };
 }
 
-async function readModel(
-  request: Request,
-  defaultModel: string,
-): Promise<string> {
+function readModel(body: string, defaultModel: string): string {
   try {
-    const text = await request.text();
-    if (text.length === 0) {
+    if (body.length === 0) {
       return defaultModel;
     }
-    const value = JSON.parse(text) as unknown;
+    const value = JSON.parse(body) as unknown;
     if (!isRecord(value) || Object.keys(value).some((key) => key !== "model")) {
       throw new TypeError("The token request must contain only model.");
     }
@@ -171,10 +170,16 @@ async function readModel(
   }
 }
 
-function validateTtl(value: number | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
+function copyRequest(request: Request, body: string): Request {
+  return new Request(request, {
+    method: "POST",
+    body,
+    referrer: request.referrer,
+    referrerPolicy: request.referrerPolicy,
+  });
+}
+
+function validateTtl(value: number): number {
   if (!Number.isInteger(value) || value < 1 || value > 3_600) {
     throw new TypeError("ttlSeconds must be an integer from 1 to 3600.");
   }
@@ -202,10 +207,72 @@ function validateToken(value: unknown): {
 }
 
 class InvalidTokenRequestError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code:
+      "invalid-configuration" | "invalid-request" = "invalid-configuration",
+    readonly status = 400,
+  ) {
     super(message);
     this.name = "InvalidTokenRequestError";
   }
+}
+
+async function readJsonBody(request: Request): Promise<string> {
+  const contentType = request.headers
+    .get("Content-Type")
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase();
+  if (contentType !== "application/json") {
+    throw new InvalidTokenRequestError(
+      "Content-Type must be application/json.",
+      "invalid-request",
+      415,
+    );
+  }
+  const declaredLength = Number(request.headers.get("Content-Length"));
+  if (declaredLength > MAX_TOKEN_REQUEST_BYTES) throw requestTooLarge();
+  const reader = request.body?.getReader();
+  if (reader === undefined) return "";
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let bytesRead = 0;
+  let text = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytesRead += value.byteLength;
+    if (bytesRead > MAX_TOKEN_REQUEST_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw requestTooLarge();
+    }
+    try {
+      text += decoder.decode(value, { stream: true });
+    } catch {
+      await reader.cancel().catch(() => {});
+      throw invalidUtf8();
+    }
+  }
+  try {
+    return text + decoder.decode();
+  } catch {
+    throw invalidUtf8();
+  }
+}
+
+function requestTooLarge(): InvalidTokenRequestError {
+  return new InvalidTokenRequestError(
+    `Token request body exceeds ${MAX_TOKEN_REQUEST_BYTES} bytes.`,
+    "invalid-request",
+    413,
+  );
+}
+
+function invalidUtf8(): InvalidTokenRequestError {
+  return new InvalidTokenRequestError(
+    "Token request body must be valid UTF-8.",
+    "invalid-request",
+  );
 }
 
 function jsonError(
@@ -216,6 +283,7 @@ function jsonError(
 ): Response {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Cache-Control", "no-store");
+  responseHeaders.set("X-VoiceInput-Error", "1");
   return Response.json(
     { error: { code, message } },
     { status, headers: responseHeaders },

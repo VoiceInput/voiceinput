@@ -73,7 +73,9 @@ export const POST = createOpenAITokenHandler({
 The handler accepts only `POST`, always requires `authorize`, sends
 `Cache-Control: no-store`, and never returns or logs the long-lived API key.
 Returning `null` from `authorize` produces `401`. A denied `rateLimit` produces
-`429` before a provider credential is minted.
+`429` before a provider credential is minted. Requests must be JSON and are
+limited to 16 KiB. Authorization and rate-limit callbacks receive independent
+request bodies. If `onTokenIssued` throws, credential delivery fails closed.
 
 ### `CreateOpenAITokenHandlerOptions`
 

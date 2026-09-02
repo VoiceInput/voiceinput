@@ -331,6 +331,58 @@ describe("openai", () => {
       retryAfterMs: 2_000,
     });
 
+    const configured = openai({
+      tokenEndpoint: "/token",
+      fetch: async () =>
+        Response.json(
+          {
+            error: {
+              code: "invalid-configuration",
+              message: "Choose an allowed transcription model.",
+            },
+          },
+          { status: 400, headers: { "X-VoiceInput-Error": "1" } },
+        ),
+    });
+    await expect(
+      configured.doOpen({ abortSignal: new AbortController().signal }),
+    ).rejects.toMatchObject({
+      code: "invalid-configuration",
+      message: "Choose an allowed transcription model.",
+    });
+
+    const untrusted = openai({
+      tokenEndpoint: "/token",
+      fetch: async () =>
+        Response.json(
+          {
+            error: {
+              code: "invalid-configuration",
+              message: "reflected upstream content",
+            },
+          },
+          { status: 400 },
+        ),
+    });
+    await expect(
+      untrusted.doOpen({ abortSignal: new AbortController().signal }),
+    ).rejects.toMatchObject({ code: "token-error" });
+
+    const brokenBody = openai({
+      tokenEndpoint: "/token",
+      fetch: async () =>
+        new Response(failingBody(), {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            "X-VoiceInput-Error": "1",
+          },
+        }),
+    });
+    await expect(
+      brokenBody.doOpen({ abortSignal: new AbortController().signal }),
+    ).rejects.toMatchObject({ code: "token-error", provider: "openai" });
+
     const transport = createTransport();
     const provider = createProvider(transport);
     const sessionPromise = Promise.resolve(
@@ -387,6 +439,14 @@ function createProvider(transport: TestTransport) {
     tokenEndpoint: "/token",
     fetch: transport.fetch,
     webSocket: MockWebSocket as unknown as typeof WebSocket,
+  });
+}
+
+function failingBody(): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    pull(controller) {
+      controller.error(new Error("broken body"));
+    },
   });
 }
 

@@ -68,7 +68,18 @@ export const POST = createDeepgramTokenHandler({
 
 The handler accepts only `POST`, requires authorization, sets
 `Cache-Control: no-store`, and returns a temporary token rather than the API
-key. `ttlSeconds`, when supplied, must be an integer from 1 to 3600.
+key. Requests must be JSON and are limited to 16 KiB. Authorization and
+rate-limit callbacks receive independent request bodies. If `onTokenIssued`
+throws, token delivery fails closed.
+
+The default `ttlSeconds` is 30; overrides must be integers from 1 to 3600. Use
+the shortest practical lifetime—the token only needs to remain valid for the
+WebSocket handshake. Deepgram grant tokens carry `usage::write` across core
+voice APIs rather than a speech-to-text-only scope. Isolate the backing Member
+key in a dedicated project, apply project spending controls, and use separate
+projects/keys for production and testing. See Deepgram's official
+[token grant](https://developers.deepgram.com/reference/auth/tokens/grant) and
+[authentication guide](https://developers.deepgram.com/guides/fundamentals/token-based-authentication).
 
 ### `CreateDeepgramTokenHandlerOptions`
 
@@ -78,7 +89,7 @@ key. `ttlSeconds`, when supplied, must be an integer from 1 to 3600.
 | `authorize(request)`      | Required application authorization                              |
 | `model`                   | Default model; default `nova-3`                                 |
 | `allowedModels`           | Browser-selectable models; defaults to only `model`             |
-| `ttlSeconds`              | Requested temporary-token lifetime, 1–3600 seconds              |
+| `ttlSeconds`              | Temporary-token lifetime, default 30; 1–3600 seconds            |
 | `rateLimit(context)`      | Optional application quota check                                |
 | `onTokenIssued(metadata)` | Metadata-only callback with subject, model, and expiry duration |
 | `fetch`, `grantUrl`       | Transport/endpoint overrides                                    |

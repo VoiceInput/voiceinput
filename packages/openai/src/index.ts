@@ -164,29 +164,7 @@ async function requestCredential(
   }
 
   if (!response.ok) {
-    const retryAfterMs = parseRetryAfter(response.headers.get("Retry-After"));
-    if (response.status === 401 || response.status === 403) {
-      throw new VoiceInputError({
-        code: "unauthorized",
-        message: "The OpenAI token endpoint rejected this request.",
-        provider: "openai",
-      });
-    }
-    if (response.status === 429) {
-      throw new VoiceInputError({
-        code: "rate-limited",
-        message: "The OpenAI token endpoint rate limit was exceeded.",
-        provider: "openai",
-        retryable: true,
-        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
-      });
-    }
-    throw new VoiceInputError({
-      code: "token-error",
-      message: "The OpenAI token endpoint did not issue a credential.",
-      provider: "openai",
-      retryable: response.status >= 500,
-    });
+    throw await tokenResponseError(response);
   }
 
   let value: unknown;
@@ -214,6 +192,98 @@ async function requestCredential(
     });
   }
   return { value: value["value"], expires_at: value["expires_at"] };
+}
+
+async function tokenResponseError(
+  response: Response,
+): Promise<VoiceInputError> {
+  const retryAfterMs = parseRetryAfter(response.headers.get("Retry-After"));
+  if (response.status === 401 || response.status === 403) {
+    return new VoiceInputError({
+      code: "unauthorized",
+      message: "The OpenAI token endpoint rejected this request.",
+      provider: "openai",
+    });
+  }
+  if (response.status === 429) {
+    return new VoiceInputError({
+      code: "rate-limited",
+      message: "The OpenAI token endpoint rate limit was exceeded.",
+      provider: "openai",
+      retryable: true,
+      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+    });
+  }
+  const safeError = await readSafeTokenError(response);
+  if (safeError !== undefined) {
+    return new VoiceInputError({ ...safeError, provider: "openai" });
+  }
+  return new VoiceInputError({
+    code: "token-error",
+    message: "The OpenAI token endpoint did not issue a credential.",
+    provider: "openai",
+    retryable: response.status >= 500,
+  });
+}
+
+async function readSafeTokenError(response: Response): Promise<
+  | {
+      code: "invalid-configuration" | "unsupported-feature";
+      message: string;
+    }
+  | undefined
+> {
+  if (
+    response.status !== 400 ||
+    response.headers.get("X-VoiceInput-Error") !== "1" ||
+    response.headers.get("Content-Type")?.split(";", 1)[0]?.trim() !==
+      "application/json"
+  ) {
+    return undefined;
+  }
+  const text = await readBoundedErrorText(response);
+  if (text === undefined) return undefined;
+  try {
+    const value = JSON.parse(text) as unknown;
+    const error = isRecord(value) ? value["error"] : undefined;
+    if (
+      !isRecord(error) ||
+      (error["code"] !== "invalid-configuration" &&
+        error["code"] !== "unsupported-feature") ||
+      typeof error["message"] !== "string" ||
+      error["message"].length === 0 ||
+      error["message"].length > 1_000
+    ) {
+      return undefined;
+    }
+    return { code: error["code"], message: error["message"] };
+  } catch {
+    return undefined;
+  }
+}
+
+async function readBoundedErrorText(
+  response: Response,
+): Promise<string | undefined> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) return undefined;
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return text + decoder.decode();
+      bytesRead += value.byteLength;
+      if (bytesRead > 4_096) {
+        await reader.cancel().catch(() => {});
+        return undefined;
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 async function createSession(

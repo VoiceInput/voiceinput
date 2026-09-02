@@ -8,6 +8,7 @@ import {
 
 const DEFAULT_CLIENT_SECRET_URL =
   "https://api.openai.com/v1/realtime/client_secrets";
+const MAX_TOKEN_REQUEST_BYTES = 16 * 1024;
 
 export interface OpenAIAuthorization {
   readonly subject: string;
@@ -78,12 +79,15 @@ export function createOpenAITokenHandler(
     }
 
     try {
-      const authorization = await options.authorize(request);
+      const requestBody = await readRequestBody(request);
+      const authorization = await options.authorize(
+        copyRequest(request, requestBody),
+      );
       if (authorization === null) {
         return jsonError(401, "unauthorized", "Unauthorized.");
       }
       const subject = validateNonEmpty(authorization.subject, "subject");
-      const tokenRequest = await readTokenRequest(request, defaultModel);
+      const tokenRequest = readTokenRequest(requestBody, defaultModel);
       if (!allowedModels.has(tokenRequest.model)) {
         return jsonError(
           400,
@@ -91,12 +95,12 @@ export function createOpenAITokenHandler(
           "The requested OpenAI model is not allowed.",
         );
       }
-      const context: OpenAITokenHandlerContext = {
-        request,
+      const createContext = (): OpenAITokenHandlerContext => ({
+        request: copyRequest(request, requestBody),
         subject,
         model: tokenRequest.model,
-      };
-      const rateLimit = await options.rateLimit?.(context);
+      });
+      const rateLimit = await options.rateLimit?.(createContext());
       if (rateLimit?.allowed === false) {
         const retryAfter = normalizeRetryAfter(rateLimit.retryAfterSeconds);
         return jsonError(
@@ -107,7 +111,8 @@ export function createOpenAITokenHandler(
         );
       }
 
-      const safetyIdentifier = await options.safetyIdentifier?.(context);
+      const safetyIdentifier =
+        await options.safetyIdentifier?.(createContext());
       const response = await fetchImplementation(clientSecretUrl, {
         method: "POST",
         headers: {
@@ -166,11 +171,7 @@ export function createOpenAITokenHandler(
         return jsonError(499, "network-error", "The request was cancelled.");
       }
       if (error instanceof InvalidTokenRequestError) {
-        return jsonError(
-          400,
-          error.code,
-          error.message || "Invalid token request.",
-        );
+        return jsonError(error.status, error.code, error.message);
       }
       return jsonError(
         500,
@@ -181,18 +182,58 @@ export function createOpenAITokenHandler(
   };
 }
 
-async function readRequestBody(request: Request): Promise<unknown> {
-  const text = await request.text();
-  return text.length === 0 ? {} : JSON.parse(text);
+async function readRequestBody(request: Request): Promise<string> {
+  const contentType = request.headers
+    .get("Content-Type")
+    ?.split(";", 1)[0]
+    ?.trim()
+    .toLowerCase();
+  if (contentType !== "application/json") {
+    throw new InvalidTokenRequestError(
+      "Content-Type must be application/json.",
+      "invalid-request",
+      415,
+    );
+  }
+  const declaredLength = Number(request.headers.get("Content-Length"));
+  if (declaredLength > MAX_TOKEN_REQUEST_BYTES) {
+    throw requestTooLarge();
+  }
+  const reader = request.body?.getReader();
+  if (reader === undefined) return "";
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let bytesRead = 0;
+  let text = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytesRead += value.byteLength;
+    if (bytesRead > MAX_TOKEN_REQUEST_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw requestTooLarge();
+    }
+    try {
+      text += decoder.decode(value, { stream: true });
+    } catch {
+      await reader.cancel().catch(() => {});
+      throw invalidUtf8();
+    }
+  }
+  try {
+    text += decoder.decode();
+  } catch {
+    throw invalidUtf8();
+  }
+  return text;
 }
 
-async function readTokenRequest(
-  request: Request,
+function readTokenRequest(
+  body: string,
   defaultModel: string,
-): Promise<ReturnType<typeof validateOpenAITokenRequest>> {
+): ReturnType<typeof validateOpenAITokenRequest> {
   try {
     return validateOpenAITokenRequest(
-      await readRequestBody(request),
+      body.length === 0 ? {} : JSON.parse(body),
       defaultModel,
     );
   } catch (cause) {
@@ -210,15 +251,42 @@ async function readTokenRequest(
   }
 }
 
+function copyRequest(request: Request, body: string): Request {
+  return new Request(request, {
+    method: "POST",
+    body,
+    referrer: request.referrer,
+    referrerPolicy: request.referrerPolicy,
+  });
+}
+
 class InvalidTokenRequestError extends Error {
   constructor(
     message: string,
     readonly code:
-      "invalid-configuration" | "unsupported-feature" = "invalid-configuration",
+      | "invalid-configuration"
+      | "invalid-request"
+      | "unsupported-feature" = "invalid-configuration",
+    readonly status = 400,
   ) {
     super(message);
     this.name = "InvalidTokenRequestError";
   }
+}
+
+function requestTooLarge(): InvalidTokenRequestError {
+  return new InvalidTokenRequestError(
+    `Token request body exceeds ${MAX_TOKEN_REQUEST_BYTES} bytes.`,
+    "invalid-request",
+    413,
+  );
+}
+
+function invalidUtf8(): InvalidTokenRequestError {
+  return new InvalidTokenRequestError(
+    "Token request body must be valid UTF-8.",
+    "invalid-request",
+  );
 }
 
 function validateCredential(value: unknown): {
@@ -248,6 +316,7 @@ function jsonError(
 ): Response {
   const responseHeaders = new Headers(headers);
   responseHeaders.set("Cache-Control", "no-store");
+  responseHeaders.set("X-VoiceInput-Error", "1");
   return Response.json(
     { error: { code, message } },
     {

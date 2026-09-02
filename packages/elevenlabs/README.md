@@ -69,7 +69,9 @@ export const POST = createElevenLabsTokenHandler({
 
 The handler accepts only `POST`, requires authorization, sets
 `Cache-Control: no-store`, and returns a single-use token rather than the
-long-lived API key.
+long-lived API key. Requests must be JSON and are limited to 16 KiB.
+Authorization and rate-limit callbacks receive independent request bodies. If
+`onTokenIssued` throws, token delivery fails closed.
 
 ### `CreateElevenLabsTokenHandlerOptions`
 

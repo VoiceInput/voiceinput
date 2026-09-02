@@ -201,6 +201,41 @@ describe("deepgram", () => {
       retryAfterMs: 2_000,
     });
 
+    const configured = deepgram({
+      tokenEndpoint: "/token",
+      fetch: async () =>
+        Response.json(
+          {
+            error: {
+              code: "invalid-configuration",
+              message: "Choose an allowed transcription model.",
+            },
+          },
+          { status: 400, headers: { "X-VoiceInput-Error": "1" } },
+        ),
+    });
+    await expect(
+      configured.doOpen({ abortSignal: new AbortController().signal }),
+    ).rejects.toMatchObject({
+      code: "invalid-configuration",
+      message: "Choose an allowed transcription model.",
+    });
+
+    const brokenBody = deepgram({
+      tokenEndpoint: "/token",
+      fetch: async () =>
+        new Response(failingBody(), {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+            "X-VoiceInput-Error": "1",
+          },
+        }),
+    });
+    await expect(
+      brokenBody.doOpen({ abortSignal: new AbortController().signal }),
+    ).rejects.toMatchObject({ code: "token-error", provider: "deepgram" });
+
     const transport = createTransport();
     const sessionPromise = Promise.resolve(
       createProvider(transport).doOpen({
@@ -257,6 +292,14 @@ function createProvider(transport: TestTransport) {
     tokenEndpoint: "/token",
     fetch: transport.fetch,
     webSocket: MockWebSocket as unknown as typeof WebSocket,
+  });
+}
+
+function failingBody(): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    pull(controller) {
+      controller.error(new Error("broken body"));
+    },
   });
 }
 

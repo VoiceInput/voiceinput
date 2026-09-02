@@ -16,6 +16,7 @@ Set the key only in the server environment:
 
 ```dotenv
 OPENAI_API_KEY=...
+APP_ORIGIN=https://app.example.com
 ```
 
 Do not use a `NEXT_PUBLIC_` name.
@@ -32,15 +33,26 @@ export const runtime = "nodejs";
 
 const apiKey = process.env.OPENAI_API_KEY;
 if (!apiKey) throw new Error("OPENAI_API_KEY is required.");
+const appOrigin = new URL(process.env.APP_ORIGIN!).origin;
 
 export const POST = createOpenAITokenHandler({
   apiKey,
   authorize: async (request) => {
+    if (
+      request.headers.get("origin") !== appOrigin ||
+      request.headers.get("sec-fetch-site") === "cross-site"
+    ) {
+      return null;
+    }
     const user = await getAuthenticatedUser(request);
     return user ? { subject: user.id } : null;
   },
   rateLimit: async ({ subject }) => {
-    const result = await consumeVoiceQuota(subject);
+    const result = await consumeVoiceQuota({
+      key: `voice-token:${subject}`,
+      limit: 10,
+      windowSeconds: 60,
+    });
     return result.allowed
       ? { allowed: true }
       : { allowed: false, retryAfterSeconds: result.retryAfterSeconds };
@@ -120,7 +132,7 @@ export function Composer() {
         value={message}
         onChange={(event) => setMessage(event.currentTarget.value)}
       />
-      <button {...voice.triggerProps}>
+      <button {...voice.getTriggerProps()}>
         {voice.status === "listening" ? "Stop" : "Speak"}
       </button>
       <output aria-live="polite">{voice.status}</output>
@@ -166,11 +178,24 @@ default. If clients may request more than one model, set an explicit
 - Keep the token endpoint same-origin when practical; the adapters send cookies
   with `credentials: "same-origin"`.
 - Protect the endpoint with your real session/authentication system.
+- For cookie authentication, require the exact configured `Origin` and reject
+  `Sec-Fetch-Site: cross-site`; do not derive the trusted origin from `Host` or
+  forwarded headers supplied by the request.
 - Use a shared quota store for multi-instance or serverless deployments.
+- Rate-limit before minting with a durable key such as
+  `voice-token:<authenticated-subject>`; the example permits 10 attempts per 60
+  seconds. Add a separately trusted client-IP dimension when your proxy setup
+  can supply one safely.
 - Add the selected provider's WebSocket origin to `connect-src` if you use CSP.
 - Never import a provider `/server` entry from a client component.
 - Do not log API keys, issued credentials, request bodies, audio, or transcript
   content unless your own privacy policy explicitly requires it.
+
+Official handlers require `application/json` and cap the body at 16 KiB before
+parsing. `authorize` and `rateLimit` each receive an independent request copy,
+so either callback may inspect the body without consuming the helper's copy.
+`onTokenIssued` runs before the credential response; if audit persistence
+throws, credential delivery fails closed with a generic `500` response.
 
 ## About the repository playground
 

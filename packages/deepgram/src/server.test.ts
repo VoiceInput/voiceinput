@@ -93,10 +93,94 @@ describe("createDeepgramTokenHandler", () => {
     expect(failure.status).toBe(502);
     expect(await failure.text()).not.toContain("sensitive");
   });
+
+  it("bounds JSON requests, isolates body readers, and defaults to a short TTL", async () => {
+    const upstream = vi.fn<typeof fetch>(async (_input, init) => {
+      expect(typeof init?.body).toBe("string");
+      expect(JSON.parse(init?.body as string)).toEqual({ ttl_seconds: 30 });
+      return Response.json({ access_token: "temporary", expires_in: 30 });
+    });
+    const handler = createDeepgramTokenHandler({
+      apiKey: "dg-server",
+      authorize: async (request) => {
+        expect(request.credentials).toBe("include");
+        expect(request.cache).toBe("no-store");
+        expect(await request.json()).toEqual({ model: "nova-3" });
+        return { subject: "user-1" };
+      },
+      rateLimit: async ({ request }) => {
+        expect(await request.json()).toEqual({ model: "nova-3" });
+        return { allowed: true };
+      },
+      fetch: upstream,
+    });
+
+    expect(
+      (
+        await handler(
+          tokenRequest(
+            { model: "nova-3" },
+            { credentials: "include", cache: "no-store" },
+          ),
+        )
+      ).status,
+    ).toBe(200);
+    const invalidHandler = createDeepgramTokenHandler({
+      apiKey: "dg-server",
+      authorize: () => ({ subject: "user-1" }),
+      fetch: upstream,
+    });
+    const wrongType = await invalidHandler(
+      new Request("https://example.test/token", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: "{}",
+      }),
+    );
+    const oversized = await invalidHandler(
+      tokenRequest({ value: "x".repeat(16_384) }),
+    );
+    const invalidUtf8 = await invalidHandler(
+      new Request("https://example.test/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: new Uint8Array([0xff]),
+      }),
+    );
+
+    expect(wrongType.status).toBe(415);
+    expect(oversized.status).toBe(413);
+    expect(oversized.headers.get("X-VoiceInput-Error")).toBe("1");
+    expect(invalidUtf8.status).toBe(400);
+    expect(await invalidUtf8.json()).toMatchObject({
+      error: { code: "invalid-request" },
+    });
+    expect(upstream).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when token audit persistence fails", async () => {
+    const handler = createDeepgramTokenHandler({
+      apiKey: "dg-server",
+      authorize: () => ({ subject: "user-1" }),
+      onTokenIssued: () => {
+        throw new Error("audit unavailable");
+      },
+      fetch: async () =>
+        Response.json({ access_token: "issued-secret", expires_in: 30 }),
+    });
+
+    const response = await handler(tokenRequest({}));
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain("issued-secret");
+  });
 });
 
-function tokenRequest(body: Record<string, unknown>): Request {
+function tokenRequest(
+  body: Record<string, unknown>,
+  init: Omit<RequestInit, "body" | "headers" | "method"> = {},
+): Request {
   return new Request("https://example.test/token", {
+    ...init,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
