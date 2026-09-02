@@ -30,6 +30,8 @@ export interface CreateBrowserAudioSourceOptions {
   constraints?: MediaTrackConstraints;
   /** Duration of each emitted PCM16 frame. Defaults to 20 milliseconds. */
   frameDurationMs?: number;
+  /** Self-hosted AudioWorklet module URL. The Blob-backed module is used by default. */
+  workletModuleUrl?: string | URL;
 }
 
 export function getBrowserVoiceInputSupport(): BrowserVoiceInputSupport {
@@ -83,6 +85,16 @@ export function createBrowserAudioSource(
       message: "frameDurationMs must be a positive finite number.",
     });
   }
+  const workletModuleUrl =
+    options.workletModuleUrl === undefined
+      ? undefined
+      : String(options.workletModuleUrl);
+  if (workletModuleUrl !== undefined && workletModuleUrl.trim().length === 0) {
+    throw new VoiceInputError({
+      code: "invalid-configuration",
+      message: "workletModuleUrl must be a non-empty URL.",
+    });
+  }
 
   return {
     async prepare(prepareOptions) {
@@ -91,6 +103,7 @@ export function createBrowserAudioSource(
       return prepareBrowserAudio(prepareOptions, {
         constraints: options.constraints,
         frameDurationMs,
+        workletModuleUrl,
       });
     },
   };
@@ -101,6 +114,7 @@ async function prepareBrowserAudio(
   options: {
     constraints: MediaTrackConstraints | undefined;
     frameDurationMs: number;
+    workletModuleUrl: string | undefined;
   },
 ): Promise<PreparedVoiceAudioSource> {
   const { abortSignal, sampleRate } = prepareOptions;
@@ -188,7 +202,18 @@ async function prepareBrowserAudio(
       throw unsupportedBrowser(["audio-worklet"]);
     }
 
-    await loadWorklet(audioContext);
+    try {
+      await loadWorklet(audioContext, options.workletModuleUrl);
+    } catch (cause) {
+      throwIfAborted(abortSignal);
+      throw new VoiceInputError({
+        code: "audio-error",
+        message:
+          "The microphone AudioWorklet could not be loaded. Check workletModuleUrl and the page's Content Security Policy.",
+        retryable: true,
+        cause,
+      });
+    }
     throwIfAborted(abortSignal);
 
     sourceNode = audioContext.createMediaStreamSource(mediaStream);
@@ -422,7 +447,14 @@ function createAudioContext(
   }
 }
 
-async function loadWorklet(context: AudioContext): Promise<void> {
+async function loadWorklet(
+  context: AudioContext,
+  moduleUrl: string | undefined,
+): Promise<void> {
+  if (moduleUrl !== undefined) {
+    await context.audioWorklet.addModule(moduleUrl);
+    return;
+  }
   const url = URL.createObjectURL(
     new Blob([AUDIO_WORKLET_SOURCE], { type: "text/javascript" }),
   );

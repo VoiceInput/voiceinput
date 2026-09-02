@@ -101,6 +101,11 @@ Inspect the token endpoint's HTTP status and server logs, then the browser's
 WebSocket connection. Check CSP `connect-src`, proxies, VPNs, ad blockers, and
 provider status. Never log the provider key or issued client credential.
 
+If microphone permission succeeds but setup reports `audio-error`, check for a
+blocked AudioWorklet request. The default path needs `blob:` in the effective
+script policy; a strict policy can use the documented
+[same-origin worklet path](content-security-policy.md) instead.
+
 VoiceInput preserves provider-finalized text already received. It discards
 untrusted provisional text if graceful provider finalization times out.
 

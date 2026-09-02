@@ -6,6 +6,7 @@ export {
   type BrowserVoiceInputSupport,
   type CreateBrowserAudioSourceOptions,
 } from "./browser-audio.js";
+export { AUDIO_WORKLET_SOURCE as VOICE_INPUT_AUDIO_WORKLET_SOURCE } from "./audio-worklet-source.js";
 export {
   VoiceInputError,
   createVoiceInputSession,

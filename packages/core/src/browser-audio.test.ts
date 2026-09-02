@@ -28,6 +28,9 @@ describe("browser support", () => {
     expect(() => createBrowserAudioSource({ frameDurationMs: 0 })).toThrow(
       /frameDurationMs/,
     );
+    expect(() => createBrowserAudioSource({ workletModuleUrl: " " })).toThrow(
+      /workletModuleUrl/,
+    );
   });
 });
 
@@ -157,6 +160,52 @@ describe("browser audio lifecycle", () => {
     expect(context?.closeCallCount).toBe(1);
     expect(context?.source.disconnected).toBe(true);
     expect(worklet?.port.closed).toBe(true);
+  });
+
+  it("loads a consumer-hosted worklet module without creating a Blob URL", async () => {
+    const track = new FakeTrack();
+    stubSupportedBrowser(track);
+    const source = createBrowserAudioSource({
+      workletModuleUrl: "/voiceinput-worklet.js",
+    });
+
+    const prepared = await source.prepare({
+      sampleRate: 16_000,
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(FakeAudioContext.instance?.moduleUrls).toEqual([
+      "/voiceinput-worklet.js",
+    ]);
+    await prepared.stop();
+  });
+
+  it("classifies a blocked worklet module as an audio pipeline error", async () => {
+    class BlockedWorkletAudioContext extends FakeAudioContext {
+      override get audioWorklet(): AudioWorklet {
+        return {
+          addModule: async () => {
+            throw new DOMException("Blocked by CSP", "AbortError");
+          },
+        } as AudioWorklet;
+      }
+    }
+    const track = new FakeTrack();
+    stubSupportedBrowser(track, BlockedWorkletAudioContext);
+
+    await expect(
+      createBrowserAudioSource({
+        workletModuleUrl: "/voiceinput-worklet.js",
+      }).prepare({
+        sampleRate: 16_000,
+        abortSignal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({
+      code: "audio-error",
+      message: expect.stringContaining("Content Security Policy"),
+    });
+    expect(track.stopCallCount).toBe(1);
+    expect(BlockedWorkletAudioContext.instance?.closeCallCount).toBe(1);
   });
 
   it("requires a user gesture before requesting microphone access", async () => {
@@ -367,7 +416,10 @@ function createMessage(data: unknown): MessageEvent<unknown> {
   return { data } as MessageEvent<unknown>;
 }
 
-function stubSupportedBrowser(track: FakeTrack): void {
+function stubSupportedBrowser(
+  track: FakeTrack,
+  AudioContextConstructor: typeof FakeAudioContext = FakeAudioContext,
+): void {
   const mediaStream = {
     getAudioTracks: () => [track],
     getTracks: () => [track],
@@ -377,6 +429,6 @@ function stubSupportedBrowser(track: FakeTrack): void {
     mediaDevices: { getUserMedia: async () => Promise.resolve(mediaStream) },
     userActivation: { isActive: true },
   });
-  vi.stubGlobal("AudioContext", FakeAudioContext);
+  vi.stubGlobal("AudioContext", AudioContextConstructor);
   vi.stubGlobal("AudioWorkletNode", FakeAudioWorkletNode);
 }

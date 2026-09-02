@@ -186,7 +186,9 @@ default. If clients may request more than one model, set an explicit
   `voice-token:<authenticated-subject>`; the example permits 10 attempts per 60
   seconds. Add a separately trusted client-IP dimension when your proxy setup
   can supply one safely.
-- Add the selected provider's WebSocket origin to `connect-src` if you use CSP.
+- Under CSP, allow the selected provider's exact WebSocket origin in
+  `connect-src`. Self-host the AudioWorklet when `blob:` scripts are disallowed;
+  see the [Content Security Policy guide](content-security-policy.md).
 - Never import a provider `/server` entry from a client component.
 - Do not log API keys, issued credentials, request bodies, audio, or transcript
   content unless your own privacy policy explicitly requires it.

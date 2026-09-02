@@ -76,12 +76,20 @@ the connection deadline even if later preparation is still pending.
 const audioSource = createBrowserAudioSource({
   constraints: { echoCancellation: true },
   frameDurationMs: 20,
+  // Optional: use a self-hosted module under strict CSP.
+  workletModuleUrl: "/voiceinput-worklet.js",
 });
 ```
 
 It captures mono audio through an `AudioWorklet`, resamples to the adapter's
 declared rate, emits `Int16Array` frames, resumes suspended Safari contexts, and
 tears down tracks, nodes, and contexts on every terminal path.
+
+The default worklet uses a temporary Blob URL. For a policy without `blob:`,
+write `VOICE_INPUT_AUDIO_WORKLET_SOURCE` to a same-origin JavaScript asset at
+build time and pass its URL as `workletModuleUrl`. See the
+[Content Security Policy guide](https://github.com/VoiceInput/voiceinput/blob/main/docs/content-security-policy.md)
+for the copy script and exact directives.
 
 Use `getBrowserVoiceInputSupport()` for a capability report. It checks secure
 context, media devices, `getUserMedia`, `AudioContext`, and `AudioWorklet`.
