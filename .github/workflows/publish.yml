@@ -7,6 +7,18 @@ on:
         description: Type PUBLISH after completing the release checklist
         required: true
         type: string
+      candidate_sha:
+        description: Full approved commit SHA from the completed release checks
+        required: true
+        type: string
+      version:
+        description: Exact version shared by all six packages
+        required: true
+        type: string
+      dist_tag:
+        description: Explicit npm dist-tag (for example, next)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -18,7 +30,9 @@ concurrency:
 jobs:
   provider-smoke:
     name: Verify live provider credentials
-    if: github.ref == 'refs/heads/main' && inputs.confirmation == 'PUBLISH'
+    if:
+      github.ref == 'refs/heads/main' && inputs.confirmation == 'PUBLISH' &&
+      inputs.candidate_sha == github.sha
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: provider-smoke
@@ -28,6 +42,8 @@ jobs:
       DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.candidate_sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -38,7 +54,9 @@ jobs:
 
   publish:
     name: Publish fixed package suite
-    if: github.ref == 'refs/heads/main' && inputs.confirmation == 'PUBLISH'
+    if:
+      github.ref == 'refs/heads/main' && inputs.confirmation == 'PUBLISH' &&
+      inputs.candidate_sha == github.sha
     needs: provider-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -46,8 +64,15 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      VOICEINPUT_RELEASE_APPROVAL: ${{ inputs.confirmation }}
+      VOICEINPUT_RELEASE_SHA: ${{ inputs.candidate_sha }}
+      VOICEINPUT_RELEASE_TAG: ${{ inputs.dist_tag }}
+      VOICEINPUT_RELEASE_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.candidate_sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
@@ -65,5 +90,9 @@ jobs:
       - run: pnpm validate:packages
       - run: pnpm test:e2e
       - run: pnpm test:security
+      - name: Restore Next.js generated declaration
+        run: git restore apps/playground-next/next-env.d.ts
+      - name: Print and verify the immutable release plan
+        run: pnpm release:plan
       - name: Publish through npm trusted publishing
         run: pnpm release

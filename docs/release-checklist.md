@@ -49,5 +49,15 @@ reviewers and deployment branch rules that allow only `main`. The workflows also
 enforce the `main` ref as defense in depth. Publishing uses OIDC
 (`id-token: write`) and does not accept a long-lived npm token.
 
-When every gate is green, merge the Changesets version PR and manually run
-`Publish packages`. Do not publish directly from a developer machine.
+When every gate is green, merge the Changesets version PR. Confirm that it
+removed the pending release Changeset and added the intended version to every
+public package changelog. Manually run `Publish packages` from `main` and enter:
+
+- `PUBLISH` as the confirmation
+- the full approved candidate commit SHA
+- the exact shared package version
+- the explicit npm dist-tag (`next` for the beta)
+
+The workflow validates and hashes the tarballs, prints the complete immutable
+package/version/tag plan, and publishes those exact files without rebuilding
+them. Do not publish directly from a developer machine.

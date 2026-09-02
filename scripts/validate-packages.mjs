@@ -1,18 +1,21 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const rootDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
+const releaseManifestPath = join(rootDirectory, ".release-manifest.json");
 const packages = [
   "provider",
   "core",
@@ -37,17 +40,21 @@ function run(command, arguments_, options = {}) {
 
 function findTarball(packageName) {
   const packageDirectory = join(rootDirectory, "packages", packageName);
-  const tarball = readdirSync(packageDirectory)
-    .filter((fileName) => fileName.endsWith(".tgz"))
-    .sort()
-    .at(-1);
+  const { version } = JSON.parse(
+    readFileSync(join(packageDirectory, "package.json"), "utf8"),
+  );
+  const tarball = `voiceinput-${packageName}-${version}.tgz`;
 
-  if (tarball === undefined) {
-    throw new Error(`No packed tarball found for @voiceinput/${packageName}`);
+  if (!readdirSync(packageDirectory).includes(tarball)) {
+    throw new Error(
+      `No packed tarball found at packages/${packageName}/${tarball}`,
+    );
   }
 
   return join(packageDirectory, tarball);
 }
+
+rmSync(releaseManifestPath, { force: true });
 
 const tarballs = new Map(
   packages.map((packageName) => [packageName, findTarball(packageName)]),
@@ -452,6 +459,34 @@ for (const reactVersion of reactVersions) {
 }
 
 console.log("\nAll packed-package checks passed.");
+
+const candidateSha = execFileSync("git", ["rev-parse", "HEAD"], {
+  cwd: rootDirectory,
+  encoding: "utf8",
+}).trim();
+const releaseManifest = {
+  schemaVersion: 1,
+  candidateSha,
+  packages: packages.map((packageName) => {
+    const tarball = tarballs.get(packageName);
+    const packageDirectory = join(rootDirectory, "packages", packageName);
+    const { name, version } = JSON.parse(
+      readFileSync(join(packageDirectory, "package.json"), "utf8"),
+    );
+    return {
+      name,
+      version,
+      path: `packages/${packageName}/${basename(tarball)}`,
+      sha512: createHash("sha512").update(readFileSync(tarball)).digest("hex"),
+      size: statSync(tarball).size,
+    };
+  }),
+};
+writeFileSync(
+  releaseManifestPath,
+  `${JSON.stringify(releaseManifest, undefined, 2)}\n`,
+);
+console.log(`Release artifact manifest: ${releaseManifestPath}`);
 
 async function validateReactBrowserConsumer(directory) {
   const server = createServer((request, response) => {

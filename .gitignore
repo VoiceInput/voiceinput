@@ -11,6 +11,7 @@ log/
 .playwright-cli/
 output/
 *.tgz
+.release-manifest.json
 
 .env
 .env.*
