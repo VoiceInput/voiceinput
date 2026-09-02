@@ -270,31 +270,175 @@ afterEach(() => {
 });
 
 describe("configuration", () => {
-  it("throws synchronously for invalid public configuration", () => {
+  it.each([
+    ["language", { language: "en_US" }, /language:.*BCP 47/],
+    ["vocabulary shape", { vocabulary: "VoiceInput" }, /vocabulary:.*array/],
+    [
+      "vocabulary terms",
+      { vocabulary: ["", " padded ", 42] },
+      /vocabulary\.0:.*; vocabulary\.1:.*; vocabulary\.2:/,
+    ],
+    ["endpointing shape", { endpointing: null }, /endpointing:.*silenceMs/],
+    [
+      "endpointing extra keys",
+      { endpointing: { silenceMs: 500, extra: true } },
+      /endpointing:.*only silenceMs/,
+    ],
+    [
+      "endpointing duration",
+      { endpointing: { silenceMs: 1.5 } },
+      /endpointing\.silenceMs:.*safe integer/,
+    ],
+    [
+      "unsafe endpointing duration",
+      { endpointing: { silenceMs: Number.MAX_SAFE_INTEGER + 1 } },
+      /endpointing\.silenceMs:.*safe integer/,
+    ],
+    ["maximum duration", { maxDurationMs: 0 }, /maxDurationMs/],
+    [
+      "unsafe maximum duration",
+      { maxDurationMs: Number.MAX_SAFE_INTEGER + 1 },
+      /maxDurationMs:.*safe integer/,
+    ],
+    [
+      "connection timeout",
+      { connectionTimeoutMs: Number.POSITIVE_INFINITY },
+      /connectionTimeoutMs/,
+    ],
+  ])("rejects invalid %s configuration", (_name, configuration, message) => {
     const provider = createFakeVoiceInputProvider();
     const audio = createFakeAudioSource();
+    let thrown: unknown;
+
+    try {
+      createVoiceInputSession({
+        provider: provider.provider,
+        audioSource: audio.audioSource,
+        ...configuration,
+      } as Parameters<typeof createVoiceInputSession>[0]);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(VoiceInputError.isInstance(thrown)).toBe(true);
+    if (!VoiceInputError.isInstance(thrown)) {
+      return;
+    }
+    expect(thrown.code).toBe("invalid-configuration");
+    expect(thrown.message).toMatch(message);
+    expect(thrown.cause).toBeInstanceOf(TypeError);
+  });
+
+  it("rejects inherited endpointing keys", () => {
+    const provider = createFakeVoiceInputProvider();
+    const audio = createFakeAudioSource();
+    const prototype = Object.defineProperty({}, "extra", {
+      enumerable: true,
+      value: true,
+    });
+    const endpointing = Object.assign(Object.create(prototype) as object, {
+      silenceMs: 500,
+    });
 
     expect(() =>
       createVoiceInputSession({
         provider: provider.provider,
         audioSource: audio.audioSource,
-        language: "en_US",
-      }),
-    ).toThrow(/language/);
-    expect(() =>
-      createVoiceInputSession({
-        provider: provider.provider,
-        audioSource: audio.audioSource,
-        maxDurationMs: 0,
-      }),
-    ).toThrow(/maxDurationMs/);
-    expect(() =>
-      createVoiceInputSession({
-        provider: provider.provider,
-        audioSource: audio.audioSource,
-        connectionTimeoutMs: 0,
-      }),
-    ).toThrow(/connectionTimeoutMs/);
+        endpointing,
+      } as Parameters<typeof createVoiceInputSession>[0]),
+    ).toThrow(/endpointing:.*only silenceMs/);
+  });
+
+  it("normalizes getter-backed options exactly once", async () => {
+    const validateOptions =
+      vi.fn<(options: VoiceTranscriptionOptions) => void>();
+    const provider = createFakeVoiceInputProvider({ validateOptions });
+    const audio = createFakeAudioSource();
+    const reads = {
+      language: 0,
+      vocabulary: 0,
+      term: 0,
+      endpointing: 0,
+      silenceMs: 0,
+      maxDurationMs: 0,
+      connectionTimeoutMs: 0,
+    };
+    const vocabulary = Object.defineProperty([], "0", {
+      enumerable: true,
+      get: () => (++reads.term === 1 ? "VoiceInput" : " changed "),
+    }) as string[];
+    const endpointing = {
+      get silenceMs() {
+        return ++reads.silenceMs === 1 ? 500 : -1;
+      },
+    };
+    const options = {
+      provider: provider.provider,
+      audioSource: audio.audioSource,
+      get language() {
+        return ++reads.language === 1 ? "en-CA" : "en_US";
+      },
+      get vocabulary() {
+        ++reads.vocabulary;
+        return vocabulary;
+      },
+      get endpointing() {
+        ++reads.endpointing;
+        return endpointing;
+      },
+      get maxDurationMs() {
+        return ++reads.maxDurationMs === 1 ? 60_000 : -1;
+      },
+      get connectionTimeoutMs() {
+        return ++reads.connectionTimeoutMs === 1 ? 5_000 : -1;
+      },
+    };
+
+    const session = createVoiceInputSession(options);
+    await session.start();
+
+    expect(reads).toEqual({
+      language: 1,
+      vocabulary: 1,
+      term: 1,
+      endpointing: 1,
+      silenceMs: 1,
+      maxDurationMs: 1,
+      connectionTimeoutMs: 1,
+    });
+    expect(validateOptions).toHaveBeenCalledWith({
+      language: "en-CA",
+      vocabulary: ["VoiceInput"],
+      endpointing: { silenceMs: 500 },
+    });
+    await session.cancel();
+  });
+
+  it("copies mutable session options before provider validation", async () => {
+    const validateOptions =
+      vi.fn<(options: VoiceTranscriptionOptions) => void>();
+    const provider = createFakeVoiceInputProvider({ validateOptions });
+    const audio = createFakeAudioSource();
+    const vocabulary = ["VoiceInput"];
+    const endpointing = { silenceMs: 500 };
+    const session = createVoiceInputSession({
+      provider: provider.provider,
+      audioSource: audio.audioSource,
+      vocabulary,
+      endpointing,
+    });
+
+    vocabulary[0] = "changed";
+    endpointing.silenceMs = 1;
+    await session.start();
+
+    expect(validateOptions).toHaveBeenCalledWith({
+      vocabulary: ["VoiceInput"],
+      endpointing: { silenceMs: 500 },
+    });
+    expect(Object.isFrozen(validateOptions.mock.calls[0]?.[0].vocabulary)).toBe(
+      true,
+    );
   });
 
   it("runs provider validation before preparing audio", async () => {

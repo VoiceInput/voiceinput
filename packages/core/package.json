@@ -28,8 +28,7 @@
     }
   },
   "dependencies": {
-    "@voiceinput/provider": "workspace:*",
-    "zod": "4.4.3"
+    "@voiceinput/provider": "workspace:*"
   },
   "publishConfig": {
     "access": "public"

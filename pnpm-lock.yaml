@@ -191,9 +191,6 @@ importers:
       '@voiceinput/provider':
         specifier: workspace:*
         version: link:../provider
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
 
   packages/deepgram:
     dependencies:
@@ -3799,9 +3796,6 @@ packages:
     resolution: {integrity: sha512-zK7YHHz4ZXpW89AHXUPbQVGKI7uvkd3hzusTdotCg1UxyaVtg0zFJSTfW/Dq5f7OBBVnq6cZIaC8Ti4hb6dtCA==}
     engines: {node: '>= 14'}
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
-
 snapshots:
 
   '@andrewbranch/untar.js@1.0.4': {}
@@ -7324,5 +7318,3 @@ snapshots:
       archiver-utils: 5.0.2
       compress-commons: 6.0.2
       readable-stream: 4.7.0
-
-  zod@4.4.3: {}

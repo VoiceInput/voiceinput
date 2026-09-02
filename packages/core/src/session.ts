@@ -6,7 +6,6 @@ import {
   type VoiceInputProviderV1StreamPart,
   type VoiceTranscriptionOptions,
 } from "@voiceinput/provider";
-import { z } from "zod";
 
 import type { VoiceInputTextEngine } from "./text-engine.js";
 import { appendTranscriptPart } from "./transcript-boundary.js";
@@ -21,38 +20,6 @@ const DEFAULT_MAX_DURATION_MS = 300_000;
 const DEFAULT_CONNECTION_TIMEOUT_MS = 15_000;
 const DURATION_WARNING_MS = 30_000;
 const FINALIZATION_TIMEOUT_MS = 5_000;
-
-const languageSchema = z.string().refine(isValidLanguage, {
-  message: "language must be a valid BCP 47 language tag without whitespace.",
-});
-
-const vocabularySchema = z
-  .array(
-    z.string().refine((term) => term.length > 0 && term === term.trim(), {
-      message:
-        "Vocabulary terms must be non-empty and have no outer whitespace.",
-    }),
-  )
-  .readonly();
-
-const endpointingSchema = z.union([
-  z.literal(false),
-  z
-    .object({
-      silenceMs: z.number().int().positive(),
-    })
-    .strict(),
-]);
-
-const sessionConfigurationSchema = z
-  .object({
-    language: languageSchema.optional(),
-    vocabulary: vocabularySchema.optional(),
-    endpointing: endpointingSchema.optional(),
-    maxDurationMs: z.number().int().positive().optional(),
-    connectionTimeoutMs: z.number().int().positive().optional(),
-  })
-  .strict();
 
 export type VoiceInputStatus =
   | "idle"
@@ -166,28 +133,7 @@ export function createVoiceInputSession(
     assertTextEngine(options.textEngine);
   }
 
-  const result = sessionConfigurationSchema.safeParse({
-    language: options.language,
-    vocabulary: options.vocabulary,
-    endpointing: options.endpointing,
-    maxDurationMs: options.maxDurationMs,
-    connectionTimeoutMs: options.connectionTimeoutMs,
-  });
-
-  if (!result.success) {
-    throw new VoiceInputError({
-      code: "invalid-configuration",
-      message: result.error.issues.map(formatValidationIssue).join("; "),
-      cause: result.error,
-    });
-  }
-
-  const configuration: SessionConfiguration = {
-    ...getTranscriptionOptions(result.data),
-    maxDurationMs: result.data.maxDurationMs ?? DEFAULT_MAX_DURATION_MS,
-    connectionTimeoutMs:
-      result.data.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS,
-  };
+  const configuration = validateSessionConfiguration(options);
 
   return new VoiceInputSessionController(
     options.provider,
@@ -834,11 +780,6 @@ function getTranscriptionOptions(options: {
   };
 }
 
-function formatValidationIssue(issue: z.core.$ZodIssue): string {
-  const path = issue.path.length === 0 ? "options" : issue.path.join(".");
-  return `${path}: ${issue.message}`;
-}
-
 function isValidLanguage(language: string): boolean {
   if (language.length === 0 || language !== language.trim()) {
     return false;
@@ -849,6 +790,117 @@ function isValidLanguage(language: string): boolean {
   } catch {
     return false;
   }
+}
+
+function validateSessionConfiguration(
+  options: CreateVoiceInputSessionOptions,
+): SessionConfiguration {
+  const issues: string[] = [];
+  const language: unknown = options.language;
+  const vocabulary: unknown = options.vocabulary;
+  const endpointing: unknown = options.endpointing;
+  const maxDurationMs: unknown = options.maxDurationMs;
+  const connectionTimeoutMs: unknown = options.connectionTimeoutMs;
+  let validatedLanguage: string | undefined;
+  let validatedVocabulary: readonly string[] | undefined;
+  let validatedEndpointing: VoiceTranscriptionOptions["endpointing"];
+
+  if (language !== undefined) {
+    if (typeof language !== "string" || !isValidLanguage(language)) {
+      issues.push(
+        "language: must be a valid BCP 47 language tag without whitespace.",
+      );
+    } else {
+      validatedLanguage = language;
+    }
+  }
+
+  if (vocabulary !== undefined) {
+    if (!Array.isArray(vocabulary)) {
+      issues.push("vocabulary: must be an array of strings.");
+    } else {
+      const copy: unknown[] = [...vocabulary];
+      for (const [index, term] of copy.entries()) {
+        if (
+          typeof term !== "string" ||
+          term.length === 0 ||
+          term !== term.trim()
+        ) {
+          issues.push(
+            `vocabulary.${index}: must be a non-empty string with no outer whitespace.`,
+          );
+        }
+      }
+      validatedVocabulary = Object.freeze(copy as string[]);
+    }
+  }
+
+  if (endpointing === false) {
+    validatedEndpointing = false;
+  } else if (endpointing !== undefined) {
+    if (!isObject(endpointing) || !hasOnlySilenceMs(endpointing)) {
+      issues.push(
+        "endpointing: must be false or an object containing only silenceMs.",
+      );
+    } else {
+      const silenceMs = endpointing["silenceMs"];
+      if (!isPositiveInteger(silenceMs)) {
+        issues.push("endpointing.silenceMs: must be a positive safe integer.");
+      } else {
+        validatedEndpointing = { silenceMs };
+      }
+    }
+  }
+
+  if (maxDurationMs !== undefined && !isPositiveInteger(maxDurationMs)) {
+    issues.push("maxDurationMs: must be a positive safe integer.");
+  }
+  if (
+    connectionTimeoutMs !== undefined &&
+    !isPositiveInteger(connectionTimeoutMs)
+  ) {
+    issues.push("connectionTimeoutMs: must be a positive safe integer.");
+  }
+
+  if (issues.length > 0) {
+    const cause = new TypeError(issues.join("; "));
+    throw new VoiceInputError({
+      code: "invalid-configuration",
+      message: cause.message,
+      cause,
+    });
+  }
+
+  return {
+    ...getTranscriptionOptions({
+      language: validatedLanguage,
+      vocabulary: validatedVocabulary,
+      endpointing: validatedEndpointing,
+    }),
+    maxDurationMs:
+      (maxDurationMs as number | undefined) ?? DEFAULT_MAX_DURATION_MS,
+    connectionTimeoutMs:
+      (connectionTimeoutMs as number | undefined) ??
+      DEFAULT_CONNECTION_TIMEOUT_MS,
+  };
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOnlySilenceMs(value: Record<string, unknown>): boolean {
+  let count = 0;
+  for (const key in value) {
+    if (key !== "silenceMs" || ++count > 1) {
+      return false;
+    }
+  }
+  return count === 1 && Object.hasOwn(value, "silenceMs");
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
 function assertProvider(provider: VoiceInputProviderV1): void {
