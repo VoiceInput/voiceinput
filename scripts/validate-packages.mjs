@@ -15,6 +15,8 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { rolldown } from "rolldown";
+import { gzipSync } from "node:zlib";
 
 const rootDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
 const releaseManifestPath = join(rootDirectory, ".release-manifest.json");
@@ -304,7 +306,7 @@ const reactBrowserConsumer = `
 import React, { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createFakeVoiceInputProvider } from "@voiceinput/provider/test";
-import { VoiceInputProvider, useVoiceInput } from "@voiceinput/react";
+import { VoiceInputProvider, VoiceTextarea, useVoiceInput } from "@voiceinput/react";
 
 const fake = createFakeVoiceInputProvider();
 const audioSource = {
@@ -326,12 +328,28 @@ const audioSource = {
   },
 };
 
+let wrapperChanges = 0;
+const wrapperValues = [];
+let uncontrolledChanges = 0;
+
 function App() {
+  const [wrapped, setWrapped] = useState("");
   const [value, setValue] = useState("");
   const voice = useVoiceInput({ value, onValueChange: setValue });
   return React.createElement(
     React.Fragment,
     null,
+    React.createElement(VoiceTextarea, {
+      "aria-label": "wrapped", value: wrapped,
+      onValueChange: (value) => { wrapperValues.push(value); setWrapped(value); },
+      onChange: () => { wrapperChanges++; },
+    }),
+    React.createElement("form", { id: "uncontrolled-form" }, React.createElement(VoiceTextarea, {
+      "aria-label": "uncontrolled", name: "message", defaultValue: "",
+      onChange: () => { uncontrolledChanges++; },
+    })),
+    React.createElement("button", { "aria-label": "external-value", onClick: () => setValue(current => "external " + current) }, "External change"),
+    React.createElement("button", { "aria-label": "reset-controlled", onClick: () => setValue("") }, "Reset controlled"),
     React.createElement("textarea", {
       "aria-label": "transcript",
       ref: voice.targetRef,
@@ -384,11 +402,43 @@ try {
     () => textarea.value === "compatibility",
     "The controlled target did not receive the transcript",
   );
+  document.querySelector('[aria-label="external-value"]').click();
+  await waitFor(() => textarea.value === "external compatibility", "External controlled value was lost");
+  document.querySelector('[aria-label="reset-controlled"]').click();
+  await waitFor(() => textarea.value === "", "External controlled reset was lost");
+  fake.controller.emit({type: "final", text: "late compatibility", segmentId: "fake:0"});
+  await new Promise(resolve => setTimeout(resolve, 10));
+  if (textarea.value !== "") throw new Error("Late final repopulated a controlled reset");
   trigger.click();
   await waitFor(
     () => fake.controller.sessions[0]?.finishCallCount === 1,
     "The session did not finish",
   );
+  document.documentElement.dataset.phase = "type-wrapper";
+  const wrapped = document.querySelector('[aria-label="wrapped"]');
+  await waitFor(() => wrapped.value === "typed", "Real typing did not update the wrapper");
+  const wrapperButton = wrapped.closest(".voiceinput-field").querySelector("button");
+  wrapperButton.click();
+  await fake.controller.waitForSession(1);
+  fake.controller.emit({ type: "interim", text: "spo", segmentId: "phrase" });
+  fake.controller.emit({ type: "final", text: "spoken", segmentId: "phrase" });
+  await waitFor(() => wrapped.value === "typed spoken", "Wrapper dictation did not update controlled state");
+  wrapperButton.click();
+  await waitFor(() => fake.controller.sessions[1]?.finishCallCount === 1, "Wrapper did not stop");
+  document.documentElement.dataset.phase = "undo-wrapper";
+  await waitFor(() => document.documentElement.dataset.phase === "undo-verified", "Keyboard undo/redo did not complete");
+  if (wrapperChanges !== wrapperValues.length) throw new Error("Wrapper change callbacks were duplicated or omitted");
+  const uncontrolled = document.querySelector('[aria-label="uncontrolled"]');
+  const uncontrolledButton = uncontrolled.closest(".voiceinput-field").querySelector("button");
+  uncontrolledButton.click();
+  await fake.controller.waitForSession(2);
+  fake.controller.emit({ type: "final", text: "registered", segmentId: "form" });
+  await waitFor(() => uncontrolled.value === "registered", "Uncontrolled dictation was lost");
+  if (uncontrolledChanges !== 1 || new FormData(document.querySelector("#uncontrolled-form")).get("message") !== "registered") {
+    throw new Error("Native React change event or submitted value was incorrect");
+  }
+  document.querySelector("#uncontrolled-form").reset();
+  await waitFor(() => uncontrolled.value === "", "Form reset did not clear the field");
   root.unmount();
   document.documentElement.dataset.result = "passed";
 } catch (error) {
@@ -533,6 +583,7 @@ for (const reactVersion of reactVersions) {
       ],
       { cwd: rootDirectory },
     );
+    await validateTreeShaking(consumerDirectory);
     await validateReactBrowserConsumer(consumerDirectory);
     if (reactVersion.runtime.startsWith("19.")) {
       const nextDirectory = join(consumerDirectory, "next-app");
@@ -684,6 +735,28 @@ async function validateReactBrowserConsumer(directory) {
     page.on("pageerror", (error) => pageErrors.push(error));
     await page.goto(`http://127.0.0.1:${address.port}`);
     await page.waitForFunction(
+      () => document.documentElement.dataset.phase === "type-wrapper",
+    );
+    await page.getByLabel("wrapped", { exact: true }).fill("typed");
+    await page.waitForFunction(
+      () => document.documentElement.dataset.phase === "undo-wrapper",
+    );
+    const wrapped = page.getByLabel("wrapped", { exact: true });
+    await wrapped.focus();
+    await page.keyboard.press("ControlOrMeta+z");
+    await page.waitForFunction(
+      () => document.querySelector('[aria-label="wrapped"]').value === "typed",
+    );
+    await page.keyboard.press("ControlOrMeta+Shift+z");
+    await page.waitForFunction(
+      () =>
+        document.querySelector('[aria-label="wrapped"]').value ===
+        "typed spoken",
+    );
+    await page.evaluate(() => {
+      document.documentElement.dataset.phase = "undo-verified";
+    });
+    await page.waitForFunction(
       () =>
         document.documentElement.dataset.result === "passed" ||
         document.documentElement.dataset.error !== undefined,
@@ -700,4 +773,43 @@ async function validateReactBrowserConsumer(directory) {
     await browser?.close();
     await new Promise((resolve) => server.close(resolve));
   }
+}
+
+async function validateTreeShaking(directory) {
+  const measurements = {};
+  for (const components of [false, true]) {
+    const input = join(
+      directory,
+      components ? "components.mjs" : "headless.mjs",
+    );
+    writeFileSync(
+      input,
+      `export { useVoiceInput${components ? ", VoiceInputProvider, VoiceTextarea" : ""} } from "@voiceinput/react"; export { openai } from "@voiceinput/openai";`,
+    );
+    const build = await rolldown({
+      input,
+      platform: "browser",
+      external: [/^react(?:\/|$)/],
+    });
+    try {
+      const { output } = await build.generate({ format: "esm", minify: true });
+      const code = output
+        .filter((item) => item.type === "chunk")
+        .map((item) => item.code)
+        .join("\n");
+      if (code.includes("voiceinput-field") !== components)
+        throw new Error(
+          "Optional field components did not tree-shake as expected.",
+        );
+      measurements[components ? "components" : "headless"] = {
+        bytes: Buffer.byteLength(code),
+        gzip: gzipSync(code).length,
+      };
+    } finally {
+      await build.close();
+    }
+  }
+  console.log(
+    `Optional-component tree shaking: ${JSON.stringify(measurements)} (React external, CSS excluded)`,
+  );
 }

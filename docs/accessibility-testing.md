@@ -38,5 +38,7 @@ logical, and edits survive interim/final updates and field switches. A hardware
 keyboard pass is useful additional evidence but does not replace the touch pass.
 
 Attach the automated report and these manual results to the same immutable
-candidate used for browser/device compatibility. Any missing platform or failed
-flow blocks release.
+candidate used for browser/device compatibility. Missing manual evidence blocks
+a full accessibility/production claim. The desktop beta requires the automated
+axe and keyboard checks; manual rows remain explicitly unverified and are not
+represented as passing.

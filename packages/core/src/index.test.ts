@@ -256,6 +256,11 @@ function createFakeTextEngine(
     applyFinal: vi.fn<(text: string) => void>(),
     complete: vi.fn<() => VoiceInputTextCompletion>(() => completion),
     cancel: vi.fn<() => void>(),
+    updateOptions: () => {},
+    undo: () => {},
+    redo: () => {},
+    isWritable: () => true,
+    subscribe: () => () => {},
     destroy: () => {},
   };
 }
@@ -853,9 +858,9 @@ describe("connection deadline", () => {
     });
 
     const start = session.start();
-    await provider.controller.waitForSession();
     await vi.advanceTimersByTimeAsync(90);
-    provider.controller.resolveOpen();
+    audio.resolveStart();
+    await provider.controller.waitForSession();
     await vi.advanceTimersByTimeAsync(0);
     expect(audio.sessions[0]?.startCallCount).toBe(1);
     await vi.advanceTimersByTimeAsync(10);
@@ -1044,7 +1049,7 @@ describe("text engine integration", () => {
     provider.controller.emit({ type: "interim", text: "hel" });
     provider.controller.emit({ type: "final", text: "hello" });
     await waitFor(() => {
-      expect(textEngine.applyFinal).toHaveBeenCalledWith("hello");
+      expect(textEngine.applyFinal).toHaveBeenCalledWith("hello", "fake:0");
     });
 
     const stopPromise = session.stop();
@@ -1052,7 +1057,7 @@ describe("text engine integration", () => {
       expect(session.getSnapshot().status).toBe("processing");
     });
     expect(textEngine.begin).toHaveBeenCalledOnce();
-    expect(textEngine.applyInterim).toHaveBeenCalledWith("hel");
+    expect(textEngine.applyInterim).toHaveBeenCalledWith("hel", "fake:0");
     expect(events).not.toContainEqual({ type: "stop", reason: "user" });
 
     resolveCompletion([]);
@@ -1106,6 +1111,87 @@ describe("text engine integration", () => {
 });
 
 describe("duration limits", () => {
+  it("stops on backgrounding, releases capture, and can record again", async () => {
+    const document = Object.assign(new EventTarget(), { hidden: false });
+    vi.stubGlobal("document", document);
+    try {
+      const { session, audio, events } = createSession();
+      await session.start();
+      document.hidden = true;
+      document.dispatchEvent(new Event("visibilitychange"));
+      await waitFor(() => expect(session.getSnapshot().status).toBe("idle"));
+      expect(events).toContainEqual({ type: "stop", reason: "backgrounded" });
+      expect(audio.sessions[0]?.stopCallCount).toBe(1);
+      document.hidden = false;
+      await session.start();
+      expect(session.getSnapshot().status).toBe("listening");
+      await session.cancel();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("counts startup capture toward the duration limit", async () => {
+    vi.useFakeTimers();
+    const provider = createFakeVoiceInputProvider({ autoOpen: false });
+    const { session, audio, events } = createSession({
+      provider,
+      maxDurationMs: 1000,
+    });
+    const starting = session.start();
+    await provider.controller.waitForSession();
+    await vi.advanceTimersByTimeAsync(1000);
+    await starting;
+    expect(session.getSnapshot().status).toBe("idle");
+    expect(audio.sessions[0]?.abortCallCount).toBe(1);
+    expect(events).toContainEqual({ type: "stop", reason: "max-duration" });
+  });
+  it("retains audio produced during provider connection and sends it in order", async () => {
+    const provider = createFakeVoiceInputProvider({ autoOpen: false });
+    const audio = createFakeAudioSource();
+    const { session } = createSession({ provider, audio });
+    const starting = session.start();
+    await provider.controller.waitForSession();
+    expect(audio.sessions[0]?.startCallCount).toBe(1);
+    audio.emitChunk(new Int16Array([1, 2]));
+    audio.emitChunk(new Int16Array([3, 4]));
+    provider.controller.resolveOpen();
+    await starting;
+    await waitFor(() =>
+      expect(provider.controller.sessions[0]?.audioChunks).toHaveLength(2),
+    );
+    expect(provider.controller.sessions[0]?.audioChunks).toEqual([
+      new Int16Array([1, 2]),
+      new Int16Array([3, 4]),
+    ]);
+    await session.stop();
+  });
+
+  it("fails safely when startup audio exceeds fifteen seconds", async () => {
+    const provider = createFakeVoiceInputProvider({ autoOpen: false });
+    const audio = createFakeAudioSource();
+    const { session } = createSession({ provider, audio });
+    const starting = session.start();
+    await provider.controller.waitForSession();
+    audio.emitChunk(new Int16Array(provider.provider.sampleRate * 15 + 1));
+    await starting;
+    expect(session.getSnapshot().error?.code).toBe("network-error");
+    expect(audio.sessions[0]?.abortCallCount).toBe(1);
+    expect(provider.controller.sessions[0]?.abortCallCount).toBe(1);
+  });
+
+  it("deduplicates finals by segment without removing legitimate repeated speech", async () => {
+    const { session, provider } = createSession();
+    await session.start();
+    provider.controller.emit({ type: "final", text: "yes", segmentId: "one" });
+    provider.controller.emit({ type: "final", text: "yes", segmentId: "one" });
+    provider.controller.emit({ type: "final", text: "yes", segmentId: "two" });
+    await waitFor(() =>
+      expect(session.getSnapshot().finalTranscript).toBe("yes yes"),
+    );
+    await session.stop();
+  });
+
   it("warns immediately for a short session and stops at the limit", async () => {
     vi.useFakeTimers();
     const { session, events } = createSession({ maxDurationMs: 1_000 });

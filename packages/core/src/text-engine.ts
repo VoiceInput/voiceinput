@@ -13,6 +13,8 @@ export type {
   VoiceInputControlledTextBinding,
   VoiceInputInterimBehavior,
   VoiceInputTextCompletion,
+  VoiceInputTextLimit,
+  VoiceInputTextEngineEvent,
   VoiceInputTextEngine,
   VoiceInputTextEngineSnapshot,
   VoiceInputTextSelection,

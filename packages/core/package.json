@@ -1,6 +1,6 @@
 {
   "name": "@voiceinput/core",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.1",
   "description": "Framework-neutral, cursor-safe voice transcription sessions and browser audio.",
   "keywords": [
     "voice-input",

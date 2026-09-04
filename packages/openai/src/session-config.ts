@@ -4,7 +4,7 @@ import {
   type VoiceTranscriptionOptions,
 } from "@voiceinput/provider";
 
-export const OPENAI_DEFAULT_MODEL = "gpt-live-transcribe";
+export const OPENAI_DEFAULT_MODEL = "gpt-transcribe";
 export const OPENAI_SAMPLE_RATE = 24_000;
 
 export interface OpenAITokenRequest extends VoiceTranscriptionOptions {
@@ -20,7 +20,7 @@ export function createOpenAITranscriptionSession(
     liveModel || vocabulary.length === 0
       ? undefined
       : `Expected vocabulary: ${vocabulary.join(", ")}.`;
-  const turnDetection = createTurnDetection(options.endpointing);
+  const turnDetection = createTurnDetection(options.endpointing, liveModel);
 
   return {
     type: "transcription",
@@ -73,6 +73,15 @@ export function validateOpenAITokenRequest(
 
   const vocabulary = validateVocabulary(value["vocabulary"]);
   const endpointing = validateEndpointing(value["endpointing"]);
+  if (
+    model.startsWith("gpt-live-transcribe") &&
+    endpointing !== undefined &&
+    endpointing !== false
+  ) {
+    throw unsupportedFeature(
+      "gpt-live-transcribe does not support server turn detection. Use endpointing: false for one manually committed segment, or choose gpt-transcribe for phrase boundaries.",
+    );
+  }
 
   return {
     model,
@@ -105,16 +114,14 @@ function normalizeLanguage(value: unknown): string | undefined {
 
 function createTurnDetection(
   endpointing: false | VoiceEndpointingOptions | undefined,
-): Record<string, unknown> | null | undefined {
-  if (endpointing === undefined) {
-    return undefined;
-  }
-  if (endpointing === false) {
+  liveModel: boolean,
+): Record<string, unknown> | null {
+  if (endpointing === false || liveModel) {
     return null;
   }
   return {
     type: "server_vad",
-    silence_duration_ms: endpointing.silenceMs,
+    silence_duration_ms: endpointing?.silenceMs ?? 500,
   };
 }
 

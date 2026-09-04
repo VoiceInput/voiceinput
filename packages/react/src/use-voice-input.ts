@@ -39,6 +39,13 @@ const useIsomorphicLayoutEffect =
 export function useVoiceInput(
   options: UseVoiceInputOptions = {},
 ): UseVoiceInputResult {
+  return useVoiceInputInternal(options);
+}
+
+export function useVoiceInputInternal(
+  options: UseVoiceInputOptions = {},
+  dispatchInput = false,
+): UseVoiceInputResult {
   const context = useContext(VoiceInputContext);
   const provider = options.provider ?? context?.provider;
   if (provider === undefined) {
@@ -48,21 +55,6 @@ export function useVoiceInput(
         "useVoiceInput requires a provider option or a parent VoiceInputProvider.",
     });
   }
-
-  const previousProviderRef = useRef(provider);
-  const providerWarningShownRef = useRef(false);
-  useEffect(() => {
-    if (
-      previousProviderRef.current !== provider &&
-      !providerWarningShownRef.current
-    ) {
-      providerWarningShownRef.current = true;
-      console.warn(
-        "VoiceInput provider identity changed. Create providers once outside render or memoize them; replacing a provider stops the current session.",
-      );
-    }
-    previousProviderRef.current = provider;
-  }, [provider]);
 
   const controlled =
     options.value !== undefined || options.onValueChange !== undefined;
@@ -78,6 +70,14 @@ export function useVoiceInput(
     });
   }
 
+  const initialControlled = useRef(controlled);
+  if (initialControlled.current !== controlled) {
+    throw new VoiceInputError({
+      code: "invalid-configuration",
+      message:
+        "A voice field cannot switch between controlled and uncontrolled modes. Remount it with a new key.",
+    });
+  }
   const latest = useRef(options);
   latest.current = options;
   const disabled = options.disabled ?? false;
@@ -114,12 +114,13 @@ export function useVoiceInput(
   );
   const hasTransform = options.transformTranscript !== undefined;
 
-  const { session, textEngine } = useMemo(() => {
+  const [textEngine] = useState(() => {
     const nextTextEngine = createVoiceInputTextEngine({
       ...(controlled
         ? {
             controlled: {
               getValue: () => latest.current.value ?? "",
+              dispatchInput,
               onValueChange: (value: string) =>
                 latest.current.onValueChange?.(value),
             },
@@ -143,10 +144,26 @@ export function useVoiceInput(
         ? {}
         : { transformTimeoutMs: options.transformTimeoutMs }),
     });
-    const nextSession = createVoiceInputSession({
+    return nextTextEngine;
+  });
+  const [session] = useState(() =>
+    createVoiceInputSession({ provider, audioSource, textEngine }),
+  );
+  useIsomorphicLayoutEffect(() => {
+    textEngine.updateOptions({
+      ...(options.interimBehavior === undefined
+        ? {}
+        : { interimBehavior: options.interimBehavior }),
+      ...(options.transformTranscript === undefined
+        ? {}
+        : { transformTranscript: options.transformTranscript }),
+      ...(options.transformTimeoutMs === undefined
+        ? {}
+        : { transformTimeoutMs: options.transformTimeoutMs }),
+    });
+    session.updateOptions({
       provider,
       audioSource,
-      textEngine: nextTextEngine,
       ...(options.language === undefined ? {} : { language: options.language }),
       ...(vocabulary === undefined ? {} : { vocabulary }),
       ...(endpointing === undefined ? {} : { endpointing }),
@@ -157,22 +174,24 @@ export function useVoiceInput(
         ? {}
         : { connectionTimeoutMs: options.connectionTimeoutMs }),
     });
-    return { session: nextSession, textEngine: nextTextEngine };
   }, [
-    audioSource,
-    controlled,
-    endpointing,
-    hasTransform,
-    options.interimBehavior,
-    options.language,
-    options.connectionTimeoutMs,
-    options.maxDurationMs,
-    options.transformTimeoutMs,
+    session,
     provider,
+    audioSource,
+    textEngine,
+    options.language,
     vocabulary,
+    endpointing,
+    options.maxDurationMs,
+    options.connectionTimeoutMs,
+    options.interimBehavior,
+    options.transformTranscript,
+    options.transformTimeoutMs,
   ]);
   const currentTextEngineRef = useRef(textEngine);
   currentTextEngineRef.current = textEngine;
+  const undo = useCallback(() => textEngine.undo(), [textEngine]);
+  const redo = useCallback(() => textEngine.redo(), [textEngine]);
   const getTextSnapshot = useCallback(
     () => textEngine.getSnapshot(),
     [textEngine],
@@ -234,7 +253,11 @@ export function useVoiceInput(
 
   const startInternal = useCallback(
     async (capture = true): Promise<void> => {
-      if (disabledRef.current || disposedRef.current) {
+      if (
+        disabledRef.current ||
+        disposedRef.current ||
+        (targetNodeRef.current !== null && !textEngine.isWritable())
+      ) {
         return;
       }
       if (capture && !selectionCapturedRef.current) {
@@ -245,7 +268,11 @@ export function useVoiceInput(
       if (!acquired) {
         return;
       }
-      if (disabledRef.current || disposedRef.current) {
+      if (
+        disabledRef.current ||
+        disposedRef.current ||
+        (targetNodeRef.current !== null && !textEngine.isWritable())
+      ) {
         coordinator.release(coordinatedSession);
         return;
       }
@@ -255,7 +282,7 @@ export function useVoiceInput(
         coordinator.release(coordinatedSession);
       }
     },
-    [captureSelection, coordinatedSession, coordinator, session],
+    [captureSelection, coordinatedSession, coordinator, session, textEngine],
   );
 
   const start = useCallback(() => startInternal(true), [startInternal]);
@@ -323,7 +350,34 @@ export function useVoiceInput(
     return () => window.removeEventListener("blur", releaseHold);
   }, [releaseHold]);
 
-  const resolvedDisabled = disabled || !isSupported;
+  const [targetWritable, setTargetWritable] = useState(true);
+  useIsomorphicLayoutEffect(() => {
+    const target = targetNodeRef.current;
+    const update = (): void =>
+      setTargetWritable(target === null || textEngine.isWritable());
+    update();
+    if (target === null) return;
+    const observer = new MutationObserver(update);
+    observer.observe(target, {
+      attributes: true,
+      attributeFilter: ["disabled", "readonly", "type"],
+    });
+    for (
+      let ancestor = target.parentElement;
+      ancestor;
+      ancestor = ancestor.parentElement
+    ) {
+      observer.observe(ancestor, {
+        attributes: true,
+        attributeFilter: ["disabled"],
+      });
+    }
+    return () => observer.disconnect();
+  });
+  useEffect(() => {
+    if (disabled || !targetWritable) void stop("target-unavailable");
+  }, [disabled, targetWritable, stop]);
+  const resolvedDisabled = disabled || !targetWritable || !isSupported;
   const active = snapshot.status !== "idle" && snapshot.status !== "error";
   const activationMode = options.activationMode ?? "toggle";
   const triggerProps = useMemo<VoiceInputTriggerProps>(
@@ -435,6 +489,8 @@ export function useVoiceInput(
       getTriggerProps,
       isSupported,
       getTextSnapshot,
+      undo,
+      redo,
       start,
       stop,
       cancel,
@@ -444,6 +500,8 @@ export function useVoiceInput(
       cancel,
       getTriggerProps,
       getTextSnapshot,
+      undo,
+      redo,
       isSupported,
       snapshot,
       start,
@@ -523,6 +581,10 @@ function dispatchCallback(
       if (event.transcriptChanged) {
         callbacks.onTranscriptChange?.(event.transcript);
       }
+      break;
+    }
+    case "text-limit": {
+      callbacks.onTextLimit?.(event);
       break;
     }
     case "duration-warning": {

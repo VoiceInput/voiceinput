@@ -1,0 +1,62 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #162e26;
+  background: #f6f8f7;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 42rem;
+  padding: 2.5rem 1.25rem;
+  margin: auto;
+}
+section {
+  margin-top: 2.5rem;
+  border-top: 1px solid #b8c9c1;
+  padding-top: 1rem;
+}
+label {
+  display: block;
+  margin: 0.75rem 0;
+}
+textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 7rem;
+  padding: 0.75rem;
+  font: inherit;
+  border: 1px solid #829c8e;
+  border-radius: 0.35rem;
+}
+button {
+  padding: 0.6rem 1rem;
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid #557a68;
+  border-radius: 0.35rem;
+  color: inherit;
+  background: white;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+:focus-visible {
+  outline: 3px solid #147c5b;
+  outline-offset: 3px;
+}
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+[role="alert"] {
+  color: #a31525;
+}
+output {
+  display: block;
+  margin-top: 1rem;
+  white-space: pre-wrap;
+}

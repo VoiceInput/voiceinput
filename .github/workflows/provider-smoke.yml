@@ -31,4 +31,4 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:provider-smoke
+      - run: pnpm test:provider-smoke -- --repeat=2 --json

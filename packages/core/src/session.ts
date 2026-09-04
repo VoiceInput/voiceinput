@@ -7,7 +7,11 @@ import {
   type VoiceTranscriptionOptions,
 } from "@voiceinput/provider";
 
-import type { VoiceInputTextEngine } from "./text-engine.js";
+import { AudioQueue } from "./audio-queue.js";
+import type {
+  VoiceInputTextLimit,
+  VoiceInputTextEngine,
+} from "./text-engine.js";
 import { appendTranscriptPart } from "./transcript-boundary.js";
 
 export { VoiceInputError };
@@ -30,7 +34,13 @@ export type VoiceInputStatus =
   | "processing"
   | "error";
 
-export type VoiceInputStopReason = "user" | "max-duration" | "replaced";
+export type VoiceInputStopReason =
+  | "user"
+  | "max-duration"
+  | "replaced"
+  | "max-length"
+  | "target-unavailable"
+  | "backgrounded";
 
 export interface VoiceInputSnapshot {
   readonly status: VoiceInputStatus;
@@ -41,6 +51,7 @@ export interface VoiceInputSnapshot {
 }
 
 export type VoiceInputSessionEvent =
+  | VoiceInputTextLimit
   | {
       type: "status-change";
       previousStatus: VoiceInputStatus;
@@ -49,12 +60,14 @@ export type VoiceInputSessionEvent =
   | {
       type: "interim";
       text: string;
+      segmentId: string;
       transcript: string;
       transcriptChanged: boolean;
     }
   | {
       type: "final";
       text: string;
+      segmentId: string;
       transcript: string;
       transcriptChanged: boolean;
       finalTranscriptChanged: boolean;
@@ -100,6 +113,10 @@ export interface CreateVoiceInputSessionOptions extends VoiceTranscriptionOption
 export interface VoiceInputSession {
   getSnapshot(): VoiceInputSnapshot;
   subscribe(listener: (event: VoiceInputSessionEvent) => void): () => void;
+  /** Applies to the next recording; a running session keeps its configuration. */
+  updateOptions(
+    options: Omit<CreateVoiceInputSessionOptions, "textEngine">,
+  ): void;
   start(): Promise<void>;
   stop(reason?: VoiceInputStopReason): Promise<void>;
   cancel(): Promise<void>;
@@ -116,6 +133,11 @@ interface ActiveRun {
   audio?: PreparedVoiceAudioSource;
   providerSession?: VoiceInputProviderV1Session;
   audioTask?: Promise<void>;
+  captureTask?: Promise<void>;
+  queue: AudioQueue;
+  closedSegments: Set<string>;
+  implicitSegment: number;
+  cleanup: Array<() => void>;
   providerTask?: Promise<void>;
   stopPromise?: Promise<void>;
   warningTimer?: ReturnType<typeof setTimeout>;
@@ -145,10 +167,10 @@ export function createVoiceInputSession(
 
 class VoiceInputSessionController implements VoiceInputSession {
   readonly #listeners = new Set<(event: VoiceInputSessionEvent) => void>();
-  readonly #provider: VoiceInputProviderV1;
-  readonly #audioSource: VoiceAudioSource;
+  #provider: VoiceInputProviderV1;
+  #audioSource: VoiceAudioSource;
   readonly #textEngine: VoiceInputTextEngine | undefined;
-  readonly #configuration: SessionConfiguration;
+  #configuration: SessionConfiguration;
 
   #snapshot: VoiceInputSnapshot = Object.freeze({
     status: "idle",
@@ -158,6 +180,13 @@ class VoiceInputSessionController implements VoiceInputSession {
     error: null,
   });
   #activeRun: ActiveRun | undefined;
+  #nextOptions: Omit<CreateVoiceInputSessionOptions, "textEngine"> | undefined;
+
+  updateOptions(
+    options: Omit<CreateVoiceInputSessionOptions, "textEngine">,
+  ): void {
+    this.#nextOptions = options;
+  }
 
   constructor(
     provider: VoiceInputProviderV1,
@@ -185,6 +214,19 @@ class VoiceInputSessionController implements VoiceInputSession {
       return;
     }
 
+    try {
+      if (this.#nextOptions) {
+        const options = this.#nextOptions;
+        assertProvider(options.provider);
+        assertAudioSource(options.audioSource);
+        this.#provider = options.provider;
+        this.#audioSource = options.audioSource;
+        this.#configuration = validateSessionConfiguration(options);
+      }
+    } catch (error) {
+      this.#setPreflightError(this.#normalizeValidationError(error));
+      return;
+    }
     this.#setSnapshot({
       transcript: "",
       interimTranscript: "",
@@ -201,9 +243,42 @@ class VoiceInputSessionController implements VoiceInputSession {
       return;
     }
 
-    const run: ActiveRun = { abortController: new AbortController() };
+    const run: ActiveRun = {
+      abortController: new AbortController(),
+      queue: new AudioQueue(this.#provider.sampleRate * 15),
+      closedSegments: new Set(),
+      implicitSegment: 0,
+      cleanup: [],
+    };
     this.#textEngine?.begin();
     this.#activeRun = run;
+    if (this.#textEngine) {
+      run.cleanup.push(
+        this.#textEngine.subscribe((event) => {
+          if (!this.#isActive(run)) return;
+          if (event.type === "text-limit") this.#emit(event);
+          const reason =
+            event.type === "text-limit"
+              ? "max-length"
+              : event.type === "reset"
+                ? "replaced"
+                : "target-unavailable";
+          queueMicrotask(() => {
+            if (this.#isActive(run)) void this.stop(reason);
+          });
+        }),
+      );
+    }
+    if (typeof document !== "undefined") {
+      const onVisibility = (): void => {
+        if (document.hidden && this.#isActive(run))
+          void this.stop("backgrounded");
+      };
+      document.addEventListener("visibilitychange", onVisibility);
+      run.cleanup.push(() =>
+        document.removeEventListener("visibilitychange", onVisibility),
+      );
+    }
     this.#transition("requesting-permission");
 
     if (!this.#isActive(run)) {
@@ -251,6 +326,19 @@ class VoiceInputSessionController implements VoiceInputSession {
 
     run.audio = audio;
     startConnectionDeadline();
+    run.captureTask = this.#captureAudio(run, audio.stream);
+    this.#scheduleDurationLimit(run);
+    try {
+      await untilAborted(
+        Promise.resolve(audio.start()),
+        run.abortController.signal,
+      );
+    } catch (error) {
+      if (this.#isActive(run))
+        this.#failRun(run, this.#normalizeError(error, "audio-error"));
+      return;
+    }
+    if (!this.#isActive(run)) return;
     this.#transition("connecting");
 
     if (!this.#isActive(run)) {
@@ -293,30 +381,10 @@ class VoiceInputSessionController implements VoiceInputSession {
 
     run.providerSession = providerSession;
     run.providerTask = this.#consumeProviderStream(run, providerSession);
-    run.audioTask = this.#pumpAudio(run, audio.stream, providerSession);
-
-    try {
-      await untilAborted(
-        Promise.resolve(audio.start()),
-        run.abortController.signal,
-      );
-    } catch (error) {
-      if (this.#isActive(run)) {
-        this.#failRun(run, this.#normalizeError(error, "audio-error"));
-      }
-      return;
-    }
-
-    if (!this.#isActive(run)) {
-      return;
-    }
+    run.audioTask = this.#pumpAudio(run, providerSession);
 
     this.#clearConnectionTimer(run);
     this.#transition("listening");
-
-    if (this.#isListening(run)) {
-      this.#scheduleDurationLimit(run);
-    }
   }
 
   async stop(reason: VoiceInputStopReason = "user"): Promise<void> {
@@ -392,6 +460,7 @@ class VoiceInputSessionController implements VoiceInputSession {
       await withTimeout(
         (async () => {
           await audio?.stop();
+          await run.captureTask;
           await audioTask;
 
           if (!this.#isActive(run)) {
@@ -416,6 +485,8 @@ class VoiceInputSessionController implements VoiceInputSession {
 
       this.#activeRun = undefined;
       this.#clearRunTimers(run);
+      for (const cleanup of run.cleanup.splice(0)) cleanup();
+      run.queue.close(true);
       this.#transition("idle");
       this.#emit({ type: "stop", reason });
     } catch (error) {
@@ -476,9 +547,24 @@ class VoiceInputSessionController implements VoiceInputSession {
       return true;
     }
 
+    const segmentId =
+      part.type === "interim" || part.type === "final"
+        ? (part.segmentId ?? `legacy:${run.implicitSegment}`)
+        : "";
+    if (part.type === "interim" || part.type === "final") {
+      if (typeof segmentId !== "string" || segmentId.length === 0)
+        throw new TypeError(
+          "Transcription segmentId must be a nonempty string.",
+        );
+      if (run.closedSegments.has(segmentId)) return false;
+      if (part.type === "final") {
+        run.closedSegments.add(segmentId);
+        run.implicitSegment++;
+      }
+    }
     switch (part.type) {
       case "interim": {
-        this.#textEngine?.applyInterim(part.text);
+        this.#textEngine?.applyInterim(part.text, segmentId);
         const previousTranscript = this.#snapshot.transcript;
         const transcript = appendTranscriptPart(
           this.#snapshot.finalTranscript,
@@ -491,13 +577,14 @@ class VoiceInputSessionController implements VoiceInputSession {
         this.#emit({
           type: "interim",
           text: part.text,
+          segmentId,
           transcript,
           transcriptChanged: transcript !== previousTranscript,
         });
         return false;
       }
       case "final": {
-        this.#textEngine?.applyFinal(part.text);
+        this.#textEngine?.applyFinal(part.text, segmentId);
         const previousTranscript = this.#snapshot.transcript;
         const previousFinalTranscript = this.#snapshot.finalTranscript;
         const finalTranscript = appendTranscriptPart(
@@ -512,6 +599,7 @@ class VoiceInputSessionController implements VoiceInputSession {
         this.#emit({
           type: "final",
           text: part.text,
+          segmentId,
           transcript: finalTranscript,
           transcriptChanged: finalTranscript !== previousTranscript,
           finalTranscriptChanged: finalTranscript !== previousFinalTranscript,
@@ -538,12 +626,17 @@ class VoiceInputSessionController implements VoiceInputSession {
     }
   }
 
-  async #pumpAudio(
+  async #captureAudio(
     run: ActiveRun,
     stream: ReadableStream<Int16Array>,
-    session: VoiceInputProviderV1Session,
   ): Promise<void> {
     const reader = stream.getReader();
+    const cancelReader = (): void => {
+      void reader.cancel().catch(() => {});
+    };
+    run.abortController.signal.addEventListener("abort", cancelReader, {
+      once: true,
+    });
 
     try {
       while (this.#isActive(run)) {
@@ -560,14 +653,35 @@ class VoiceInputSessionController implements VoiceInputSession {
           });
         }
 
-        await session.sendAudio(result.value);
+        run.queue.push(result.value);
       }
     } catch (error) {
       if (this.#isActive(run)) {
         this.#failRun(run, this.#normalizeError(error, "audio-error"));
       }
     } finally {
+      run.abortController.signal.removeEventListener("abort", cancelReader);
       reader.releaseLock();
+      run.queue.close();
+    }
+  }
+
+  async #pumpAudio(
+    run: ActiveRun,
+    session: VoiceInputProviderV1Session,
+  ): Promise<void> {
+    try {
+      while (this.#isActive(run)) {
+        const chunk = await run.queue.read();
+        if (!chunk || !this.#isActive(run)) return;
+        await untilAborted(
+          Promise.resolve(session.sendAudio(chunk)),
+          run.abortController.signal,
+        );
+      }
+    } catch (error) {
+      if (this.#isActive(run))
+        this.#failRun(run, this.#normalizeError(error, "audio-error"));
     }
   }
 
@@ -575,7 +689,7 @@ class VoiceInputSessionController implements VoiceInputSession {
     const { maxDurationMs } = this.#configuration;
     const warningDelayMs = maxDurationMs - DURATION_WARNING_MS;
     const warn = (): void => {
-      if (this.#isActive(run) && this.#snapshot.status === "listening") {
+      if (this.#isActive(run) && this.#snapshot.status !== "stopping") {
         this.#emit({
           type: "duration-warning",
           remainingMs: Math.min(DURATION_WARNING_MS, maxDurationMs),
@@ -591,7 +705,7 @@ class VoiceInputSessionController implements VoiceInputSession {
     }
 
     run.durationTimer = setTimeout(() => {
-      if (this.#isActive(run) && this.#snapshot.status === "listening") {
+      if (this.#isActive(run) && this.#snapshot.status !== "stopping") {
         void this.stop("max-duration");
       }
     }, maxDurationMs);
@@ -649,8 +763,10 @@ class VoiceInputSessionController implements VoiceInputSession {
 
   #abortRun(run: ActiveRun, reason: unknown): void {
     this.#clearRunTimers(run);
-    safely(() => run.abortController.abort(reason));
+    for (const cleanup of run.cleanup.splice(0)) cleanup();
+    run.queue.close(true);
     safely(() => run.audio?.abort(reason));
+    safely(() => run.abortController.abort(reason));
     safely(() => run.providerSession?.abort(reason));
   }
 
@@ -691,10 +807,6 @@ class VoiceInputSessionController implements VoiceInputSession {
 
   #isActive(run: ActiveRun): boolean {
     return this.#activeRun === run;
-  }
-
-  #isListening(run: ActiveRun): boolean {
-    return this.#isActive(run) && this.#snapshot.status === "listening";
   }
 
   #transition(status: VoiceInputStatus): void {

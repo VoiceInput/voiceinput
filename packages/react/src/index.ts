@@ -6,6 +6,7 @@ export type {
   VoiceInputSnapshot,
   VoiceInputStatus,
   VoiceInputStopReason,
+  VoiceInputTextLimit,
 } from "@voiceinput/core";
 export type {
   VoiceEndpointingOptions,

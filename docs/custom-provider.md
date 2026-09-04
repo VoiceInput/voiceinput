@@ -238,3 +238,22 @@ Once the adapter returns `VoiceInputProviderV1`, React code is unchanged:
 Provider neutrality applies to the field/session contract. Document differences
 in pricing, latency, supported languages, vocabulary semantics, retention, and
 endpointing rather than hiding them.
+
+## Segment identity
+
+Include `segmentId: string` on each `interim` and `final` stream part. Keep it
+stable across revisions of one segment and unique within an open session. Emit
+ordered segments; buffer out-of-order provider results in the adapter. Empty
+finals close segments too. Speech-start/end notifications alone do not close a
+transcription segment. Identical text in two segments is legitimate repetition.
+
+Official adapters always provide identities. The optional field preserves older
+strictly sequential custom providers; without it, each final advances an
+implicit segment. Session events always include the resulting identifier, but
+legacy duplicate finals cannot be identified reliably. New adapters should
+always implement segment identity and use the published conformance cases.
+
+`sendAudio` may return a promise for backpressure. Bound transport queues and
+honor abort while waiting; never silently drop audio. The official adapters use
+the shared `@voiceinput/provider/transport` helper with a 1 MiB high-water mark
+and a five-second congestion deadline.

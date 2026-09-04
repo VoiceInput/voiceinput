@@ -17,21 +17,7 @@ without creating a second transcription stack.
   `VoiceTextarea` controls.
 - Ship no VoiceInput telemetry, hosted proxy, database, or Tailwind runtime.
 
-## Choose packages
-
-| Package                                                   | Use it for                                                     |
-| --------------------------------------------------------- | -------------------------------------------------------------- |
-| [`@voiceinput/react`](packages/react/README.md)           | React context, `useVoiceInput`, and optional controls          |
-| [`@voiceinput/openai`](packages/openai/README.md)         | OpenAI Realtime transcription; default `gpt-live-transcribe`   |
-| [`@voiceinput/elevenlabs`](packages/elevenlabs/README.md) | ElevenLabs Realtime Scribe; default `scribe_v2_realtime`       |
-| [`@voiceinput/deepgram`](packages/deepgram/README.md)     | Deepgram live transcription; default `nova-3`                  |
-| [`@voiceinput/core`](packages/core/README.md)             | Framework-neutral sessions, browser audio, and text ownership  |
-| [`@voiceinput/provider`](packages/provider/README.md)     | Custom adapter contracts, fake provider, and conformance cases |
-
-A React application normally installs `@voiceinput/react` and one provider
-package. `@voiceinput/core` and `@voiceinput/provider` arrive transitively.
-
-## Five-minute quickstart
+## Quickstart
 
 This OpenAI example uses Next.js App Router. The same React component works with
 the other providers; only the adapter and server token handler change.
@@ -65,53 +51,35 @@ export const POST = createOpenAITokenHandler({
 `OPENAI_API_KEY` in a server-only environment variable—never use a public or
 client-prefixed variable.
 
-### 3. Configure the browser adapter
+### 3. Enhance a field
 
 ```tsx
-// src/app/providers.tsx
 "use client";
 
+import { useState } from "react";
 import { openai } from "@voiceinput/openai";
-import { VoiceInputProvider } from "@voiceinput/react";
+import { useVoiceInput } from "@voiceinput/react";
 
 const voiceProvider = openai({ tokenEndpoint: "/api/voice-token" });
 
-export function AppProviders({ children }: { children: React.ReactNode }) {
-  return (
-    <VoiceInputProvider provider={voiceProvider}>{children}</VoiceInputProvider>
-  );
-}
-```
-
-Render `AppProviders` around your application from the root layout.
-
-### 4. Enhance a field
-
-```tsx
-"use client";
-
-import { useVoiceInput } from "@voiceinput/react";
-import { useState } from "react";
-
 export function Composer() {
   const [message, setMessage] = useState("");
-  const voice = useVoiceInput({
+  const { targetRef, getTriggerProps, status, error } = useVoiceInput({
+    provider: voiceProvider,
     value: message,
     onValueChange: setMessage,
-    vocabulary: ["VoiceInput", "Acme"],
   });
-
   return (
     <div>
       <textarea
-        ref={voice.targetRef}
+        ref={targetRef}
         value={message}
         onChange={(event) => setMessage(event.currentTarget.value)}
       />
-      <button {...voice.getTriggerProps()}>
-        {voice.status === "listening" ? "Stop" : "Speak"}
+      <button {...getTriggerProps()}>
+        {status === "idle" ? "Speak" : "Stop"}
       </button>
-      {voice.error ? <p role="alert">{voice.error.message}</p> : null}
+      {error ? <p role="alert">{error.message}</p> : null}
     </div>
   );
 }
@@ -125,7 +93,7 @@ import { VoiceTextarea } from "@voiceinput/react";
 <VoiceTextarea
   value={message}
   onValueChange={setMessage}
-  onChange={(event) => setMessage(event.currentTarget.value)}
+  voice={{ provider: voiceProvider }}
 />;
 ```
 
@@ -139,6 +107,32 @@ See the full [Next.js guide](docs/nextjs.md),
 [Vite/Hono guide](docs/vite-hono.md), or [Express bridge](docs/express.md). For
 copyable consumer projects, start with the [golden paths](docs/golden-paths.md)
 and [authentication recipes](docs/authentication-recipes.md).
+
+## Try it without credentials
+
+The [simulated example](examples/simulated) demonstrates editing, undo/redo and
+a React Hook Form integration without a microphone or external account. See the
+[composer and form recipes](docs/form-integration.md) and the
+[editing contract](docs/editing-contract.md).
+
+Use `VoiceInputProvider` when several fields should share configuration and
+coordinate microphone ownership. Standalone fields do not need a root context.
+Provider configuration changes apply to the next recording; rerenders do not
+interrupt an active session.
+
+## Choose packages
+
+| Package                                                   | Use it for                                                     |
+| --------------------------------------------------------- | -------------------------------------------------------------- |
+| [`@voiceinput/react`](packages/react/README.md)           | React context, `useVoiceInput`, and optional controls          |
+| [`@voiceinput/openai`](packages/openai/README.md)         | OpenAI Realtime transcription; default `gpt-transcribe`        |
+| [`@voiceinput/elevenlabs`](packages/elevenlabs/README.md) | ElevenLabs Realtime Scribe; default `scribe_v2_realtime`       |
+| [`@voiceinput/deepgram`](packages/deepgram/README.md)     | Deepgram live transcription; default `nova-3`                  |
+| [`@voiceinput/core`](packages/core/README.md)             | Framework-neutral sessions, browser audio, and text ownership  |
+| [`@voiceinput/provider`](packages/provider/README.md)     | Custom adapter contracts, fake provider, and conformance cases |
+
+A React application normally installs `@voiceinput/react` and one provider
+package. `@voiceinput/core` and `@voiceinput/provider` arrive transitively.
 
 ## Architecture and privacy
 
@@ -169,7 +163,7 @@ provider capabilities are identical.
 
 | Capability           | OpenAI                                         | ElevenLabs           | Deepgram                                                      |
 | -------------------- | ---------------------------------------------- | -------------------- | ------------------------------------------------------------- |
-| Default model        | `gpt-live-transcribe`                          | `scribe_v2_realtime` | `nova-3`                                                      |
+| Default model        | `gpt-transcribe`                               | `scribe_v2_realtime` | `nova-3`                                                      |
 | PCM16 rate           | 24 kHz                                         | 16 kHz               | 16 kHz                                                        |
 | Omitted language     | Automatic                                      | Automatic            | `multi` on known multilingual Nova models; otherwise required |
 | Vocabulary mapping   | Prompt, or keywords for live-transcribe models | Key terms            | Nova-3 key terms                                              |
@@ -183,8 +177,10 @@ recorded in [Provider certification](docs/provider-certification.md).
 
 ## Browser support
 
-VoiceInput targets the current and previous stable releases of Chrome, Edge,
-Firefox, Safari on macOS, and Safari on iOS. It supports React 18 and 19.
+This release is a desktop beta supporting React 18 and 19. Editing is tested in
+Playwright Chromium, Firefox and WebKit; the release record identifies the exact
+versions and separate microphone/provider evidence. Physical Safari and iOS
+microphones and manual assistive-technology checks remain unverified.
 
 Runtime support is capability-based. The browser must provide a secure context,
 `getUserMedia`, `AudioContext`, and `AudioWorklet`; microphone access therefore
@@ -198,6 +194,8 @@ and browser compatibility contract.
 
 ## Documentation
 
+- [Editing, undo, constraints and events](docs/editing-contract.md)
+- [Existing composers and form libraries](docs/form-integration.md)
 - [React API](packages/react/README.md)
 - [Core API](packages/core/README.md)
 - [Provider contract and custom adapters](packages/provider/README.md)

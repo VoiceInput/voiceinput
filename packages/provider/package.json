@@ -1,6 +1,6 @@
 {
   "name": "@voiceinput/provider",
-  "version": "0.1.0-beta.0",
+  "version": "0.1.0-beta.1",
   "description": "Versioned provider contracts and conformance tools for VoiceInput.",
   "keywords": [
     "voice-input",
@@ -53,13 +53,23 @@
         "types": "./dist/test.d.cts",
         "default": "./dist/test.cjs"
       }
+    },
+    "./transport": {
+      "import": {
+        "types": "./dist/transport.d.ts",
+        "default": "./dist/transport.js"
+      },
+      "require": {
+        "types": "./dist/transport.d.cts",
+        "default": "./dist/transport.cjs"
+      }
     }
   },
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/index.ts src/test.ts",
+    "build": "tsdown src/index.ts src/test.ts src/transport.ts",
     "dev": "tsdown src/index.ts src/test.ts --watch --no-clean",
     "pack": "pnpm pack --pack-destination .",
     "test": "vitest run",

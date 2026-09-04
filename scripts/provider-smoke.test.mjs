@@ -25,6 +25,8 @@ describe("provider smoke support", () => {
       endpointing: { silenceMs: 650 },
       json: true,
     });
+    expect(readRunOptions(["--repeat=2"]).repeat).toBe(2);
+    expect(() => readRunOptions(["--repeat=4"])).toThrow(/1 to 3/u);
     expect(() => readRunOptions(["--chunk-ms=1001"])).toThrow(/1 to 1000/u);
     expect(() =>
       readRunOptions(["--trailing-silence-ms=9007199254740992"]),

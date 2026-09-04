@@ -6,13 +6,21 @@ import {
 } from "./session-config.js";
 
 describe("createOpenAITranscriptionSession", () => {
-  it("preserves provider-default endpointing when omitted", () => {
+  it("selects server turn boundaries for the default model", () => {
     const session = createOpenAITranscriptionSession({
       model: "gpt-transcribe",
     });
     const input = getAudioInput(session);
 
-    expect(input).not.toHaveProperty("turn_detection");
+    expect(input["turn_detection"]).toEqual({
+      type: "server_vad",
+      silence_duration_ms: 500,
+    });
+    expect(
+      getAudioInput(
+        createOpenAITranscriptionSession({ model: "gpt-live-transcribe" }),
+      )["turn_detection"],
+    ).toBeNull();
   });
 
   it("maps vocabulary to the mechanism supported by each model family", () => {

@@ -1,6 +1,7 @@
 import type {
   VoiceAudioSource,
   VoiceInputError,
+  VoiceInputTextLimit,
   VoiceInputInterimBehavior,
   VoiceInputSessionEvent,
   VoiceInputSnapshot,
@@ -38,6 +39,7 @@ interface UseVoiceInputCommonOptions {
   transformTimeoutMs?: number;
   activationMode?: VoiceInputActivationMode;
   disabled?: boolean;
+  onTextLimit?: (event: VoiceInputTextLimit) => void;
   onEvent?: (event: VoiceInputSessionEvent) => void;
   onStatusChange?: (
     status: VoiceInputStatus,
@@ -91,5 +93,7 @@ export interface UseVoiceInputResult extends VoiceInputSnapshot {
   start(this: void): Promise<void>;
   stop(this: void, reason?: VoiceInputStopReason): Promise<void>;
   cancel(this: void): Promise<void>;
+  undo(this: void): void;
+  redo(this: void): void;
   toggle(this: void): Promise<void>;
 }

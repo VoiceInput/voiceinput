@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -53,7 +54,8 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - run: node scripts/record-desktop-versions.mjs > desktop-versions.json
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
@@ -71,6 +73,7 @@ jobs:
           name: release-candidate-${{ github.sha }}
           path: |
             .release-manifest.json
+            desktop-versions.json
             packages/*/*.tgz
           if-no-files-found: error
           include-hidden-files: true

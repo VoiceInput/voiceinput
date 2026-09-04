@@ -1062,6 +1062,8 @@ function normalizeSessionEventDetail(event: VoiceInputSessionEvent): unknown {
     case "interim":
     case "final":
       return { text: event.text };
+    case "text-limit":
+      return { maxLength: event.maxLength, source: event.source };
     case "duration-warning":
       return {
         remainingMs: event.remainingMs,

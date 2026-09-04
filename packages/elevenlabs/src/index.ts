@@ -1,3 +1,4 @@
+import { sendWithBackpressure } from "@voiceinput/provider/transport";
 import {
   VoiceInputError,
   type VoiceInputProviderV1,
@@ -222,7 +223,8 @@ async function createSession(
   let finishTimer: ReturnType<typeof setTimeout> | undefined;
   let finishDrainTimer: ReturnType<typeof setTimeout> | undefined;
   let lastInterim = "";
-  const unsettledFinals: string[] = [];
+  let segmentSequence = 0;
+  const segmentId = (): string => `commit:${segmentSequence}`;
   let speechActive = false;
 
   const closeSocket = (reason: "aborted" | "finished"): void => {
@@ -260,7 +262,11 @@ async function createSession(
   const finishCleanly = (): void => {
     if (lastInterim.length > 0) {
       lastInterim = "";
-      controller?.enqueue({ type: "interim", text: "" });
+      controller?.enqueue({
+        type: "interim",
+        text: "",
+        segmentId: segmentId(),
+      });
     }
     endSpeech();
     settleFinish();
@@ -304,45 +310,14 @@ async function createSession(
     }
     startSpeech();
     lastInterim = text;
-    controller?.enqueue({ type: "interim", text });
-  };
-  const emitFinal = (text: string): void => {
-    if (text.length === 0) {
-      return;
-    }
-    startSpeech();
-    controller?.enqueue({ type: "final", text });
-  };
-  const settleTranscript = (text: string): void => {
-    if (text.length === 0) {
-      return;
-    }
-    if (!unsettledFinals.includes(text)) {
-      unsettledFinals.push(text);
-    }
+    controller?.enqueue({ type: "interim", text, segmentId: segmentId() });
   };
   const commitTranscript = (text: string): void => {
-    const hadInterim = lastInterim.length > 0;
-    const settledIndex = unsettledFinals.indexOf(text);
-    if (settledIndex !== -1) {
-      unsettledFinals.splice(settledIndex, 1);
-    }
-    const preservedInterim =
-      text.length === 0 || isSameTranscriptDraft(lastInterim, text)
-        ? ""
-        : lastInterim;
-    if (preservedInterim.length === 0) {
-      lastInterim = "";
-    }
-    emitFinal(text);
-    if (text.length === 0 && hadInterim) {
-      controller?.enqueue({ type: "interim", text: "" });
-    } else if (preservedInterim.length > 0) {
-      controller?.enqueue({ type: "interim", text: preservedInterim });
-    }
-    if (!finishing && lastInterim.length === 0) {
-      endSpeech();
-    }
+    if (text.length > 0) startSpeech();
+    controller?.enqueue({ type: "final", text, segmentId: segmentId() });
+    segmentSequence += 1;
+    lastInterim = "";
+    if (!finishing) endSpeech();
   };
   const handleMessage = (event: MessageEvent): void => {
     if (closed) {
@@ -360,7 +335,7 @@ async function createSession(
           scheduleFinishDrain();
         }
       } else if (type === "final_transcript") {
-        settleTranscript(readText(value));
+        // Informational only: committed_transcript closes the segment.
         if (finishDrainTimer !== undefined) {
           scheduleFinishDrain();
         }
@@ -443,12 +418,19 @@ async function createSession(
         return;
       }
       hasAudio = true;
-      sendJson(socket, {
-        message_type: "input_audio_chunk",
-        audio_base_64: encodePcm16(chunk),
-        commit: false,
-        sample_rate: ELEVENLABS_SAMPLE_RATE,
-      });
+      return sendWithBackpressure(
+        socket,
+        Math.ceil((chunk.byteLength * 4) / 3) + 160,
+        abortSignal,
+        "elevenlabs",
+        () =>
+          sendJson(socket, {
+            message_type: "input_audio_chunk",
+            audio_base_64: encodePcm16(chunk),
+            commit: false,
+            sample_rate: ELEVENLABS_SAMPLE_RATE,
+          }),
+      );
     },
     finish() {
       if (finishDeferred !== undefined) {
@@ -498,26 +480,6 @@ async function createSession(
     },
     abort,
   };
-}
-
-function isSameTranscriptDraft(interim: string, final: string): boolean {
-  if (interim.length === 0 || final.length === 0) {
-    return false;
-  }
-  const draft = normalizeTranscriptForComparison(interim);
-  const settled = normalizeTranscriptForComparison(final);
-  return (
-    draft.length > 0 &&
-    settled.length > 0 &&
-    (draft.startsWith(settled) || settled.startsWith(draft))
-  );
-}
-
-function normalizeTranscriptForComparison(value: string): string {
-  return value
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "")
-    .trim();
 }
 
 const elevenLabsErrorTypes = new Set([

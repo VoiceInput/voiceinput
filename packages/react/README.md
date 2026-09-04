@@ -31,9 +31,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 ```
 
 Create provider objects once at module scope, as above, or memoize them.
-Changing provider identity replaces the underlying session; the hook warns when
-that happens so an inline provider factory cannot silently restart recording on
-every render.
+Provider and recording options are sampled at recording start. Changing provider
+identity during a render does not interrupt a running session; the next start
+uses the new configuration.
 
 `VoiceInputProvider` accepts `provider`, an optional custom `audioSource`, and
 `children`. It coordinates descendants so only one microphone session is active
@@ -109,7 +109,7 @@ dispatches a bubbling native `input` event.
 | `transformTranscript`     | Sync or async post-stop transform for unedited voice-owned spans  |
 | `transformTimeoutMs`      | Transform deadline; default 10 seconds                            |
 | `activationMode`          | `"toggle"` (default) or `"hold"`                                  |
-| `disabled`                | Prevent activation and release an active hold                     |
+| `disabled`                | Prevent activation and stop active recording                      |
 | `onEvent`                 | Receive every normalized session event                            |
 | `onStatusChange`          | Receive current and previous status                               |
 | `onInterimTranscript`     | Current raw interim provider part                                 |
@@ -125,6 +125,7 @@ The hook returns:
 
 - `targetRef`, `triggerProps`, and `isSupported`
 - `getTriggerProps(buttonProps?)` for safe application-handler composition
+- `undo()` and `redo()` restore field-local editing transactions
 - `status`, `transcript`, `interimTranscript`, `finalTranscript`, and `error`
 - `start()`, `stop(reason?)`, `cancel()`, and `toggle()`
 - `getTextSnapshot()` for the current selection and voice-owned spans
@@ -164,7 +165,6 @@ the built-in live region; `getAnnouncement` customizes its text.
 <VoiceTextarea
   value={message}
   onValueChange={setMessage}
-  onChange={(event) => setMessage(event.currentTarget.value)}
   voice={{ vocabulary: ["VoiceInput"] }}
 />
 ```
@@ -248,3 +248,20 @@ This package runs in the browser. Give adapters a same-origin token endpoint;
 never pass long-lived provider credentials to React props, client environment
 variables, or browser bundles. Official server handlers live under each provider
 package's `/server` export.
+
+## Editing guarantees and limit notifications
+
+Controlled wrappers require only `value` and `onValueChange`; the callback
+covers typing, dictation, undo and redo once per edit. Uncontrolled wrappers
+dispatch native input events that React `onChange` and form registration can
+observe. `disabled` and `readOnly` are safe mounting states.
+
+`onTextLimit` receives the `text-limit` event: `maxLength`, attempted `text`,
+`insertedText`, and `source` (`interim`, `final`, `transform`). Stop reasons
+include `max-length`, `target-unavailable`, and `backgrounded` in addition to
+the original reasons. Full recognized text remains in transcript callbacks even
+when it cannot be inserted.
+
+See [editing behavior and history limits](../../docs/editing-contract.md) and
+[form integration](../../docs/form-integration.md). Mobile microphones and
+manual screen-reader compatibility remain unverified for this desktop beta.

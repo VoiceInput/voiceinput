@@ -16,16 +16,16 @@ describe("lab fake runtime", () => {
     const firstReader = first.stream.getReader();
     const secondReader = second.stream.getReader();
 
-    captured.emit({ type: "final", text: "first" });
-    runtime.emit({ type: "final", text: "second" });
+    captured.emit({ type: "final", text: "first", segmentId: "fake:0" });
+    runtime.emit({ type: "final", text: "second", segmentId: "fake:0" });
 
     await expect(firstReader.read()).resolves.toEqual({
       done: false,
-      value: { type: "final", text: "first" },
+      value: { type: "final", text: "first", segmentId: "fake:0" },
     });
     await expect(secondReader.read()).resolves.toEqual({
       done: false,
-      value: { type: "final", text: "second" },
+      value: { type: "final", text: "second", segmentId: "fake:0" },
     });
 
     captured.close();

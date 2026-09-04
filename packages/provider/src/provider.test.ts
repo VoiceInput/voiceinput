@@ -54,15 +54,19 @@ describe("createFakeVoiceInputProvider", () => {
     fake.controller.resolveOpen();
     const session = await openPromise;
     const reader = session.stream.getReader();
-    fake.controller.emit({ type: "interim", text: "hello" });
+    fake.controller.emit({
+      type: "interim",
+      text: "hello",
+      segmentId: "fake:0",
+    });
     fake.controller.close();
 
     await expect(reader.read()).resolves.toEqual({
       done: false,
-      value: { type: "interim", text: "hello" },
+      value: { type: "interim", text: "hello", segmentId: "fake:0" },
     });
     await expect(reader.read()).resolves.toEqual({ done: true });
-    fake.controller.emit({ type: "final", text: "late" });
+    fake.controller.emit({ type: "final", text: "late", segmentId: "fake:0" });
     await expect(reader.read()).resolves.toEqual({ done: true });
   });
 

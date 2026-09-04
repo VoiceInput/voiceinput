@@ -51,6 +51,27 @@ describe("browser audio errors", () => {
 });
 
 describe("browser audio lifecycle", () => {
+  it("releases an interrupted context and permits a fresh user-initiated capture", async () => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const track = new FakeTrack();
+      stubSupportedBrowser(track);
+      const prepared = await createBrowserAudioSource().prepare({
+        sampleRate: 16_000,
+        abortSignal: new AbortController().signal,
+      });
+      await prepared.start();
+      const reader = prepared.stream.getReader();
+      const context = FakeAudioContext.instance!;
+      context.state = "suspended";
+      context.dispatchEvent(new Event("statechange"));
+      await expect(reader.read()).rejects.toMatchObject({
+        code: "audio-error",
+        retryable: true,
+      });
+      expect(track.stopCallCount).toBe(1);
+      expect(context.closeCallCount).toBe(1);
+    }
+  });
   it("releases acquired resources when post-permission setup stalls", async () => {
     const track = new FakeTrack();
     const mediaStream = {
@@ -321,7 +342,7 @@ class FakeAudioNode {
   }
 }
 
-class FakeAudioContext {
+class FakeAudioContext extends EventTarget {
   static instance: FakeAudioContext | undefined;
 
   readonly destination = {};
@@ -333,6 +354,7 @@ class FakeAudioContext {
   closeCallCount = 0;
 
   constructor(readonly options: AudioContextOptions = {}) {
+    super();
     FakeAudioContext.instance = this;
   }
 

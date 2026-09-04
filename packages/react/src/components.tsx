@@ -14,7 +14,7 @@ import {
 } from "react";
 
 import type { UseVoiceInputOptions, UseVoiceInputResult } from "./types.js";
-import { useVoiceInput } from "./use-voice-input.js";
+import { useVoiceInput, useVoiceInputInternal } from "./use-voice-input.js";
 
 export type VoiceButtonChildren =
   ReactNode | ((voice: UseVoiceInputResult) => ReactNode);
@@ -86,65 +86,77 @@ const visuallyHiddenStyle: CSSProperties = {
   width: 1,
 };
 
-export const VoiceButton = forwardRef<HTMLButtonElement, VoiceButtonProps>(
-  function VoiceButton({ voice: options, ...props }, forwardedRef) {
-    const voice = useVoiceInput({
-      ...options,
-      disabled: props.disabled === true || options?.disabled === true,
-    });
-    return <VoiceButtonElement {...props} ref={forwardedRef} voice={voice} />;
-  },
-);
+export const VoiceButton = /* @__PURE__ */ forwardRef<
+  HTMLButtonElement,
+  VoiceButtonProps
+>(function VoiceButton({ voice: options, ...props }, forwardedRef) {
+  const voice = useVoiceInput({
+    ...options,
+    disabled: props.disabled === true || options?.disabled === true,
+  });
+  return <VoiceButtonElement {...props} ref={forwardedRef} voice={voice} />;
+});
 
-export const VoiceInput = forwardRef<HTMLInputElement, VoiceInputProps>(
-  function VoiceInput(
-    {
-      className,
-      containerClassName,
-      disabled,
-      onValueChange,
-      type = "text",
-      value,
-      voice: options,
-      voiceButtonProps,
-      ...props
-    },
-    forwardedRef,
-  ) {
-    const voice = useVoiceField({
-      disabled: disabled === true || voiceButtonProps?.disabled === true,
-      onValueChange,
-      options,
-      value,
-    });
-    const targetRef = useComposedTargetRef(voice, forwardedRef);
-    return (
-      <span
-        className={joinClassNames("voiceinput-field", containerClassName)}
-        {...voiceDataAttributes(voice)}
-      >
-        <input
-          {...props}
-          ref={targetRef}
-          className={joinClassNames("voiceinput-field__input", className)}
-          disabled={disabled}
-          type={type}
-          value={value}
-        />
-        <VoiceButtonElement
-          {...voiceButtonProps}
-          className={joinClassNames(
-            "voiceinput-field__button",
-            voiceButtonProps?.className,
-          )}
-          voice={voice}
-        />
-      </span>
-    );
+export const VoiceInput = /* @__PURE__ */ forwardRef<
+  HTMLInputElement,
+  VoiceInputProps
+>(function VoiceInput(
+  {
+    className,
+    containerClassName,
+    disabled,
+    readOnly,
+    onChange,
+    onValueChange,
+    type = "text",
+    value,
+    voice: options,
+    voiceButtonProps,
+    ...props
   },
-);
+  forwardedRef,
+) {
+  const voice = useVoiceField({
+    disabled:
+      disabled === true ||
+      readOnly === true ||
+      voiceButtonProps?.disabled === true,
+    onValueChange,
+    options,
+    value,
+  });
+  const targetRef = useComposedTargetRef(voice, forwardedRef);
+  return (
+    <span
+      className={joinClassNames("voiceinput-field", containerClassName)}
+      {...voiceDataAttributes(voice)}
+    >
+      <input
+        {...props}
+        ref={targetRef}
+        className={joinClassNames("voiceinput-field__input", className)}
+        disabled={disabled}
+        readOnly={readOnly}
+        onChange={(event) => {
+          onValueChange?.(event.currentTarget.value);
+          onChange?.(event);
+        }}
+        type={type}
+        value={value}
+      />
+      <VoiceButtonElement
+        {...voiceButtonProps}
+        className={joinClassNames(
+          "voiceinput-field__button",
+          voiceButtonProps?.className,
+        )}
+        voice={voice}
+      />
+    </span>
+  );
+});
 
-export const VoiceTextarea = forwardRef<
+export const VoiceTextarea = /* @__PURE__ */ forwardRef<
   HTMLTextAreaElement,
   VoiceTextareaProps
 >(function VoiceTextarea(
@@ -152,6 +164,8 @@ export const VoiceTextarea = forwardRef<
     className,
     containerClassName,
     disabled,
+    readOnly,
+    onChange,
     onValueChange,
     value,
     voice: options,
@@ -161,7 +175,10 @@ export const VoiceTextarea = forwardRef<
   forwardedRef,
 ) {
   const voice = useVoiceField({
-    disabled: disabled === true || voiceButtonProps?.disabled === true,
+    disabled:
+      disabled === true ||
+      readOnly === true ||
+      voiceButtonProps?.disabled === true,
     onValueChange,
     options,
     value,
@@ -180,6 +197,11 @@ export const VoiceTextarea = forwardRef<
         ref={targetRef}
         className={joinClassNames("voiceinput-field__input", className)}
         disabled={disabled}
+        readOnly={readOnly}
+        onChange={(event) => {
+          onValueChange?.(event.currentTarget.value);
+          onChange?.(event);
+        }}
         value={value}
       />
       <VoiceButtonElement
@@ -198,7 +220,7 @@ interface VoiceButtonElementProps extends VoiceFieldButtonProps {
   readonly voice: UseVoiceInputResult;
 }
 
-const VoiceButtonElement = forwardRef<
+const VoiceButtonElement = /* @__PURE__ */ forwardRef<
   HTMLButtonElement,
   VoiceButtonElementProps
 >(function VoiceButtonElement(
@@ -332,16 +354,19 @@ function useVoiceField(options: {
 }): UseVoiceInputResult {
   const controlled =
     options.value !== undefined || options.onValueChange !== undefined;
-  return useVoiceInput({
-    ...options.options,
-    disabled: options.disabled === true || options.options?.disabled === true,
-    ...(controlled && options.value !== undefined
-      ? { value: options.value }
-      : {}),
-    ...(controlled && options.onValueChange !== undefined
-      ? { onValueChange: options.onValueChange }
-      : {}),
-  });
+  return useVoiceInputInternal(
+    {
+      ...options.options,
+      disabled: options.disabled === true || options.options?.disabled === true,
+      ...(controlled && options.value !== undefined
+        ? { value: options.value }
+        : {}),
+      ...(controlled && options.onValueChange !== undefined
+        ? { onValueChange: options.onValueChange }
+        : {}),
+    },
+    true,
+  );
 }
 
 function useComposedTargetRef<T extends HTMLInputElement | HTMLTextAreaElement>(

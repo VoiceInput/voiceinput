@@ -63,8 +63,8 @@ describe("deepgram", () => {
 
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
-      { type: "interim", text: "hel" },
-      { type: "final", text: "hello" },
+      { type: "interim", text: "hel", segmentId: expect.any(String) },
+      { type: "final", text: "hello", segmentId: expect.any(String) },
       { type: "speech-end" },
     ]);
     expect(new Int16Array(socket.binary[0] as ArrayBuffer)).toEqual(

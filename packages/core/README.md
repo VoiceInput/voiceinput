@@ -52,7 +52,9 @@ permits a fresh `start()`.
 The immutable snapshot exposes `status`, `transcript`, `interimTranscript`,
 `finalTranscript`, and `error`. Status values are `idle`,
 `requesting-permission`, `connecting`, `listening`, `stopping`, `processing`,
-and `error`. Stop reasons are `user`, `max-duration`, and `replaced`.
+and `error`. Stop reasons are `user`, `max-duration`, `replaced`, `max-length`,
+`target-unavailable`, and `backgrounded`. A `text-limit` event reports a
+constrained insertion.
 
 Final parts use the same boundary policy as field insertion: outer provider
 whitespace is normalized, word boundaries are added when needed, punctuation is
@@ -166,3 +168,25 @@ The session accepts any `VoiceInputProviderV1`. Provider-specific models,
 tokens, and settings belong in adapter factories, not core options. See the
 [`@voiceinput/provider` guide](https://github.com/VoiceInput/voiceinput/blob/main/packages/provider/README.md)
 to implement an adapter.
+
+## Configuration, segments and history
+
+`session.updateOptions(options)` supplies configuration for the next recording;
+active recording configuration is unchanged. `textEngine.updateOptions(options)`
+similarly samples interim and transform settings on the next `begin()`.
+
+Pass the provider's `segmentId` as the second argument to `applyInterim` and
+`applyFinal`. Official adapters provide identifiers for every transcript part.
+Omitting it retains sequential compatibility: every final closes the current
+implicit segment. This legacy mode cannot distinguish duplicate final delivery.
+
+The text engine exposes `undo()`, `redo()`, `isWritable()`, and `subscribe()`.
+Subscribers receive `text-limit`, `target-unavailable`, and `reset` events. See
+the [editing contract](../../docs/editing-contract.md) for behavior.
+
+Capture starts while connecting and queues up to fifteen seconds of PCM in
+memory. It drains in order once connected; overflow or sustained transport
+stalls stop with a recoverable error. Recording duration includes buffered
+capture. Backgrounding stops capture; unexpected AudioContext or track
+interruption is a recoverable audio error. Audio and transcript data are never
+persisted by core.

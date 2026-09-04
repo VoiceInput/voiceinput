@@ -1,8 +1,8 @@
 # Release checklist
 
-VoiceInput stays on prerelease `0.x` versions until the product criteria in
-`.private/PRODUCT.md` pass. Publishing is a deliberate final action, separate
-from ordinary CI.
+VoiceInput stays on prerelease `0.x` versions. The first release is the scoped
+desktop beta described in the public support policy. Publishing is a deliberate
+final action, separate from ordinary CI.
 
 ## Automated release-candidate gates
 
@@ -11,7 +11,9 @@ from ordinary CI.
 - `pnpm test:a11y`
 - `pnpm validate:packages`
 - `pnpm test:e2e`
-- A successful BrowserStack compatibility run
+- Desktop Chromium, Firefox and WebKit editing and form tests
+- Record exact versions and distinguish engine tests from branded-browser
+  evidence
 - A successful credential-backed provider smoke run for OpenAI, ElevenLabs, and
   Deepgram. The Deepgram credential needs Member-or-higher permission for
   `/v1/auth/grant`.
@@ -21,10 +23,11 @@ from ordinary CI.
 
 Record the immutable candidate SHA, run date, BrowserStack run URLs, provider
 smoke run URL, and the uploaded compatibility artifacts in the release record.
-The BrowserStack matrix covers current and previous Chrome, Edge, branded
-Firefox, macOS Safari, and real-device iOS Safari on both iPhone and iPad.
+For a later full production claim, the BrowserStack matrix covers current and
+previous Chrome, Edge, branded Firefox, macOS Safari, and real-device iOS Safari
+on both iPhone and iPad. Missing rows remain unverified for the desktop beta.
 
-## Physical iPhone and iPad pass
+## Physical iPhone and iPad pass — required for full production support
 
 Run this pass in Safari on physical iPhone and iPad hardware for both the
 current and previous supported iOS releases, using the release-candidate
@@ -59,17 +62,19 @@ row; a blank row is not a pass.
 - Change between the built-in microphone and a Bluetooth headset while idle and
   while listening; confirm the app never remains stuck or duplicates a final.
 
-Any failure blocks the release. BrowserStack real-device automation is useful
-compatibility evidence, but it does not replace this physical microphone and
-route-change pass.
+Any failure blocks a full production-support claim. These physical-device checks
+are not gates for the explicitly scoped desktop beta. BrowserStack automation is
+useful compatibility evidence, but it does not replace this physical microphone
+and route-change pass.
 
 ## Publishing setup (one-time)
 
 For each of the six npm packages, configure the same GitHub repository,
 `publish.yml` workflow filename, and `npm` environment as its trusted publisher.
-Protect the `npm` and `provider-smoke` GitHub environments with required
-reviewers and deployment branch rules that allow only `main`. The workflows also
-enforce the `main` ref as defense in depth. Publishing uses OIDC
+Protect the `npm` environment with required reviewers and restrict both `npm`
+and `provider-smoke` deployments to `main`. The scheduled `provider-smoke` check
+must run unattended; its secrets are scoped to that environment. The workflows
+also enforce the `main` ref as defense in depth. Publishing uses OIDC
 (`id-token: write`) and does not accept a long-lived npm token.
 
 When every gate is green, merge the Changesets version PR. Confirm that it

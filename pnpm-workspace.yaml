@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - apps/*
+  - examples/simulated
 allowBuilds:
   esbuild: true
   protobufjs: false

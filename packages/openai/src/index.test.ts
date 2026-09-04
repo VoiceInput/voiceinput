@@ -13,6 +13,18 @@ import { describe, expect, it, vi } from "vitest";
 import { openai } from "./index.js";
 
 describe("openai", () => {
+  it("rejects unsupported live-model endpointing before permission or token work", () => {
+    const provider = openai({
+      tokenEndpoint: "/token",
+      model: "gpt-live-transcribe",
+    });
+    expect(() =>
+      provider.validateOptions({ endpointing: { silenceMs: 500 } }),
+    ).toThrowError(expect.objectContaining({ code: "unsupported-feature" }));
+    expect(() =>
+      provider.validateOptions({ endpointing: false }),
+    ).not.toThrow();
+  });
   it("validates OpenAI language support synchronously", () => {
     const provider = createProvider(createTransport());
 
@@ -64,9 +76,9 @@ describe("openai", () => {
         audio: {
           input: {
             transcription: {
-              model: "gpt-live-transcribe",
-              languages: ["en"],
-              keywords: ["VoiceInput"],
+              model: "gpt-transcribe",
+              language: "en",
+              prompt: "Expected vocabulary: VoiceInput.",
             },
             turn_detection: {
               type: "server_vad",
@@ -113,11 +125,11 @@ describe("openai", () => {
 
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
-      { type: "interim", text: "hel" },
-      { type: "interim", text: "hello" },
-      { type: "final", text: "hello" },
+      { type: "interim", text: "hel", segmentId: expect.any(String) },
+      { type: "interim", text: "hello", segmentId: expect.any(String) },
+      { type: "final", text: "hello", segmentId: expect.any(String) },
       { type: "speech-end" },
-      { type: "final", text: "world" },
+      { type: "final", text: "world", segmentId: expect.any(String) },
     ]);
     expect(decodeAudio(socket.sent[1]?.["audio"])).toEqual(
       new Int16Array([1, -2]),
@@ -155,7 +167,7 @@ describe("openai", () => {
       delta: "fir",
     });
     await expect(reader.read()).resolves.toMatchObject({
-      value: { type: "interim", text: "fir" },
+      value: { type: "interim", text: "fir", segmentId: expect.any(String) },
     });
     socket.message({
       type: "conversation.item.input_audio_transcription.completed",
@@ -169,10 +181,10 @@ describe("openai", () => {
     });
 
     await expect(reader.read()).resolves.toMatchObject({
-      value: { type: "final", text: "first" },
+      value: { type: "final", text: "first", segmentId: expect.any(String) },
     });
     await expect(reader.read()).resolves.toMatchObject({
-      value: { type: "final", text: "second" },
+      value: { type: "final", text: "second", segmentId: expect.any(String) },
     });
     session.abort();
   });
@@ -212,7 +224,7 @@ describe("openai", () => {
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
       { type: "speech-end" },
-      { type: "final", text: "done" },
+      { type: "final", text: "done", segmentId: expect.any(String) },
     ]);
     expect(socket.sent.at(-1)).toEqual({
       type: "input_audio_buffer.commit",
@@ -264,8 +276,8 @@ describe("openai", () => {
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
       { type: "speech-end" },
-      { type: "final", text: "first" },
-      { type: "final", text: "short" },
+      { type: "final", text: "first", segmentId: expect.any(String) },
+      { type: "final", text: "short", segmentId: expect.any(String) },
     ]);
     expect(socket.closeReason).toBe("finished");
   });

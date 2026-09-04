@@ -133,11 +133,14 @@ async function prepareBrowserAudio(
   let closed = false;
   let tracksStopped = false;
 
-  const stream = new ReadableStream<Int16Array>({
-    start(controller) {
-      streamController = controller;
+  const stream = new ReadableStream<Int16Array>(
+    {
+      start(controller) {
+        streamController = controller;
+      },
     },
-  });
+    { highWaterMark: sampleRate * 15, size: (chunk) => chunk.length },
+  );
 
   const cleanup = (error?: unknown): void => {
     if (closed) {
@@ -246,10 +249,19 @@ async function prepareBrowserAudio(
         return;
       }
       const data = event.data;
-      if (data instanceof ArrayBuffer) {
-        streamController.enqueue(new Int16Array(data));
-      } else if (data instanceof Int16Array) {
-        streamController.enqueue(data);
+      if (data instanceof ArrayBuffer || data instanceof Int16Array) {
+        const chunk = data instanceof ArrayBuffer ? new Int16Array(data) : data;
+        if ((streamController.desiredSize ?? 0) < chunk.length) {
+          cleanup(
+            new VoiceInputError({
+              code: "audio-error",
+              retryable: true,
+              message: "The application stopped consuming microphone audio.",
+            }),
+          );
+          return;
+        }
+        streamController.enqueue(chunk);
       } else if (
         typeof data === "object" &&
         data !== null &&
@@ -309,6 +321,18 @@ async function prepareBrowserAudio(
       await audioContext.resume();
     }
     throwIfAborted(abortSignal);
+    audioContext.addEventListener("statechange", () => {
+      if (started && !closed && audioContext?.state !== "running") {
+        cleanup(
+          new VoiceInputError({
+            code: "audio-error",
+            retryable: true,
+            message:
+              "Microphone capture was interrupted. Start a new recording to continue.",
+          }),
+        );
+      }
+    });
 
     return {
       stream,

@@ -1,11 +1,11 @@
 # Provider certification
 
-This record explains the launch defaults with semantic spoken-audio evidence,
-not merely a successful connection. Measurements were taken on 2026-09-02 from
-the same local machine and network using the checked-in 2.245-second LibriSpeech
-fixture, whose reference is `BY HARRY QUILTER M A`. The fixture's license,
-attribution, and hash are in
-[`fixtures/audio/README.md`](../fixtures/audio/README.md).
+This record contains historical model comparisons and the desktop beta's current
+protocol evidence. The September 4 entry below supersedes the initial OpenAI
+default. Earlier measurements were taken on 2026-09-02 from the same local
+machine and network using the checked-in 2.245-second LibriSpeech fixture, whose
+reference is `BY HARRY QUILTER M A`. The fixture's license, attribution, and
+hash are in [`fixtures/audio/README.md`](../fixtures/audio/README.md).
 
 Run the checked-in harness after building:
 
@@ -40,9 +40,9 @@ showed `gpt-transcribe` first interim at 2787.4–3138.4 ms with WER 0.00 in all
 three; `gpt-live-transcribe` produced its first interim at 1531.1–1551.6 ms,
 with WER 0.00 in two runs and 0.20 (`Henry` for `Harry`) in one.
 
-The default is therefore `gpt-live-transcribe`: VoiceInput is a live microphone
-editing interface, and the model delivered useful partial text about 1.3–1.6
-seconds earlier. This agrees with OpenAI's
+The initial beta.0 default was `gpt-live-transcribe`: VoiceInput is a live
+microphone editing interface, and the model delivered useful partial text about
+1.3–1.6 seconds earlier. This agrees with OpenAI's
 [Realtime transcription guide](https://developers.openai.com/api/docs/guides/realtime-transcription),
 which recommends the live model for microphone input. The tradeoff is explicit:
 on the test date, the official model pages listed
@@ -114,3 +114,30 @@ streaming latency, committed finalization, and a basic accuracy regression. It
 does not establish broad accent, noise, language, or domain accuracy. Re-run the
 harness before changing defaults, and use a larger representative corpus for
 product-specific provider selection.
+
+## Desktop beta recheck — 2026-09-04
+
+The repeated fixture (`--repeat=2`) sends the same utterance twice with two
+seconds of silence between copies. The harness requires distinct nonempty final
+segments and stable identifiers; empty finals also close their audio segments.
+This exercises transport ordering and repeated speech, not general accuracy.
+
+The previous OpenAI live default returned both utterances in one final on Stop.
+A direct authenticated token request for that model with `server_vad` returned
+HTTP 400, code `invalid_value`, parameter `session.audio.input.turn_detection`:
+turn detection is unsupported for the model. `gpt-transcribe` and
+`gpt-4o-transcribe` accepted the same configuration. The default is now
+`gpt-transcribe` with 500 ms server VAD. Its repeated-fixture check produced two
+separate item IDs, preserving both identical phrases. The tradeoff is later
+interim feedback because transcription starts after a turn is committed. This
+choice serves the field-editing contract; it is not an accuracy ranking.
+
+The live model remains opt-in with manual commit, as shown in OpenAI's
+[Realtime transcription guide](https://developers.openai.com/api/docs/guides/realtime-transcription).
+One recording is one phrase in that mode. Explicit server endpointing is
+rejected locally instead of returning an opaque token failure.
+
+The exact candidate's fixture results, engine versions and limitations are
+recorded in `docs/releases/desktop-beta.md`. Physical microphones, real-world
+speech diversity, mobile interruption behavior and manual assistive-technology
+checks remain outside these Node-streamed fixture observations.

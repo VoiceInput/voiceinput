@@ -1,3 +1,4 @@
+import { sendWithBackpressure } from "@voiceinput/provider/transport";
 import {
   VoiceInputError,
   type VoiceInputProviderV1,
@@ -189,7 +190,7 @@ async function createSession(
   let closed = false;
   let failed = false;
   let finishing = false;
-  let lastFinalKey = "";
+  const closedSegments = new Set<string>();
   let lastInterim = "";
   let speechActive = false;
 
@@ -245,18 +246,22 @@ async function createSession(
     }
     const text = alternative["transcript"];
     const isFinal = value["is_final"] === true;
-    if (text.length > 0) {
-      startSpeech();
+    const start = value["start"];
+    if (typeof start !== "number" || !Number.isFinite(start) || start < 0)
+      throw new TypeError(
+        "Deepgram Results did not contain an audio start boundary.",
+      );
+    const segmentId = `audio:${start}`;
+    if (closedSegments.has(segmentId)) return;
+    if (text.length > 0 || isFinal) {
+      if (text.length > 0) startSpeech();
       if (isFinal) {
-        const finalKey = `${String(value["start"])}:${String(value["duration"])}:${text}`;
-        if (finalKey !== lastFinalKey) {
-          lastFinalKey = finalKey;
-          controller?.enqueue({ type: "final", text });
-        }
+        closedSegments.add(segmentId);
+        controller?.enqueue({ type: "final", text, segmentId });
         lastInterim = "";
       } else if (text !== lastInterim) {
         lastInterim = text;
-        controller?.enqueue({ type: "interim", text });
+        controller?.enqueue({ type: "interim", text, segmentId });
       }
     }
     if (value["speech_final"] === true) {
@@ -334,7 +339,13 @@ async function createSession(
       }
       audioSent = true;
       try {
-        socket.send(new Int16Array(chunk).buffer);
+        return sendWithBackpressure(
+          socket,
+          chunk.byteLength,
+          abortSignal,
+          "deepgram",
+          () => socket.send(new Int16Array(chunk).buffer),
+        );
       } catch (cause) {
         throw new VoiceInputError({
           code: "network-error",

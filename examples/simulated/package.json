@@ -1,0 +1,26 @@
+{
+  "name": "@voiceinput/example-simulated",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5174",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --config ../../.oxlintrc.json ."
+  },
+  "dependencies": {
+    "@voiceinput/core": "workspace:*",
+    "@voiceinput/provider": "workspace:*",
+    "@voiceinput/react": "workspace:*",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-hook-form": "7.87.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.3",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  }
+}

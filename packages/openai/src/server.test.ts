@@ -35,6 +35,7 @@ describe("createOpenAITokenHandler", () => {
     const audit = vi.fn<(event: unknown) => void>();
     const handler = createOpenAITokenHandler({
       apiKey: "sk-server",
+      model: "gpt-live-transcribe",
       authorize: () => ({ subject: "user-1" }),
       rateLimit: ({ subject, model }) => ({
         allowed: subject === "user-1" && model === "gpt-live-transcribe",

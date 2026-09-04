@@ -140,7 +140,7 @@ for (const playground of playgrounds) {
         await textarea.pressSequentially(" [manual edit]");
         await page.getByRole("button", { name: "Emit final" }).click();
         await expect(textarea).toHaveValue(
-          `This is the ${field.kind} field. hello [manual edit] hello from VoiceInput, move the caret, or type while dictating.`,
+          `This is the ${field.kind} field. hello [manual edit], move the caret, or type while dictating.`,
         );
       }
 

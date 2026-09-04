@@ -406,7 +406,7 @@ describe("useVoiceInput", () => {
     expect(contextAudio.prepareCallCount).toBe(0);
   });
 
-  it("serializes provider replacement and isolates the old final", async () => {
+  it("keeps the running provider and applies changed configuration on the next start", async () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     const firstFake = createFakeVoiceInputProvider({
       autoCloseOnFinish: false,
@@ -433,9 +433,8 @@ describe("useVoiceInput", () => {
     await act(async () => {
       getButton("switch provider").click();
     });
-    expect(warning).toHaveBeenCalledWith(
-      expect.stringContaining("provider identity changed"),
-    );
+    expect(warning).not.toHaveBeenCalled();
+    expect(firstFake.controller.sessions[0]?.finishCallCount).toBe(0);
     await waitForEnabled(trigger);
     await act(async () => {
       trigger.click();
@@ -446,11 +445,17 @@ describe("useVoiceInput", () => {
     await act(async () => {
       firstFake.controller.emit({ type: "final", text: "old" });
       firstFake.controller.close();
+    });
+    await vi.waitFor(() =>
+      expect(trigger.getAttribute("aria-pressed")).toBe("false"),
+    );
+    await act(async () => {
+      trigger.click();
       await secondFake.controller.waitForSession();
       secondFake.controller.emit({ type: "final", text: "new" });
     });
 
-    await vi.waitFor(() => expect(textarea.value).toBe("new"));
+    await vi.waitFor(() => expect(textarea.value).toBe("old new"));
   });
 
   it("retains provider-context ownership across a provider change", async () => {
@@ -490,11 +495,17 @@ describe("useVoiceInput", () => {
     await act(async () => {
       firstFake.controller.emit({ type: "final", text: "old" });
       firstFake.controller.close();
+    });
+    await vi.waitFor(() =>
+      expect(trigger.getAttribute("aria-pressed")).toBe("false"),
+    );
+    await act(async () => {
+      trigger.click();
       await secondFake.controller.waitForSession();
       secondFake.controller.emit({ type: "final", text: "new" });
     });
 
-    await vi.waitFor(() => expect(textarea.value).toBe("new"));
+    await vi.waitFor(() => expect(textarea.value).toBe("old new"));
   });
 
   it("keeps an inline transcript transform stable across controlled rerenders", async () => {

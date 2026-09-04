@@ -4,10 +4,13 @@
 - npm dist-tag: `next`
 - Approved candidate SHA:
 - CI run and immutable package artifact:
-- BrowserStack run and artifacts:
+- Desktop engine versions and automated runs:
+- Branded browsers / BrowserStack evidence (unverified unless recorded):
 - Provider credential smoke run:
-- Accessibility evidence:
-- Physical iPhone/iPad evidence:
+- Automated accessibility evidence:
+- Manual screen-reader evidence (unverified unless recorded):
+- Physical iPhone/iPad evidence (outside desktop beta; unverified unless
+  recorded):
 - Full-history/tree/tarball/workflow-log secret scan:
 - Reviewer and approval date:
 
@@ -23,4 +26,7 @@ Copy the generated Changesets release notes for the shared package version.
 
 ## Exceptions
 
-None. Any failed or missing release gate blocks approval.
+Desktop beta: physical-device, branded-browser and manual assistive-technology
+evidence may remain unverified under the support policy. Every required
+automated, package, security and live-provider gate must pass. Record all
+failures explicitly.

@@ -8,6 +8,7 @@ import { createFakeVoiceInputProvider } from "@voiceinput/provider/test";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 
 import { VoiceButton, VoiceInput, VoiceTextarea } from "./index.js";
 
@@ -28,6 +29,142 @@ afterEach(async () => {
 });
 
 describe("React controls", () => {
+  it("uses one controlled callback for typing, voice, undo, and redo", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const audioSource = createFakeAudioSource();
+    const values: string[] = [];
+    const changes = vi.fn<() => void>();
+    function Field() {
+      const [value, setValue] = useState("");
+      return (
+        <VoiceTextarea
+          aria-label="Unified"
+          value={value}
+          onValueChange={(next) => {
+            values.push(next);
+            setValue(next);
+          }}
+          onChange={changes}
+          voice={{ provider: fake.provider, audioSource }}
+        />
+      );
+    }
+    render(<Field />);
+    const field = getTextarea("Unified");
+    const button = getButton("Start voice input");
+    await waitForEnabled(button);
+    await act(() => userEvent.type(field, "a"));
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({ type: "final", text: "voice", segmentId: "a" });
+    });
+    await vi.waitFor(() => expect(field.value).toBe("a voice"));
+    field.focus();
+    await act(() => userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}"));
+    await vi.waitFor(() => expect(field.value).toBe("a"));
+    await act(() =>
+      userEvent.keyboard("{ControlOrMeta>}{Shift>}z{/Shift}{/ControlOrMeta}"),
+    );
+    await vi.waitFor(() => expect(field.value).toBe("a voice"));
+    expect(values).toEqual(["a", "a voice", "a", "a voice"]);
+    expect(changes).toHaveBeenCalledTimes(4);
+  });
+
+  it("stops at maxLength but retains the complete recognized transcript", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const limits: unknown[] = [];
+    const finals: string[] = [];
+    render(
+      <VoiceTextarea
+        aria-label="Limited"
+        maxLength={5}
+        voice={{
+          provider: fake.provider,
+          audioSource: createFakeAudioSource(),
+          onTextLimit: (event) => limits.push(event),
+          onFinalTranscript: (text) => finals.push(text),
+        }}
+      />,
+    );
+    const button = getButton("Start voice input");
+    await waitForEnabled(button);
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({
+        type: "final",
+        text: "hello world",
+        segmentId: "a",
+      });
+    });
+    await vi.waitFor(() =>
+      expect(button.getAttribute("aria-pressed")).toBe("false"),
+    );
+    expect(getTextarea("Limited").value).toBe("hello");
+    expect(finals).toEqual(["hello world"]);
+    expect(limits).toEqual([
+      expect.objectContaining({ type: "text-limit", insertedText: "hello" }),
+    ]);
+    expect(fake.controller.sessions[0]?.finishCallCount).toBe(1);
+  });
+
+  it("mounts read-only and disabled wrappers and stops when editability is removed", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const audioSource = createFakeAudioSource();
+    const field = (readOnly: boolean) => (
+      <VoiceTextarea
+        aria-label="Availability"
+        readOnly={readOnly}
+        voice={{ provider: fake.provider, audioSource }}
+      />
+    );
+    const root = render(field(true));
+    const button = getButton("Start voice input");
+    expect(button.disabled).toBe(true);
+    await act(async () => {
+      root.render(field(false));
+    });
+    await waitForEnabled(button);
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({ type: "interim", text: "draft", segmentId: "a" });
+    });
+    await act(async () => {
+      root.render(field(true));
+    });
+    await vi.waitFor(() =>
+      expect(fake.controller.sessions[0]?.finishCallCount).toBe(1),
+    );
+    expect(getTextarea("Availability").value).toBe("draft");
+    expect(button.disabled).toBe(true);
+  });
+
+  it("notifies uncontrolled React onChange when dictation changes the field", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const onChange = vi.fn<() => void>();
+    render(
+      <VoiceTextarea
+        aria-label="Events"
+        onChange={onChange}
+        voice={{
+          provider: fake.provider,
+          audioSource: createFakeAudioSource(),
+        }}
+      />,
+    );
+    const button = getButton("Start voice input");
+    await waitForEnabled(button);
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({ type: "final", text: "hello" });
+    });
+    await vi.waitFor(() => expect(getTextarea("Events").value).toBe("hello"));
+    expect(onChange).toHaveBeenCalledOnce();
+  });
+
   it("forwards button props and refs while exposing and announcing state", async () => {
     const fake = createFakeVoiceInputProvider();
     const onClick = vi.fn<React.MouseEventHandler<HTMLButtonElement>>();

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 
 import {
   VoiceInputError,
@@ -61,6 +62,246 @@ afterEach(() => {
 });
 
 describe("text ownership", () => {
+  it("freezes a disabled fieldset and never mutates a replacement with old speech", async () => {
+    const target = createTextarea();
+    const fieldset = document.createElement("fieldset");
+    document.body.append(fieldset);
+    fieldset.append(target);
+    const engine = createEngine();
+    const events: unknown[] = [];
+    engine.subscribe((event) => events.push(event));
+    activate(engine, target);
+    engine.applyInterim("draft", "a");
+    fieldset.disabled = true;
+    await Promise.resolve();
+    expect(engine.isWritable()).toBe(false);
+    engine.applyFinal("changed", "a");
+    engine.cancel();
+    expect(target.value).toBe("draft");
+    expect(events).toContainEqual({ type: "target-unavailable" });
+    fieldset.disabled = false;
+    engine.begin();
+    engine.applyInterim("old", "old");
+    const replacement = createTextarea("fresh");
+    engine.setTarget(replacement);
+    engine.captureSelection();
+    engine.applyFinal("late", "new");
+    expect(replacement.value).toBe("fresh");
+    engine.undo();
+    expect(replacement.value).toBe("fresh");
+  });
+
+  it("separates real typing, deletion, and voice history and intercepts browser history events", async () => {
+    const target = createTextarea();
+    const engine = createEngine();
+    activate(engine, target);
+    await userEvent.type(target, "abc");
+    await userEvent.keyboard("{Backspace}");
+    engine.applyFinal("voice", "a");
+    await userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}");
+    expect(target.value).toBe("ab");
+    await userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}");
+    expect(target.value).toBe("abc");
+    const undoEvent = new InputEvent("beforeinput", {
+      inputType: "historyUndo",
+      cancelable: true,
+      bubbles: true,
+    });
+    target.dispatchEvent(undoEvent);
+    expect(undoEvent.defaultPrevented).toBe(true);
+    expect(target.value).toBe("");
+    target.dispatchEvent(
+      new InputEvent("beforeinput", {
+        inputType: "historyRedo",
+        cancelable: true,
+        bubbles: true,
+      }),
+    );
+    expect(target.value).toBe("abc");
+  });
+
+  it("limits transforms and rejects late transforms after undo or loss of editability", async () => {
+    const target = createTextarea();
+    target.maxLength = 5;
+    const engine = createEngine({ transformTranscript: async () => "👍🏽abcd" });
+    activate(engine, target);
+    engine.applyFinal("hi", "a");
+    await engine.complete().result;
+    expect(target.value).toBe("👍🏽a");
+    engine.undo();
+    expect(target.value).toBe("hi");
+    for (const action of ["undo", "readOnly"] as const) {
+      let resolve!: (text: string) => void;
+      engine.updateOptions({
+        transformTranscript: () =>
+          new Promise<string>((r) => {
+            resolve = r;
+          }),
+      });
+      engine.begin();
+      engine.applyFinal("!", action);
+      const completion = engine.complete();
+      if (action === "undo") engine.undo();
+      else target.readOnly = true;
+      const frozen = target.value;
+      resolve("late");
+      await completion.result;
+      expect(target.value).toBe(frozen);
+    }
+  });
+  it("groups revisions into one undo step and never resurrects an undone phrase", async () => {
+    const target = createTextarea("before");
+    const engine = createEngine();
+    activate(engine, target);
+    engine.applyInterim("one", "a");
+    engine.applyInterim("one revised", "a");
+    engine.applyFinal("one revised.", "a");
+    engine.applyFinal("two", "b");
+    engine.undo();
+    expect(target.value).toBe("before one revised.");
+    engine.undo();
+    expect(target.value).toBe("before");
+    engine.redo();
+    expect(target.value).toBe("before one revised.");
+    engine.applyFinal("late duplicate", "a");
+    expect(target.value).toBe("before one revised.");
+    engine.applyInterim("draft", "c");
+    await userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}");
+    engine.applyFinal("draft corrected", "c");
+    expect(target.value).toBe("before one revised.");
+  });
+
+  it("keeps identical text from distinct segments and ignores duplicate finals", () => {
+    const target = createTextarea();
+    const engine = createEngine();
+    activate(engine, target);
+    engine.applyFinal("yes", "a");
+    engine.applyFinal("yes", "a");
+    engine.applyFinal("yes", "b");
+    expect(target.value).toBe("yes yes");
+  });
+
+  it("restores replaced text and its selection through undo and redo", () => {
+    const target = createTextarea("keep old end");
+    const engine = createEngine();
+    activate(engine, target, 5, 8);
+    engine.applyFinal("new", "a");
+    engine.undo();
+    expect(target.value).toBe("keep old end");
+    expect([target.selectionStart, target.selectionEnd]).toEqual([5, 8]);
+    engine.redo();
+    expect(target.value).toBe("keep new end");
+  });
+
+  it("limits whole graphemes without trimming neighboring application text", () => {
+    const target = createTextarea("L old R");
+    target.maxLength = 8;
+    const engine = createEngine();
+    const limits: unknown[] = [];
+    engine.subscribe((event) => limits.push(event));
+    activate(engine, target, 2, 5);
+    engine.applyFinal("👍🏽 hello", "a");
+    expect(target.value).toBe("L 👍🏽 R");
+    expect(limits).toEqual([
+      expect.objectContaining({
+        type: "text-limit",
+        maxLength: 8,
+        source: "final",
+      }),
+    ]);
+    engine.applyFinal("extra", "b");
+    expect(target.value).toBe("L 👍🏽 R");
+  });
+
+  it("protects composition and resumes insertion with a subsequent segment", async () => {
+    const target = createTextarea();
+    const engine = createEngine();
+    activate(engine, target);
+    target.dispatchEvent(new CompositionEvent("compositionstart"));
+    userInput(target, "日本", 2);
+    engine.applyInterim("ignored", "a");
+    expect(target.value).toBe("日本");
+    target.dispatchEvent(new CompositionEvent("compositionend"));
+    await Promise.resolve();
+    engine.applyFinal("ignored final", "a");
+    engine.applyFinal("語", "b");
+    expect(target.value).toBe("日本語");
+  });
+
+  it("does not apply pending speech or transforms after form reset", async () => {
+    const target = createTextarea();
+    const form = document.createElement("form");
+    document.body.append(form);
+    form.append(target);
+    let resolve!: (text: string) => void;
+    const engine = createEngine({
+      transformTranscript: () =>
+        new Promise<string>((r) => {
+          resolve = r;
+        }),
+    });
+    activate(engine, target);
+    engine.applyFinal("original", "a");
+    const completion = engine.complete();
+    form.reset();
+    await Promise.resolve();
+    resolve("late transform");
+    await completion.result;
+    engine.applyFinal("late speech", "b");
+    engine.undo();
+    expect(target.value).toBe("");
+  });
+
+  it("mounts disabled and read-only native fields without changing them", () => {
+    for (const attribute of ["disabled", "readOnly"] as const) {
+      const target = createTextarea("keep");
+      target[attribute] = true;
+      const engine = createEngine();
+      expect(() => engine.setTarget(target)).not.toThrow();
+      engine.begin();
+      engine.applyFinal("ignored");
+      expect(target.value).toBe("keep");
+    }
+  });
+
+  it("does not resurrect a corrected provisional phrase", () => {
+    const target = createTextarea();
+    const engine = createEngine();
+    activate(engine, target);
+    engine.applyInterim("Book flight");
+    userInput(target, "Book train", 10);
+    engine.applyFinal("Book flight tomorrow.");
+    expect(target.value).toBe("Book train");
+    engine.applyFinal("Thank you.");
+    expect(target.value).toBe("Book train Thank you.");
+  });
+
+  it("undoes finalized speech with the real keyboard", async () => {
+    const target = createTextarea();
+    const engine = createEngine();
+    activate(engine, target);
+    await userEvent.type(target, "typed");
+    engine.applyFinal("spoken");
+    expect(target.value).toBe("typed spoken");
+    await userEvent.keyboard("{ControlOrMeta>}z{/ControlOrMeta}");
+    expect(target.value).toBe("typed");
+  });
+
+  it("respects maxLength and a target that becomes read-only", () => {
+    const target = createTextarea();
+    target.maxLength = 5;
+    const engine = createEngine();
+    activate(engine, target);
+    engine.applyFinal("hello world");
+    expect(target.value).toBe("hello");
+    target.removeAttribute("maxlength");
+    engine.applyInterim("draft");
+    const value = target.value;
+    target.readOnly = true;
+    engine.applyFinal("rewritten while read only");
+    expect(target.value).toBe(value);
+  });
+
   it("captures a selection before blur and replaces only the provisional range", () => {
     const target = createTextarea("Say old now");
     const trigger = document.createElement("button");
@@ -123,7 +364,7 @@ describe("text ownership", () => {
     engine.applyInterim("hello");
 
     userInput(target, "hello!", 6);
-    engine.applyInterim("world");
+    engine.applyInterim("world", "next-phrase");
 
     expect(target.value).toBe("hello! world");
     expect(engine.getSnapshot().spans.map((span) => span.state)).toEqual([
@@ -133,7 +374,7 @@ describe("text ownership", () => {
 
     target.setSelectionRange(0, 0);
     target.dispatchEvent(new Event("select", { bubbles: true }));
-    engine.applyInterim("new");
+    engine.applyInterim("new", "third-phrase");
     expect(target.value).toBe("new hello! world");
     expect(engine.getSnapshot().spans.at(-1)?.state).toBe("provisional");
   });
@@ -357,7 +598,7 @@ describe("controlled reconciliation", () => {
     target.value = value;
     target.setSelectionRange(0, 0);
     engine.reconcileControlledValue(value);
-    engine.applyInterim("new");
+    engine.applyInterim("new", "third-phrase");
 
     expect(target.value).toBe("new base voice app");
     expect(engine.getSnapshot().spans.map((span) => span.state)).toEqual([
@@ -382,7 +623,7 @@ describe("controlled reconciliation", () => {
 
     target.setSelectionRange(0, 0);
     engine.reconcileControlledValue(value);
-    engine.applyInterim("new");
+    engine.applyInterim("new", "third-phrase");
 
     expect(target.value).toBe("new base voice");
     expect(engine.getSnapshot().spans.map((span) => span.state)).toEqual([
@@ -540,14 +781,16 @@ describe("target validation", () => {
     },
   );
 
-  it("rejects readonly and disabled targets", () => {
+  it("accepts readonly and disabled targets without granting write access", () => {
     const readonly = createTextarea();
     readonly.readOnly = true;
     const disabled = createTextarea();
     disabled.disabled = true;
     const engine = createEngine();
-    expect(() => engine.setTarget(readonly)).toThrow(/writable/);
-    expect(() => engine.setTarget(disabled)).toThrow(/writable/);
+    expect(() => engine.setTarget(readonly)).not.toThrow();
+    expect(engine.isWritable()).toBe(false);
+    expect(() => engine.setTarget(disabled)).not.toThrow();
+    expect(engine.isWritable()).toBe(false);
   });
 
   it.each(["text", "search", "url", "tel"])(

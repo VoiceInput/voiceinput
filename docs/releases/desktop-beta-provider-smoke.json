@@ -1,0 +1,108 @@
+{
+  "date": "2026-09-04",
+  "transport": "Node WebSocket; checked-in LibriSpeech PCM fixture, repeated twice with two seconds of silence",
+  "results": [
+    {
+      "provider": "openai",
+      "model": "gpt-transcribe",
+      "reference": "BY HARRY QUILTER M A BY HARRY QUILTER M A",
+      "repeat": 2,
+      "transcript": "By Harry Quilter, M.A. By Harry Quilter, M.A.",
+      "wordErrorRate": 0,
+      "chunkMs": 20,
+      "audioDurationMs": 6490,
+      "internalSilenceMs": 0,
+      "trailingSilenceMs": 0,
+      "endpointing": 500,
+      "connectionMs": 535.3,
+      "firstInterimMs": 3465.8,
+      "firstFinalMs": 3815.4,
+      "finalizationMs": 636,
+      "interimParts": 16,
+      "finalParts": 2,
+      "segments": [
+        {
+          "segmentId": "item_EKVPIqLedqCyCdw1F3qWs",
+          "text": "By Harry Quilter, M.A."
+        },
+        {
+          "segmentId": "item_EKVPNTLMzwbt6pwwVAdSk",
+          "text": "By Harry Quilter, M.A."
+        }
+      ],
+      "tokenExpiresIn": null
+    },
+    {
+      "provider": "elevenlabs",
+      "model": "scribe_v2_realtime",
+      "reference": "BY HARRY QUILTER M A BY HARRY QUILTER M A",
+      "repeat": 2,
+      "transcript": "By Harry Quilter, MA. By Harry Quilter, MA.",
+      "wordErrorRate": 0.4,
+      "chunkMs": 20,
+      "audioDurationMs": 6490,
+      "internalSilenceMs": 0,
+      "trailingSilenceMs": 0,
+      "endpointing": 650,
+      "connectionMs": 519,
+      "firstInterimMs": 2510.5,
+      "firstFinalMs": 3235.6,
+      "finalizationMs": 491.5,
+      "interimParts": 4,
+      "finalParts": 2,
+      "segments": [
+        {
+          "segmentId": "commit:0",
+          "text": "By Harry Quilter, MA."
+        },
+        {
+          "segmentId": "commit:1",
+          "text": "By Harry Quilter, MA."
+        }
+      ],
+      "tokenExpiresIn": null
+    },
+    {
+      "provider": "deepgram",
+      "model": "nova-3",
+      "reference": "BY HARRY QUILTER M A BY HARRY QUILTER M A",
+      "repeat": 2,
+      "transcript": "By Harry Quilter m a.  Harry Quilter m a.",
+      "wordErrorRate": 0.1,
+      "chunkMs": 20,
+      "audioDurationMs": 6490,
+      "internalSilenceMs": 0,
+      "trailingSilenceMs": 0,
+      "endpointing": "provider-default",
+      "connectionMs": 884.4,
+      "firstInterimMs": 1131.2,
+      "firstFinalMs": 2445.6,
+      "finalizationMs": 172,
+      "interimParts": 3,
+      "finalParts": 2,
+      "segments": [
+        {
+          "segmentId": "audio:0",
+          "text": "By Harry Quilter m a."
+        },
+        {
+          "segmentId": "audio:2.15",
+          "text": ""
+        },
+        {
+          "segmentId": "audio:4.57",
+          "text": "Harry Quilter m a."
+        },
+        {
+          "segmentId": "audio:6.41",
+          "text": ""
+        },
+        {
+          "segmentId": "audio:6.49",
+          "text": ""
+        }
+      ],
+      "tokenExpiresIn": 30
+    }
+  ]
+}

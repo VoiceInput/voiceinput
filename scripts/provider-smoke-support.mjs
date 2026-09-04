@@ -14,6 +14,7 @@ export function readRunOptions(arguments_) {
   return {
     provider,
     model,
+    repeat: readNumberArgument(arguments_, "repeat", 1, 1, 3),
     language: languageArgument === "auto" ? undefined : languageArgument,
     vocabulary: (readArgument(arguments_, "vocabulary") ?? "")
       .split(",")

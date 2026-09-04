@@ -73,8 +73,8 @@ export interface VoiceInputProviderV1CallOptions extends VoiceTranscriptionOptio
 }
 
 export type VoiceInputProviderV1StreamPart =
-  | { type: "interim"; text: string }
-  | { type: "final"; text: string }
+  | { type: "interim"; text: string; segmentId?: string }
+  | { type: "final"; text: string; segmentId?: string }
   | { type: "speech-start" }
   | { type: "speech-end" }
   | { type: "error"; error: VoiceInputError };

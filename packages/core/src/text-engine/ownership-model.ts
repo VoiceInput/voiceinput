@@ -1,5 +1,6 @@
 import type {
   VoiceInputInterimBehavior,
+  VoiceInputTextLimit,
   VoiceInputTextEngineSnapshot,
   VoiceInputTextSelection,
   VoiceInputTextSpanState,
@@ -43,8 +44,11 @@ export interface TextCompletionState {
 }
 
 export class TextOwnershipModel {
-  readonly #interimBehavior: VoiceInputInterimBehavior;
+  #interimBehavior: VoiceInputInterimBehavior;
 
+  #maxLength = -1;
+  #source: VoiceInputTextLimit["source"] = "final";
+  #limit: VoiceInputTextLimit | undefined;
   #value = "";
   #selection: MutableTextSelection | null = null;
   #spans: MutableTextSpan[] = [];
@@ -58,6 +62,49 @@ export class TextOwnershipModel {
 
   constructor(interimBehavior: VoiceInputInterimBehavior) {
     this.#interimBehavior = interimBehavior;
+  }
+
+  configureMutation(
+    maxLength: number,
+    source: VoiceInputTextLimit["source"],
+  ): void {
+    this.#maxLength = maxLength;
+    this.#source = source;
+    this.#limit = undefined;
+  }
+
+  takeLimit(): VoiceInputTextLimit | undefined {
+    const limit = this.#limit;
+    this.#limit = undefined;
+    return limit;
+  }
+
+  #limitReplacement(start: number, end: number, text: string): string {
+    if (this.#maxLength < 0) return text;
+    const available = Math.max(
+      0,
+      this.#maxLength - (this.#value.length - (end - start)),
+    );
+    if (text.length < available || text.length === 0) return text;
+    let insertedText = "";
+    for (const { segment } of new Intl.Segmenter(undefined, {
+      granularity: "grapheme",
+    }).segment(text)) {
+      if (insertedText.length + segment.length > available) break;
+      insertedText += segment;
+    }
+    this.#limit = {
+      type: "text-limit",
+      maxLength: this.#maxLength,
+      text,
+      insertedText,
+      source: this.#source,
+    };
+    return insertedText;
+  }
+
+  setInterimBehavior(behavior: VoiceInputInterimBehavior): void {
+    this.#interimBehavior = behavior;
   }
 
   get value(): string {
@@ -133,7 +180,7 @@ export class TextOwnershipModel {
   }
 
   applyInterim(text: string, canInsert: boolean): TextMutation | null {
-    if (!this.#runActive) {
+    if (!this.#runActive || !canInsert) {
       return null;
     }
 
@@ -160,7 +207,7 @@ export class TextOwnershipModel {
   }
 
   applyFinal(text: string, canInsert: boolean): TextMutation | null {
-    if (!this.#runActive) {
+    if (!this.#runActive || !canInsert) {
       return null;
     }
 
@@ -360,10 +407,14 @@ export class TextOwnershipModel {
   }
 
   applyTransform(span: MutableTextSpan, text: string): TextMutation {
-    const replacement = normalizeInsertion(
-      this.#value.slice(0, span.start),
-      this.#value.slice(span.end),
-      text,
+    const replacement = this.#limitReplacement(
+      span.start,
+      span.end,
+      normalizeInsertion(
+        this.#value.slice(0, span.start),
+        this.#value.slice(span.end),
+        text,
+      ),
     );
     const changed = this.#replaceText(
       span.start,
@@ -412,10 +463,14 @@ export class TextOwnershipModel {
 
     const start = selection.start;
     const end = selection.replacePending ? selection.end : selection.start;
-    const replacement = normalizeInsertion(
-      this.#value.slice(0, start),
-      this.#value.slice(end),
-      text,
+    const replacement = this.#limitReplacement(
+      start,
+      end,
+      normalizeInsertion(
+        this.#value.slice(0, start),
+        this.#value.slice(end),
+        text,
+      ),
     );
     if (replacement.length === 0) {
       return undefined;
@@ -449,10 +504,14 @@ export class TextOwnershipModel {
     text: string,
     state: Extract<VoiceInputTextSpanState, "provisional" | "finalized">,
   ): { mutation: TextMutation; span?: MutableTextSpan } {
-    const replacement = normalizeInsertion(
-      this.#value.slice(0, span.start),
-      this.#value.slice(span.end),
-      text,
+    const replacement = this.#limitReplacement(
+      span.start,
+      span.end,
+      normalizeInsertion(
+        this.#value.slice(0, span.start),
+        this.#value.slice(span.end),
+        text,
+      ),
     );
     if (replacement.length === 0) {
       return { mutation: this.#removeOwnedSpan(span) };

@@ -166,3 +166,22 @@ This package contains no credential handling. Official adapters expose browser
 code from their root and token minting from a separate `/server` export. Custom
 adapters should preserve the same boundary: long-lived credentials must never
 enter browser code, payloads, or logs.
+
+## Segment identity
+
+Include `segmentId: string` on each `interim` and `final` stream part. Keep it
+stable across revisions of one segment and unique within an open session. Emit
+ordered segments; buffer out-of-order provider results in the adapter. Empty
+finals close segments too. Speech-start/end notifications alone do not close a
+transcription segment. Identical text in two segments is legitimate repetition.
+
+Official adapters always provide identities. The optional field preserves older
+strictly sequential custom providers; without it, each final advances an
+implicit segment and duplicate finals cannot be identified reliably. New
+adapters should always implement segment identity and use the published
+conformance cases.
+
+`sendAudio` may return a promise for backpressure. Bound transport queues and
+honor abort while waiting; never silently drop audio. The official adapters use
+the shared `@voiceinput/provider/transport` helper with a 1 MiB high-water mark
+and a five-second congestion deadline.

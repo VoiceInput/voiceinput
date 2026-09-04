@@ -1,3 +1,4 @@
+import { sendWithBackpressure } from "@voiceinput/provider/transport";
 import {
   VoiceInputError,
   type VoiceInputProviderV1,
@@ -308,6 +309,7 @@ async function createSession(
 
   const transcripts = new Map<string, TranscriptState>();
   const transcriptOrder: string[] = [];
+  const closedItems = new Set<string>();
   let audioSent = false;
   let closed = false;
   let failed = false;
@@ -360,7 +362,11 @@ async function createSession(
   const emitInterim = (state: TranscriptState): void => {
     if (state.delta && state.delta !== state.lastEmittedInterim) {
       state.lastEmittedInterim = state.delta;
-      streamController?.enqueue({ type: "interim", text: state.delta });
+      streamController?.enqueue({
+        type: "interim",
+        text: state.delta,
+        segmentId: transcriptOrder[0] as string,
+      });
     }
   };
 
@@ -376,7 +382,12 @@ async function createSession(
       }
       transcriptOrder.shift();
       transcripts.delete(itemId);
-      streamController?.enqueue({ type: "final", text: state.final });
+      closedItems.add(itemId);
+      streamController?.enqueue({
+        type: "final",
+        text: state.final,
+        segmentId: itemId,
+      });
     }
     maybeFinish();
   };
@@ -412,6 +423,7 @@ async function createSession(
       }
       if (type === "input_audio_buffer.committed") {
         const itemId = readString(value, "item_id");
+        if (closedItems.has(itemId)) return;
         manualCommitPending = false;
         vadCommitPending = false;
         ensureTranscript(itemId);
@@ -420,6 +432,7 @@ async function createSession(
       }
       if (type === "conversation.item.input_audio_transcription.delta") {
         const itemId = readString(value, "item_id");
+        if (closedItems.has(itemId)) return;
         const state = ensureTranscript(itemId);
         state.delta += readString(value, "delta");
         if (transcriptOrder[0] === itemId) {
@@ -429,6 +442,7 @@ async function createSession(
       }
       if (type === "conversation.item.input_audio_transcription.completed") {
         const itemId = readString(value, "item_id");
+        if (closedItems.has(itemId)) return;
         ensureTranscript(itemId).final = readString(value, "transcript");
         flushFinals();
         return;
@@ -512,10 +526,17 @@ async function createSession(
       }
       audioSent ||= chunk.length > 0;
       if (chunk.length > 0) {
-        sendEvent(socket, {
-          type: "input_audio_buffer.append",
-          audio: encodePcm16(chunk),
-        });
+        return sendWithBackpressure(
+          socket,
+          Math.ceil((chunk.byteLength * 4) / 3) + 128,
+          abortSignal,
+          "openai",
+          () =>
+            sendEvent(socket, {
+              type: "input_audio_buffer.append",
+              audio: encodePcm16(chunk),
+            }),
+        );
       }
     },
     finish() {

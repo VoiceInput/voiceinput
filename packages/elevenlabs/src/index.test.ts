@@ -65,8 +65,8 @@ describe("elevenlabs", () => {
 
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
-      { type: "interim", text: "hel" },
-      { type: "final", text: "hello!" },
+      { type: "interim", text: "hel", segmentId: expect.any(String) },
+      { type: "final", text: "hello!", segmentId: expect.any(String) },
       { type: "speech-end" },
     ]);
     expect(decodeAudio(socket.json[0]?.["audio_base_64"])).toEqual(
@@ -166,11 +166,16 @@ describe("elevenlabs", () => {
 
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
-      { type: "interim", text: "first" },
-      { type: "interim", text: "second" },
-      { type: "final", text: "first" },
-      { type: "interim", text: "second" },
-      { type: "final", text: "second corrected." },
+      { type: "interim", text: "first", segmentId: expect.any(String) },
+      { type: "interim", text: "second", segmentId: expect.any(String) },
+      { type: "final", text: "first", segmentId: expect.any(String) },
+      { type: "speech-end" },
+      { type: "speech-start" },
+      {
+        type: "final",
+        text: "second corrected.",
+        segmentId: expect.any(String),
+      },
       { type: "speech-end" },
     ]);
     expect(socket.closeReason).toBe("finished");
@@ -219,13 +224,14 @@ describe("elevenlabs", () => {
 
       expect(await partsPromise).toEqual([
         { type: "speech-start" },
-        { type: "interim", text: "first" },
-        { type: "interim", text: "second" },
-        { type: "final", text: "first" },
-        { type: "interim", text: "second" },
-        { type: "final", text: "entirely revised." },
-        { type: "interim", text: "second" },
-        { type: "interim", text: "" },
+        { type: "interim", text: "first", segmentId: expect.any(String) },
+        { type: "interim", text: "second", segmentId: expect.any(String) },
+        { type: "final", text: "first", segmentId: expect.any(String) },
+        {
+          type: "final",
+          text: "entirely revised.",
+          segmentId: expect.any(String),
+        },
         { type: "speech-end" },
       ]);
       expect(socket.closeReason).toBe("finished");
@@ -257,8 +263,8 @@ describe("elevenlabs", () => {
       await expect(finish).resolves.toBeUndefined();
       expect(await partsPromise).toEqual([
         { type: "speech-start" },
-        { type: "interim", text: "noise" },
-        { type: "interim", text: "" },
+        { type: "interim", text: "noise", segmentId: expect.any(String) },
+        { type: "final", text: "", segmentId: expect.any(String) },
         { type: "speech-end" },
       ]);
     } finally {
@@ -286,8 +292,8 @@ describe("elevenlabs", () => {
     await expect(finish).resolves.toBeUndefined();
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
-      { type: "interim", text: "draft" },
-      { type: "interim", text: "" },
+      { type: "interim", text: "draft", segmentId: expect.any(String) },
+      { type: "interim", text: "", segmentId: expect.any(String) },
       { type: "speech-end" },
     ]);
   });
@@ -394,8 +400,8 @@ describe("elevenlabs", () => {
       });
       expect(await partsPromise).toEqual([
         { type: "speech-start" },
-        { type: "final", text: "first" },
-        { type: "interim", text: "more" },
+        { type: "final", text: "first", segmentId: expect.any(String) },
+        { type: "interim", text: "more", segmentId: expect.any(String) },
         expect.objectContaining({
           type: "error",
           error: expect.objectContaining({ code: "network-error" }),
@@ -429,7 +435,7 @@ describe("elevenlabs", () => {
     });
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
-      { type: "interim", text: "draft" },
+      { type: "interim", text: "draft", segmentId: expect.any(String) },
     ]);
     expect(socket.closeReason).toBe("aborted");
   });

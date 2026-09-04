@@ -189,6 +189,40 @@ importers:
         specifier: 8.2.2
         version: 8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.9.0)
 
+  examples/simulated:
+    dependencies:
+      '@voiceinput/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@voiceinput/provider':
+        specifier: workspace:*
+        version: link:../../packages/provider
+      '@voiceinput/react':
+        specifier: workspace:*
+        version: link:../../packages/react
+      react:
+        specifier: 19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: 19.2.8
+        version: 19.2.8(react@19.2.8)
+      react-hook-form:
+        specifier: 7.87.0
+        version: 7.87.0(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.18)
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vite:
+        specifier: 8.2.2
+        version: 8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(tsx@4.23.12)(yaml@2.9.0)
+
   packages/core:
     dependencies:
       '@voiceinput/provider':
@@ -3137,6 +3171,12 @@ packages:
     resolution: {integrity: sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ==}
     peerDependencies:
       react: ^19.2.8
+
+  react-hook-form@7.87.0:
+    resolution: {integrity: sha512-zhFzWvLxNHH+8839OnZcUxgMZw88ah2jZWDWvKWgF3Tpbnd0vKL+dlcuU3nZVWESZQjd81EW8K+wU+cYfYAc0w==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^16.8.0 || ^17 || ^18 || ^19
 
   react@19.2.8:
     resolution: {integrity: sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw==}
@@ -6605,6 +6645,10 @@ snapshots:
     dependencies:
       react: 19.2.8
       scheduler: 0.27.0
+
+  react-hook-form@7.87.0(react@19.2.8):
+    dependencies:
+      react: 19.2.8
 
   react@19.2.8: {}
 

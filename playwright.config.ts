@@ -20,7 +20,26 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
+  projects: [
+    { name: "chromium", use: { browserName: "chromium" } },
+    {
+      name: "firefox",
+      use: { browserName: "firefox" },
+      testMatch: "simulated.spec.ts",
+    },
+    {
+      name: "webkit",
+      use: { browserName: "webkit" },
+      testMatch: "simulated.spec.ts",
+    },
+  ],
   webServer: [
+    {
+      command: "pnpm --filter @voiceinput/example-simulated dev",
+      url: "http://127.0.0.1:5174",
+      reuseExistingServer: !process.env["CI"],
+      timeout: 60_000,
+    },
     {
       command: `VOICEINPUT_DEV_AUTH_SECRET=${developmentAuthSecret} pnpm --filter @voiceinput/playground-next dev`,
       url: "http://127.0.0.1:3000",

@@ -25,7 +25,19 @@ export default defineConfig({
     browser: {
       enabled: true,
       headless: true,
-      instances: [{ browser: "chromium" }],
+      instances: [
+        { browser: "chromium" },
+        {
+          browser: "firefox",
+          include: ["src/text-engine.browser.test.ts"],
+          provider: playwright(),
+        },
+        {
+          browser: "webkit",
+          include: ["src/text-engine.browser.test.ts"],
+          provider: playwright(),
+        },
+      ],
       provider: playwright({
         launchOptions: {
           args: [

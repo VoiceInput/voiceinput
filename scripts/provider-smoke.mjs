@@ -13,7 +13,7 @@ const runOptions = readRunOptions(process.argv.slice(2));
 const smokeCases = [
   {
     name: "openai",
-    defaultEndpointing: "provider-default",
+    defaultEndpointing: 500,
     environmentName: "OPENAI_API_KEY",
     create(apiKey, onTokenIssued, options) {
       const handler = createOpenAITokenHandler({
@@ -123,6 +123,7 @@ async function runSmokeCase(smokeCase, options) {
       options.chunkMs,
       options.trailingSilenceMs,
       options.internalSilenceMs,
+      options.repeat,
     );
     const audioStartedAt = performance.now();
     for (const chunk of chunks) {
@@ -142,6 +143,25 @@ async function runSmokeCase(smokeCase, options) {
       .map((part) => part.text)
       .join(" ")
       .trim();
+    const finals = outcome.result.parts.filter((part) => part.type === "final");
+    if (
+      finals.some(
+        (part) => typeof part.segmentId !== "string" || !part.segmentId,
+      )
+    ) {
+      throw new Error("Provider emitted a final without segment identity.");
+    }
+    if (new Set(finals.map((part) => part.segmentId)).size !== finals.length) {
+      throw new Error("Provider emitted a duplicate segment final.");
+    }
+    if (
+      options.repeat > 1 &&
+      finals.filter((part) => part.text.length > 0).length < options.repeat
+    ) {
+      throw new Error(
+        `The repeated fixture did not produce distinct committed segments: ${JSON.stringify(finals)}`,
+      );
+    }
     if (finalTranscript.length === 0) {
       throw new Error("Provider returned no committed final transcript.");
     }
@@ -156,9 +176,13 @@ async function runSmokeCase(smokeCase, options) {
     const result = {
       provider: smokeCase.name,
       model: provider.modelId,
-      reference: "BY HARRY QUILTER M A",
+      reference: Array(options.repeat).fill("BY HARRY QUILTER M A").join(" "),
+      repeat: options.repeat,
       transcript: finalTranscript,
-      wordErrorRate: wordErrorRate("BY HARRY QUILTER M A", finalTranscript),
+      wordErrorRate: wordErrorRate(
+        Array(options.repeat).fill("BY HARRY QUILTER M A").join(" "),
+        finalTranscript,
+      ),
       chunkMs: options.chunkMs,
       audioDurationMs: Math.round(audioDurationMs),
       internalSilenceMs: options.internalSilenceMs,
@@ -182,8 +206,12 @@ async function runSmokeCase(smokeCase, options) {
       interimParts: outcome.result.parts.filter(
         (part) => part.type === "interim",
       ).length,
-      finalParts: outcome.result.parts.filter((part) => part.type === "final")
-        .length,
+      finalParts: outcome.result.parts.filter(
+        (part) => part.type === "final" && part.text.length > 0,
+      ).length,
+      segments: outcome.result.parts
+        .filter((part) => part.type === "final")
+        .map((part) => ({ segmentId: part.segmentId, text: part.text })),
       tokenExpiresIn:
         "expiresIn" in tokenMetadata ? tokenMetadata.expiresIn : null,
     };
@@ -223,6 +251,7 @@ async function createSpeechPcm(
   chunkMs,
   trailingSilenceMs,
   internalSilenceMs,
+  repeat = 1,
 ) {
   const wav = await readFile(
     new URL(
@@ -238,9 +267,12 @@ async function createSpeechPcm(
   );
   const speech = insertSilence(resampled, sampleRate, 1_294, internalSilenceMs);
   const samples = new Int16Array(
-    speech.length + Math.round((sampleRate * trailingSilenceMs) / 1_000),
+    speech.length * repeat +
+      sampleRate * 2 * (repeat - 1) +
+      Math.round((sampleRate * trailingSilenceMs) / 1_000),
   );
-  samples.set(speech);
+  for (let index = 0; index < repeat; index++)
+    samples.set(speech, index * (speech.length + sampleRate * 2));
   const chunkLength = Math.max(1, Math.round((sampleRate * chunkMs) / 1_000));
   const chunks = [];
   for (let offset = 0; offset < samples.length; offset += chunkLength) {

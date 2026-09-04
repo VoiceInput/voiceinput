@@ -44,6 +44,7 @@ export interface FakeVoiceInputProvider {
 }
 
 interface MutableFakeSession {
+  segmentSequence: number;
   callOptions: VoiceInputProviderV1CallOptions;
   audioChunks: Int16Array[];
   finishCallCount: number;
@@ -108,7 +109,13 @@ export function createFakeVoiceInputProvider(
       return;
     }
 
-    session.streamController.enqueue(part);
+    if (part.type === "interim" || part.type === "final") {
+      session.streamController.enqueue({
+        ...part,
+        segmentId: part.segmentId ?? `fake:${session.segmentSequence}`,
+      });
+      if (part.type === "final") session.segmentSequence += 1;
+    } else session.streamController.enqueue(part);
   };
 
   const controller: FakeVoiceInputProviderController = {
@@ -194,6 +201,7 @@ export function createFakeVoiceInputProvider(
       );
 
       const mutableSession: MutableFakeSession = {
+        segmentSequence: 0,
         callOptions,
         audioChunks: [],
         finishCallCount: 0,
@@ -430,7 +438,22 @@ export function createVoiceInputProviderV1ConformanceCases(
         harness.controller.emit({ type: "final", text: "hello" });
         harness.controller.emit({ type: "speech-end" });
         harness.controller.close();
-        const partTypes = (await partsPromise).map((part) => part.type);
+        const parts = await partsPromise;
+        const transcripts = parts.filter(
+          (part) => part.type === "interim" || part.type === "final",
+        );
+        assert(
+          transcripts.every(
+            (part) =>
+              typeof part.segmentId === "string" && part.segmentId.length > 0,
+          ),
+          "Normalized transcript parts must include a non-empty segmentId.",
+        );
+        assert(
+          new Set(transcripts.map((part) => part.segmentId)).size === 1,
+          "Interim revisions and their final must keep the same segmentId.",
+        );
+        const partTypes = parts.map((part) => part.type);
         assert(
           partTypes.join(",") ===
             "speech-start,interim,interim,final,speech-end",
@@ -481,10 +504,12 @@ export function createVoiceInputProviderV1ConformanceCases(
         await finishPromise;
 
         const parts = await partsPromise;
-        const finals = parts.filter((part) => part.type === "final");
+        const finals = parts.filter(
+          (part) => part.type === "final" && part.text.length > 0,
+        );
         assert(finals.length === 1, "Expected one delayed final part.");
         assert(
-          finals[0]?.text === "corrected.",
+          finals[0]?.type === "final" && finals[0].text === "corrected.",
           "finish() must preserve the provider's corrected final text.",
         );
       },
@@ -505,7 +530,7 @@ export function createVoiceInputProviderV1ConformanceCases(
 
         const parts = await partsPromise;
         assert(
-          !parts.some((part) => part.type === "final"),
+          !parts.some((part) => part.type === "final" && part.text.length > 0),
           "Interim text must not be relabeled as final during finish().",
         );
       },

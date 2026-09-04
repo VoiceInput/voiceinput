@@ -19,3 +19,9 @@ output/
 
 .DS_Store
 *.tsbuildinfo
+
+__screenshots__/
+
+.vitest-attachments/
+
+/desktop-versions.json
