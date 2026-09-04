@@ -25,3 +25,17 @@ measurements, not a guarantee for every device or connection. Mobile uses a
 static silver waveform; desktop loads the interactive Three.js sculpture.
 
 The [desktop beta support limits](../support-policy.md) continue to apply.
+
+Final public verification succeeded after npm's publish-time scan completed:
+the exact website installation command installed from the public registry in
+an empty temporary project, and the React hook, OpenAI provider, and server
+token handler exports loaded successfully. Anonymous GitHub access returned
+the public repository.
+
+Cloudflare's production custom-domain binding is enabled for `voiceinput.dev`
+on `voiceinput-website`. Google and Cloudflare public DNS resolve the domain;
+all 19 sitemap URLs return HTTP 200 after redirects, with valid HTTPS. The
+production simulation, undo, and quickstart passed in Chromium with no browser
+errors. The launch machine's local DNS proxy still returned an empty answer at
+verification time, so the production browser check used the publicly resolved
+Cloudflare address while retaining normal hostname and certificate validation.
