@@ -9,7 +9,7 @@ token handler; the React field code stays the same.
 ## Install
 
 ```bash
-npm install @voiceinput/react @voiceinput/openai
+npm install @voiceinput/react@next @voiceinput/openai@next
 ```
 
 Set the key only in the server environment:

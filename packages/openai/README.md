@@ -7,7 +7,7 @@ with a long-lived API key.
 ## Install
 
 ```bash
-npm install @voiceinput/react @voiceinput/openai
+npm install @voiceinput/react@next @voiceinput/openai@next
 ```
 
 ## Browser adapter

@@ -25,3 +25,6 @@ __screenshots__/
 .vitest-attachments/
 
 /desktop-versions.json
+
+.astro/
+.wrangler/

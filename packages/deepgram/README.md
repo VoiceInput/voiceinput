@@ -7,7 +7,7 @@ key for a temporary JWT.
 ## Install
 
 ```bash
-npm install @voiceinput/react @voiceinput/deepgram
+npm install @voiceinput/react@next @voiceinput/deepgram@next
 ```
 
 ## Browser adapter

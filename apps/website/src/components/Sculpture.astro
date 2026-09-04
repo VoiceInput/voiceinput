@@ -1,0 +1,58 @@
+<div class="sculpture" aria-hidden="true" data-sculpture>
+  <svg class="sculpture-fallback" viewBox="0 0 560 500"
+    ><defs
+      ><linearGradient id="silver" x1="0" x2="1"
+        ><stop stop-color="#707883"></stop><stop
+          offset=".28"
+          stop-color="#e5e8ec"></stop><stop offset=".55" stop-color="#9ca4af"
+        ></stop><stop offset=".78" stop-color="#f5f6f8"></stop><stop
+          offset="1"
+          stop-color="#656e7a"></stop></linearGradient
+      ></defs
+    ><g fill="url(#silver)" transform="translate(275 240) rotate(-15)"
+      >{
+        Array.from({ length: 19 }, (_, i) => {
+          const h = 30 + 200 * Math.exp(-(((i - 9) / 4.3) ** 2));
+          return (
+            <rect
+              x={(i - 9) * 21 - 7}
+              y={-h / 2}
+              width="14"
+              height={h}
+              rx="7"
+            />
+          );
+        })
+      }</g
+    ></svg
+  >
+  <div class="sculpture-ground"></div>
+  <div class="sculpture-note">
+    <span class="tiny-wave">▂ ▅ ▇ ▃ ▆ ▂</span><span
+      >From sound to sentence.</span
+    >
+  </div>
+</div>
+<script>
+  const element = document.querySelector<HTMLElement>("[data-sculpture]");
+  if (
+    element &&
+    window.matchMedia("(min-width: 701px)").matches &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    const observer = new IntersectionObserver(
+      async ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        observer.disconnect();
+        try {
+          const { mountSculpture } = await import("../lib/sculpture");
+          mountSculpture(element);
+        } catch {
+          /* Keep the SVG when WebGL is unavailable. */
+        }
+      },
+      { rootMargin: "100px" },
+    );
+    observer.observe(element);
+  }
+</script>

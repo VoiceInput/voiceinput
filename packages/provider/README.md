@@ -7,7 +7,7 @@ authors use it directly.
 ## Install
 
 ```bash
-npm install @voiceinput/provider
+npm install @voiceinput/provider@next
 ```
 
 ## Provider contract

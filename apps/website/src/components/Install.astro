@@ -1,0 +1,11 @@
+---
+const command = "npm install @voiceinput/react@next @voiceinput/openai@next";
+---
+
+<div class="install">
+  <span aria-hidden="true" class="prompt">$</span><code>{command}</code><button
+    type="button"
+    data-copy={command}
+    aria-label="Copy install command">Copy</button
+  >
+</div>

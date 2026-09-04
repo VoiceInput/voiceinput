@@ -1,0 +1,104 @@
+---
+import "@fontsource-variable/manrope";
+import "@fontsource/ibm-plex-mono/400.css";
+import "../styles/global.css";
+interface Props {
+  title?: string;
+  description?: string;
+}
+const {
+  title = "VoiceInput — Voice input. Right where you type.",
+  description = "Add streaming voice input to your React fields. Keep your cursor, your edits, and your choice of OpenAI, ElevenLabs, or Deepgram. Open-source desktop beta.",
+} = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content="https://voiceinput.dev/social.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="header wrap">
+      <a href="/" class="wordmark" aria-label="VoiceInput beta home"
+        ><svg viewBox="0 0 30 30" width="27" height="27" aria-hidden="true"
+          ><g stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+            ><path d="M4 12v6M11 7v16M18 3v24M25 10v10"></path></g
+          ></svg
+        >VoiceInput<span class="beta">beta</span></a
+      >
+      <nav aria-label="Main navigation">
+        <a href="/docs/quickstart">Docs</a><a href="/#demo">Demo</a><a
+          class="github-link"
+          href="https://github.com/VoiceInput/voiceinput"
+          >GitHub <svg
+            viewBox="0 0 16 16"
+            width="13"
+            height="13"
+            fill="none"
+            aria-hidden="true"
+            ><path
+              d="M4 12 12 4M4 4h8v8"
+              stroke="currentColor"
+              stroke-width="1.4"></path></svg
+          ></a
+        >
+      </nav>
+    </header>
+    <slot />
+    <footer class="footer wrap">
+      <a class="wordmark" href="/">VoiceInput</a><p>
+        A little less typing. A little more flow.
+      </p><div>
+        <a href="/docs/support-policy">Desktop beta</a><a
+          href="https://github.com/VoiceInput/voiceinput/blob/main/LICENSE"
+          >MIT license</a
+        ><a href="https://github.com/VoiceInput/voiceinput">GitHub</a>
+      </div>
+    </footer>
+    <script>
+      document.addEventListener("click", async (event) => {
+        const button = (event.target as Element).closest<HTMLButtonElement>(
+          "[data-copy]",
+        );
+        if (!button) return;
+        const text =
+          button.dataset.copy ||
+          button.parentElement?.querySelector("code")?.textContent ||
+          "";
+        try {
+          await navigator.clipboard.writeText(text);
+          const old = button.textContent;
+          button.textContent = "Copied";
+          setTimeout(() => {
+            button.textContent = old;
+          }, 1800);
+        } catch {
+          button.textContent = "Select and copy";
+        }
+      });
+      document.querySelectorAll(".prose pre").forEach((pre) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.copy = "";
+        button.className = "code-copy";
+        button.textContent = "Copy";
+        button.setAttribute("aria-label", "Copy code");
+        pre.append(button);
+      });
+    </script>
+  </body>
+</html>
