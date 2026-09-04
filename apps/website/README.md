@@ -10,7 +10,7 @@ pnpm --filter @voiceinput/website build
 pnpm --filter @voiceinput/website typecheck
 pnpm --filter @voiceinput/website test:e2e
 pnpm --filter @voiceinput/website deploy:preview
-pnpm --filter @voiceinput/website deploy
+pnpm --filter @voiceinput/website run deploy
 ```
 
 The final command deploys the production custom domain `voiceinput.dev`.
