@@ -1,0 +1,194 @@
+---
+import Base from "../layouts/Base.astro";
+import Install from "../components/Install.astro";
+import Sculpture from "../components/Sculpture.astro";
+import Demo from "../components/Demo";
+import { Code } from "astro:components";
+const code = `const provider = openai({
+  tokenEndpoint: "/api/voice-token",
+});
+
+const { targetRef, getTriggerProps } = useVoiceInput({
+  provider,
+  value,
+  onValueChange: setValue,
+});
+
+<textarea ref={targetRef} value={value} onChange={onChange} />
+<button {...getTriggerProps()}>Speak</button>`;
+---
+
+<Base>
+  <main id="main">
+    <section class="hero wrap">
+      <div class="hero-copy">
+        <a class="release-note" href="/docs/support-policy"
+          ><span></span>Open-source. Ready for your next input.<svg
+            viewBox="0 0 16 16"
+            width="14"
+            height="14"
+            fill="none"
+            aria-hidden="true"
+            ><path d="m6 4 4 4-4 4" stroke="currentColor" stroke-width="1.4"
+            ></path></svg
+          ></a
+        ><h1>
+          Voice input.<br />Right where<br />you type<span
+            class="headline-period">.</span
+          >
+        </h1><p class="hero-description">
+          Turn speech into text in the fields you already have. Keep your
+          cursor, your edits, and your choice of provider.
+        </p><div class="hero-actions">
+          <a href="/docs/quickstart" class="button primary"
+            >Start building<svg
+              viewBox="0 0 20 20"
+              width="17"
+              height="17"
+              fill="none"
+              aria-hidden="true"
+              ><path
+                d="M4 10h12m-5-5 5 5-5 5"
+                stroke="currentColor"
+                stroke-width="1.5"></path></svg
+            ></a
+          ><a href="#demo" class="text-link">Try the interaction</a>
+        </div><p class="hero-meta">Built for React. Headless by default.</p>
+      </div>
+      <Sculpture />
+      <div class="hero-install">
+        <Install /><span>One hook. Your interface.</span>
+      </div>
+    </section>
+    <section class="providers wrap" aria-label="Supported providers">
+      <p>Your provider. Same familiar API.</p><div>
+        <a href="/docs/providers/openai"
+          ><span class="provider-symbol openai-symbol">◎</span>OpenAI</a
+        ><a href="/docs/providers/elevenlabs"
+          ><span class="provider-symbol eleven-symbol">Ⅱ</span>ElevenLabs</a
+        ><a href="/docs/providers/deepgram"
+          ><span class="provider-symbol deepgram-symbol">D</span>deepgram</a
+        >
+      </div>
+    </section>
+    <section class="demo-section wrap" id="demo">
+      <div class="section-intro">
+        <div><h2>Speaking is natural.<br />Editing should be, too.</h2></div><p>
+          Place your cursor. Start the demo. Change your mind mid-sentence. It’s
+          still your text field.
+        </p>
+      </div><div class="demo-stage">
+        <div class="demo-margin-note">
+          <span class="note-line"></span>Go ahead.<br />Move the cursor.
+        </div><Demo client:visible /><div class="demo-caption">
+          <span>Speech meets your existing input.</span><span
+            >Powered by @voiceinput/react</span
+          >
+        </div>
+      </div>
+    </section>
+    <section class="integration wrap" id="build">
+      <div class="integration-copy">
+        <span class="small-context">Fits right in</span><h2>
+          Your field. <br />Now with voice.
+        </h2><p>
+          Start with a hook. Keep the components, styling, and form logic you’ve
+          already built.
+        </p><p>
+          Prefer a quick start? Use the optional accessible controls, then make
+          them yours.
+        </p><a class="text-link underlined" href="/docs/quickstart"
+          >Read the quickstart <span aria-hidden="true">↗</span></a
+        >
+      </div><div class="code-panel">
+        <div class="code-heading">
+          <span><span class="code-dot"></span>Composer.tsx</span><a
+            href="/docs/quickstart">Full example ↗</a
+          >
+        </div><Code
+          code={code}
+          lang="tsx"
+          theme="github-light-high-contrast"
+        /><p class="code-footnote">
+          Pair with an authenticated server token route.
+        </p>
+      </div>
+    </section>
+    <section class="benefits wrap">
+      <article>
+        <svg
+          viewBox="0 0 32 32"
+          width="32"
+          height="32"
+          fill="none"
+          aria-hidden="true"
+          ><path
+            d="M10 5h12M16 5v22M10 27h12M6 13v6M26 11v10"
+            stroke="currentColor"
+            stroke-width="1.5"></path></svg
+        ><h3>The cursor stays yours.</h3><p>
+          Selections, manual edits, and undo stay part of the flow. Speech
+          belongs where you’re working.
+        </p>
+      </article><article>
+        <svg
+          viewBox="0 0 32 32"
+          width="32"
+          height="32"
+          fill="none"
+          aria-hidden="true"
+          ><path
+            d="M6 9h20M6 23h20M11 5v8M21 19v8"
+            stroke="currentColor"
+            stroke-width="1.5"></path><circle
+            cx="11"
+            cy="9"
+            r="3"
+            fill="white"
+            stroke="currentColor"></circle><circle
+            cx="21"
+            cy="23"
+            r="3"
+            fill="white"
+            stroke="currentColor"></circle></svg
+        ><h3>Switch providers, not UI.</h3><p>
+          OpenAI, ElevenLabs, or Deepgram. One editing experience, with provider
+          differences documented.
+        </p>
+      </article><article>
+        <svg
+          viewBox="0 0 32 32"
+          width="32"
+          height="32"
+          fill="none"
+          aria-hidden="true"
+          ><path
+            d="m16 3 10 4v8c0 7-10 14-10 14S6 22 6 15V7l10-4Z"
+            stroke="currentColor"
+            stroke-width="1.5"></path><path
+            d="m11 15 3 3 7-7"
+            stroke="currentColor"
+            stroke-width="1.5"></path></svg
+        ><h3>A direct path for audio.</h3><p>
+          Keys stay on your server. Audio goes to your provider. No VoiceInput
+          proxy or package telemetry.
+        </p>
+      </article>
+    </section>
+    <section class="beta-note wrap">
+      <span class="status-indicator"></span><p>
+        <strong>A considered desktop beta.</strong> React 18 and 19. Desktop editing
+        tested across Chromium, Firefox, and WebKit.
+      </p><a href="/docs/support-policy">Read the support policy ↗</a>
+    </section>
+    <section class="final-cta wrap">
+      <div>
+        <h2>Make room for voice.</h2><p>
+          A small addition. A more natural way to write.
+        </p>
+      </div><a class="button primary" href="/docs/quickstart"
+        >Start building <span aria-hidden="true">↗</span></a
+      >
+    </section>
+  </main>
+</Base>

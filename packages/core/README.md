@@ -7,7 +7,7 @@ these primitives.
 ## Install
 
 ```bash
-npm install @voiceinput/core
+npm install @voiceinput/core@next
 ```
 
 ## Session

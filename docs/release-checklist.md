@@ -93,3 +93,20 @@ The workflow reruns the gates, restores the exact hashed tarballs from the
 approved CI artifact, scans that set and the candidate workflow logs, prints the
 complete immutable package/version/tag plan, and publishes those files without
 rebuilding them. Do not publish directly from a developer machine.
+
+## First-publication bootstrap
+
+The initial public launch has an owner-authorized exception to the CI-only
+publication rule. npm trusted publishing requires each package to exist first.
+For `0.1.0-beta.1` only, an authenticated owner may publish the exact six hashed
+CI artifact tarballs, in the dependency order printed by `pnpm release:plan`,
+with `--access public --tag next`. Run the plan against the successful main
+candidate and scan the restored artifacts and completed workflow logs first. Do
+not repack or publish workspace directories. Confirm each registry integrity
+matches its manifest SHA-512 before proceeding to the next package.
+
+After this one-time bootstrap, configure each package to trust
+`VoiceInput/voiceinput`, workflow `publish.yml`, environment `npm`, with publish
+permission. Require an owner review on the `npm` GitHub environment, retaining
+its `main` restriction. All later versions use the existing publication
+workflow.

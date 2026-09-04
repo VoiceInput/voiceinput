@@ -9,3 +9,6 @@ test-results/
 apps/playground-next/AGENTS.md
 pnpm-lock.yaml
 *.tgz
+
+.astro/
+.wrangler/

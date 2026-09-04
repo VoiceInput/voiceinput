@@ -8,7 +8,7 @@
     "transcription",
     "elevenlabs"
   ],
-  "homepage": "https://github.com/VoiceInput/voiceinput#readme",
+  "homepage": "https://voiceinput.dev/docs/providers/elevenlabs",
   "bugs": {
     "url": "https://github.com/VoiceInput/voiceinput/issues"
   },

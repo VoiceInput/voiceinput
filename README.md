@@ -25,7 +25,7 @@ the other providers; only the adapter and server token handler change.
 ### 1. Install
 
 ```bash
-npm install @voiceinput/react @voiceinput/openai
+npm install @voiceinput/react@next @voiceinput/openai@next
 ```
 
 ### 2. Add an authenticated server route

@@ -7,7 +7,7 @@ long-lived API key.
 ## Install
 
 ```bash
-npm install @voiceinput/react @voiceinput/elevenlabs
+npm install @voiceinput/react@next @voiceinput/elevenlabs@next
 ```
 
 ## Browser adapter

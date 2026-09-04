@@ -10,7 +10,7 @@ React 18.2+ and React 19 are supported.
 Install this package with one adapter:
 
 ```bash
-npm install @voiceinput/react @voiceinput/openai
+npm install @voiceinput/react@next @voiceinput/openai@next
 ```
 
 ## Shared provider configuration

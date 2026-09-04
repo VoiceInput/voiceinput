@@ -12,13 +12,13 @@ The example uses Deepgram.
 Browser application:
 
 ```bash
-npm install @voiceinput/react @voiceinput/deepgram
+npm install @voiceinput/react@next @voiceinput/deepgram@next
 ```
 
 API application:
 
 ```bash
-npm install @voiceinput/deepgram hono @hono/node-server
+npm install @voiceinput/deepgram@next hono @hono/node-server
 ```
 
 Keep `DEEPGRAM_API_KEY` only in the API process environment.
