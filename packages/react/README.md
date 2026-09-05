@@ -1,7 +1,9 @@
 # `@voiceinput/react`
 
-Headless React voice input plus optional accessible controls. The package wraps
-`@voiceinput/core`; it does not implement a separate React transcription path.
+Add dictation to your own React field with `useVoiceInput`, or use the optional
+controls. The hook manages recording and text insertion while your application
+keeps its state, styling, and submit behavior. Start with the
+[quickstart](../../docs/quickstart.md) for server setup.
 
 React 18.2+ and React 19 are supported.
 
@@ -9,46 +11,35 @@ React 18.2+ and React 19 are supported.
 
 Install this package with one adapter:
 
+**npm**
+
 ```bash
 npm install @voiceinput/react@next @voiceinput/openai@next
 ```
 
-## Shared provider configuration
+**pnpm**
 
-```tsx
-"use client";
-
-import { openai } from "@voiceinput/openai";
-import { VoiceInputProvider } from "@voiceinput/react";
-
-const provider = openai({ tokenEndpoint: "/api/voice-token" });
-
-export function Providers({ children }: { children: React.ReactNode }) {
-  return (
-    <VoiceInputProvider provider={provider}>{children}</VoiceInputProvider>
-  );
-}
+```bash
+pnpm add @voiceinput/react@next @voiceinput/openai@next
 ```
 
-Create provider objects once at module scope, as above, or memoize them.
-Provider and recording options are sampled at recording start. Changing provider
-identity during a render does not interrupt a running session; the next start
-uses the new configuration.
-
-`VoiceInputProvider` accepts `provider`, an optional custom `audioSource`, and
-`children`. It coordinates descendants so only one microphone session is active
-in that context. Context is optional: pass `provider` and optionally
-`audioSource` directly to `useVoiceInput` or a component's `voice` prop.
-
 ## Headless hook
+
+Use this hook when your app already has a field. Keep the native `onChange`
+handler for typing and pass the same state to the hook. No root provider is
+required when you pass `provider` directly.
 
 ```tsx
 import { useVoiceInput } from "@voiceinput/react";
 import { useState } from "react";
+import { openai } from "@voiceinput/openai";
+
+const provider = openai({ tokenEndpoint: "/api/voice-token" });
 
 export function Composer() {
   const [value, setValue] = useState("");
   const voice = useVoiceInput({
+    provider,
     value,
     onValueChange: setValue,
     language: "en-CA",
@@ -56,15 +47,17 @@ export function Composer() {
     activationMode: "toggle",
     interimBehavior: "inline",
   });
+  const active = voice.status !== "idle" && voice.status !== "error";
 
   return (
     <>
       <textarea
+        aria-label="Message"
         ref={voice.targetRef}
         value={value}
         onChange={(event) => setValue(event.currentTarget.value)}
       />
-      <button {...voice.getTriggerProps()}>Speak</button>
+      <button {...voice.getTriggerProps()}>{active ? "Stop" : "Speak"}</button>
     </>
   );
 }
@@ -110,6 +103,7 @@ dispatches a bubbling native `input` event.
 | `transformTimeoutMs`      | Transform deadline; default 10 seconds                            |
 | `activationMode`          | `"toggle"` (default) or `"hold"`                                  |
 | `disabled`                | Prevent activation and stop active recording                      |
+| `onTextLimit`             | Called when a voice insertion reaches the field’s `maxLength`     |
 | `onEvent`                 | Receive every normalized session event                            |
 | `onStatusChange`          | Receive current and previous status                               |
 | `onInterimTranscript`     | Current raw interim provider part                                 |
@@ -138,7 +132,42 @@ Transcript names are intentionally distinct: `onInterimTranscript` and
 `finalTranscript`, `onFinalTranscript`, and `onTranscriptChange` expose
 cumulative normalized state.
 
+## Shared provider configuration
+
+Use this optional context when multiple fields should share configuration and
+coordinate microphone access. Fields inside it can omit their `provider` option.
+
+```tsx
+"use client";
+
+import { openai } from "@voiceinput/openai";
+import { VoiceInputProvider } from "@voiceinput/react";
+
+const provider = openai({ tokenEndpoint: "/api/voice-token" });
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <VoiceInputProvider provider={provider}>{children}</VoiceInputProvider>
+  );
+}
+```
+
+Create provider objects once at module scope, as above, or memoize them.
+Provider and recording options are sampled at recording start. Changing provider
+identity during a render does not interrupt a running session; the next start
+uses the new configuration.
+
+`VoiceInputProvider` accepts `provider`, an optional custom `audioSource`, and
+`children`. It coordinates descendants so only one microphone session is active
+in that context. Context is optional: pass `provider` and optionally
+`audioSource` directly to `useVoiceInput` or a component's `voice` prop.
+
 ## Optional controls
+
+The examples below assume the shared provider context above. Without context,
+pass a provider under each control’s `voice` prop. Import each control from
+`@voiceinput/react`. Controlled wrappers need only `value` and `onValueChange`;
+that callback covers typing and dictation.
 
 ### `VoiceButton`
 

@@ -1,13 +1,25 @@
 # `@voiceinput/deepgram`
 
-Deepgram live transcription adapter for VoiceInput. The browser-safe root opens
-the realtime stream; `@voiceinput/deepgram/server` exchanges a long-lived API
-key for a temporary JWT.
+Use Deepgram to transcribe audio from your React fields. You need a provider API
+key and an authenticated server route. The browser uses temporary credentials;
+your long-lived key stays on the server.
+
+For a full application example, follow the
+[quickstart](../../docs/quickstart.md) or an
+[integration guide](../../docs/overview.md#choose-an-integration).
 
 ## Install
 
+**npm**
+
 ```bash
 npm install @voiceinput/react@next @voiceinput/deepgram@next
+```
+
+**pnpm**
+
+```bash
+pnpm add @voiceinput/react@next @voiceinput/deepgram@next
 ```
 
 ## Browser adapter
@@ -17,41 +29,17 @@ import { deepgram } from "@voiceinput/deepgram";
 
 const provider = deepgram({
   tokenEndpoint: "/api/voice-token",
-  smartFormat: true,
-  punctuate: true,
 });
 ```
 
-### Defaults and shared-option mapping
-
-- Model: `nova-3` (`DEEPGRAM_DEFAULT_MODEL`)
-- Audio: mono linear PCM16 at 16 kHz
-- Omitted language: `multi` for `nova-2`, `nova-2-general`, `nova-3`, and
-  `nova-3-general`; other models require an explicit BCP 47 language
-- General Nova-2 and Nova-3 preserve supported regional English tags and
-  normalize unsupported tags such as `en-CA` to `en`; specialized models keep
-  their regional language tags exact
-- `vocabulary`: Deepgram key terms, supported only by Nova-3 model IDs
-- `endpointing`: provider default when omitted, disabled when `false`, or the
-  supplied positive integer silence threshold
-- `smartFormat` and `punctuate`: both default to `true`
-
-Invalid or unsupported settings fail before microphone permission with distinct
-error codes.
-
-### `DeepgramVoiceInputProviderOptions`
-
-| Option                              | Purpose                                                    |
-| ----------------------------------- | ---------------------------------------------------------- |
-| `tokenEndpoint`                     | Required same-origin endpoint that returns a temporary JWT |
-| `model`                             | Model ID; default `nova-3`                                 |
-| `smartFormat`                       | Deepgram smart formatting; default `true`                  |
-| `punctuate`                         | Punctuation; default `true`                                |
-| `profanityFilter`                   | Provider profanity filter                                  |
-| `numerals`                          | Provider numeral conversion                                |
-| `fetch`, `webSocket`, `realtimeUrl` | Transport/endpoint overrides                               |
-
 ## Server token handler
+
+Keep this code in a server route. `authenticate(request)` below represents your
+existing authentication function, not a VoiceInput export. It must validate the
+request and return a user or `null`. For cookie sessions, also validate the
+configured origin. Copy the complete route from the
+[quickstart](../../docs/quickstart.md#3-create-the-token-route) or use an
+[authentication recipe](../../docs/authentication-recipes.md).
 
 ```ts
 import { createDeepgramTokenHandler } from "@voiceinput/deepgram/server";
@@ -96,6 +84,42 @@ projects/keys for production and testing. See Deepgram's official
 
 `DeepgramTokenHandlerContext` contains `request`, `subject`, and `model`.
 `DeepgramTokenIssuedMetadata` also contains `expiresIn`.
+
+## Transcription options
+
+Start with the defaults. `language` hints at the spoken language, `vocabulary`
+helps recognize specific terms, and `endpointing` controls when a pause ends a
+phrase. Set these shared options on the React hook or under a control’s `voice`
+prop. Provider-only options belong in the browser factory.
+
+### Defaults and shared-option mapping
+
+- Model: `nova-3` (`DEEPGRAM_DEFAULT_MODEL`)
+- Audio: mono linear PCM16 at 16 kHz
+- Omitted language: `multi` for `nova-2`, `nova-2-general`, `nova-3`, and
+  `nova-3-general`; other models require an explicit BCP 47 language
+- General Nova-2 and Nova-3 preserve supported regional English tags and
+  normalize unsupported tags such as `en-CA` to `en`; specialized models keep
+  their regional language tags exact
+- `vocabulary`: Deepgram key terms, supported only by Nova-3 model IDs
+- `endpointing`: provider default when omitted, disabled when `false`, or the
+  supplied positive integer silence threshold
+- `smartFormat` and `punctuate`: both default to `true`
+
+Invalid or unsupported settings fail before microphone permission with distinct
+error codes.
+
+### `DeepgramVoiceInputProviderOptions`
+
+| Option                              | Purpose                                                    |
+| ----------------------------------- | ---------------------------------------------------------- |
+| `tokenEndpoint`                     | Required same-origin endpoint that returns a temporary JWT |
+| `model`                             | Model ID; default `nova-3`                                 |
+| `smartFormat`                       | Deepgram smart formatting; default `true`                  |
+| `punctuate`                         | Punctuation; default `true`                                |
+| `profanityFilter`                   | Provider profanity filter                                  |
+| `numerals`                          | Provider numeral conversion                                |
+| `fetch`, `webSocket`, `realtimeUrl` | Transport/endpoint overrides                               |
 
 ## Public API
 

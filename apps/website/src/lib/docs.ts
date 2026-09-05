@@ -1,149 +1,163 @@
-import { readFile } from "node:fs/promises";
-import { resolve, dirname, relative } from "node:path";
-import { createMarkdownProcessor } from "@astrojs/markdown-remark";
-
 export const docs = [
+  {
+    slug: "overview",
+    title: "Overview",
+    group: "Get started",
+    source: "docs/overview.md",
+    description:
+      "Add dictation to React inputs and textareas. Requirements, supported fields, and how VoiceInput works.",
+  },
   {
     slug: "quickstart",
     title: "Quickstart",
     group: "Get started",
-    source: "README.md",
+    source: "docs/quickstart.md",
+    description:
+      "Install VoiceInput with npm or pnpm, create a secure token route, and add dictation to a React field.",
   },
   {
     slug: "golden-paths",
     title: "Example projects",
     group: "Get started",
     source: "docs/golden-paths.md",
+    description:
+      "Run a simulated demo or start from a Next.js or Vite example with authentication and rate limits.",
   },
   {
-    slug: "react",
-    title: "React API",
-    group: "Reference",
-    source: "packages/react/README.md",
+    slug: "nextjs",
+    title: "Next.js",
+    group: "Integrations",
+    source: "docs/nextjs.md",
+    description:
+      "Add VoiceInput to a Next.js App Router application with a server token route and a client-side field.",
   },
   {
-    slug: "core",
-    title: "Core API",
-    group: "Reference",
-    source: "packages/core/README.md",
+    slug: "vite-hono",
+    title: "Vite + Hono",
+    group: "Integrations",
+    source: "docs/vite-hono.md",
+    description:
+      "Connect a Vite React app to a Hono token API, with setup commands and a development proxy.",
   },
   {
-    slug: "provider",
-    title: "Provider contract",
-    group: "Reference",
-    source: "packages/provider/README.md",
+    slug: "express",
+    title: "Express",
+    group: "Integrations",
+    source: "docs/express.md",
+    description:
+      "Use an existing Express server to authenticate requests and issue temporary voice credentials.",
+  },
+  {
+    slug: "form-integration",
+    title: "Existing fields and forms",
+    group: "Integrations",
+    source: "docs/form-integration.md",
+    description:
+      "Add dictation to a custom textarea or React Hook Form without changing your form's submit flow.",
+  },
+  {
+    slug: "providers",
+    title: "Choose a provider",
+    group: "Providers",
+    source: "docs/providers.md",
+    description:
+      "Choose OpenAI, ElevenLabs, or Deepgram and understand which configuration changes between providers.",
   },
   {
     slug: "providers/openai",
     title: "OpenAI",
     group: "Providers",
     source: "packages/openai/README.md",
+    description:
+      "Set up OpenAI transcription, create temporary credentials, and configure language and phrase detection.",
   },
   {
     slug: "providers/elevenlabs",
     title: "ElevenLabs",
     group: "Providers",
     source: "packages/elevenlabs/README.md",
+    description:
+      "Set up ElevenLabs Realtime Scribe with single-use tokens and configure transcription options.",
   },
   {
     slug: "providers/deepgram",
     title: "Deepgram",
     group: "Providers",
     source: "packages/deepgram/README.md",
-  },
-  {
-    slug: "nextjs",
-    title: "Next.js",
-    group: "Integration",
-    source: "docs/nextjs.md",
-  },
-  {
-    slug: "vite-hono",
-    title: "Vite + Hono",
-    group: "Integration",
-    source: "docs/vite-hono.md",
-  },
-  {
-    slug: "express",
-    title: "Express",
-    group: "Integration",
-    source: "docs/express.md",
-  },
-  {
-    slug: "form-integration",
-    title: "Composers and forms",
-    group: "Integration",
-    source: "docs/form-integration.md",
-  },
-  {
-    slug: "authentication-recipes",
-    title: "Authentication",
-    group: "Integration",
-    source: "docs/authentication-recipes.md",
+    description:
+      "Set up Deepgram transcription with temporary tokens, language selection, and formatting options.",
   },
   {
     slug: "editing-contract",
     title: "Editing and undo",
-    group: "Guides",
+    group: "Common tasks",
     source: "docs/editing-contract.md",
+    description:
+      "Learn how dictation interacts with cursor movement, manual edits, undo, reset, and text limits.",
   },
   {
-    slug: "custom-provider",
-    title: "Custom providers",
-    group: "Guides",
-    source: "docs/custom-provider.md",
-  },
-  {
-    slug: "content-security-policy",
-    title: "Content security policy",
-    group: "Guides",
-    source: "docs/content-security-policy.md",
+    slug: "authentication-recipes",
+    title: "Authentication and rate limits",
+    group: "Common tasks",
+    source: "docs/authentication-recipes.md",
+    description:
+      "Connect Clerk, Auth.js, Supabase, or Better Auth to your token route and add shared rate limits.",
   },
   {
     slug: "troubleshooting",
     title: "Troubleshooting",
-    group: "Guides",
+    group: "Common tasks",
     source: "docs/troubleshooting.md",
+    description:
+      "Fix microphone permissions, disabled controls, authentication errors, and transcription connection failures.",
+  },
+  {
+    slug: "react",
+    title: "React API",
+    group: "Reference",
+    source: "packages/react/README.md",
+    description:
+      "Reference for useVoiceInput, its options and results, optional controls, shared configuration, and styling.",
+  },
+  {
+    slug: "core",
+    title: "Core API",
+    group: "Advanced",
+    source: "packages/core/README.md",
+    description:
+      "Framework-independent APIs for voice sessions, browser audio, text insertion, and editing history.",
+  },
+  {
+    slug: "provider",
+    title: "Provider contract",
+    group: "Advanced",
+    source: "packages/provider/README.md",
+    description:
+      "The streaming adapter contract, transcript segments, error codes, and provider test utilities.",
+  },
+  {
+    slug: "custom-provider",
+    title: "Custom providers",
+    group: "Advanced",
+    source: "docs/custom-provider.md",
+    description:
+      "Build a transcription adapter with option validation, streaming events, cancellation, and conformance tests.",
+  },
+  {
+    slug: "content-security-policy",
+    title: "Content security policy",
+    group: "Advanced",
+    source: "docs/content-security-policy.md",
+    description:
+      "Self-host the audio processor and configure provider connections for a strict Content Security Policy.",
   },
   {
     slug: "support-policy",
-    title: "Support policy",
-    group: "Guides",
+    title: "Browser and runtime support",
+    group: "Project",
     source: "docs/support-policy.md",
+    description:
+      "React, Node.js, TypeScript, and browser requirements, with the verified scope of the desktop beta.",
   },
 ];
 export const groups = [...new Set(docs.map((doc) => doc.group))];
-const root = resolve(process.cwd(), "../..");
-export async function renderDoc(doc: (typeof docs)[number]) {
-  let markdown = await readFile(resolve(root, doc.source), "utf8");
-  if (doc.slug === "quickstart") {
-    const start = markdown.indexOf("## Quickstart");
-    const end = markdown.indexOf("## Try it without credentials");
-    markdown = markdown.slice(start, end).replace(/^## Quickstart\n/, "");
-    markdown = markdown.replace(/^### /gm, "## ");
-    markdown =
-      "Add streaming speech to an existing React field. This desktop beta supports React 18 and 19.\n\n" +
-      markdown;
-  } else markdown = markdown.replace(/^# .+\n/, "");
-  // Rewrite repository-relative links to public docs or the exact GitHub file.
-  markdown = markdown.replace(/\]\(([^\s)]+)\)/g, (full, href: string) => {
-    if (/^(https?:|mailto:|#)/.test(href)) return full;
-    const [path, hash] = href.split("#");
-    const file = relative(
-      root,
-      resolve(root, dirname(doc.source), path),
-    ).replace(/\/$/, "");
-    const linked = docs.find(
-      (item) => item.source === file || item.source === `${file}/README.md`,
-    );
-    const target = linked
-      ? `/docs/${linked.slug}`
-      : `https://github.com/VoiceInput/voiceinput/${/\.[a-z]+$/i.test(file) ? "blob" : "tree"}/main/${file}`;
-    return `](${target}${hash ? `#${hash}` : ""})`;
-  });
-  const processor = await createMarkdownProcessor({
-    shikiConfig: { theme: "github-light-high-contrast" },
-    gfm: true,
-  });
-  return processor.render(markdown);
-}

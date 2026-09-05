@@ -1,8 +1,37 @@
-# Authentication and durable quotas
+# Authentication and rate limits
 
-Every provider token handler requires `authorize`. The callback must validate
-the application user from the incoming request and return a stable, non-secret
-subject. Returning `null` prevents credential minting.
+Your token route must check who is asking for a credential. The required
+`authorize` callback validates the signed-in user and returns their stable user
+ID as `subject`. Returning `null` rejects the request without issuing a token.
+
+These recipes assume your chosen sign-in library is already configured. The
+`@/auth`, `@/lib/auth`, and Supabase server-client imports refer to your app’s
+existing auth setup; they are not VoiceInput exports. For a complete example,
+start with the [quickstart](quickstart.md) or
+[example projects](golden-paths.md).
+
+## Where the callbacks go
+
+Choose one auth recipe below and add its `authorize` callback to your provider
+handler. Add a `rateLimit` callback if you want to limit credential requests.
+This is the surrounding route structure; the auth helper is supplied by your
+app:
+
+```ts
+import { createOpenAITokenHandler } from "@voiceinput/openai/server";
+import { authorize } from "./voice-auth";
+
+export const POST = createOpenAITokenHandler({
+  apiKey: process.env.OPENAI_API_KEY!,
+  authorize,
+});
+```
+
+For that structure, export the chosen callback as `authorize` from
+`voice-auth.ts`. Alternatively, paste it directly into the handler options. The
+snippets below show the callback form.
+
+## Check the browser origin
 
 For cookie sessions, also compare `Origin` to a configured value and reject
 `Sec-Fetch-Site: cross-site`. Do not derive the trusted origin from request host
@@ -18,6 +47,10 @@ function trustedBrowserRequest(request: Request) {
   );
 }
 ```
+
+Include `trustedBrowserRequest` in the module containing your auth callback. Set
+`APP_ORIGIN` to your configured app URL, including its local development port.
+It must come from your server environment.
 
 Use one of these callbacks with `createOpenAITokenHandler`,
 `createElevenLabsTokenHandler`, or `createDeepgramTokenHandler`.
@@ -87,6 +120,22 @@ headers so the library can validate its session cookie or bearer token.
 
 ## Durable Upstash quota
 
+A shared store keeps limits consistent across server processes. Create an
+Upstash Redis database and add its `UPSTASH_REDIS_REST_URL` and
+`UPSTASH_REDIS_REST_TOKEN` values to your server environment. Install:
+
+**npm**
+
+```bash
+npm install @upstash/ratelimit @upstash/redis
+```
+
+**pnpm**
+
+```bash
+pnpm add @upstash/ratelimit @upstash/redis
+```
+
 Create the limiter once, outside the request callback, so warm serverless
 instances can reuse it. The subject namespace prevents collisions with other
 application quotas.
@@ -116,5 +165,6 @@ rateLimit: async ({ subject }) => {
 ```
 
 The handler turns the denied result into `429` and a `Retry-After` header.
-Choose limits based on credential cost and abuse risk, and decide explicitly
-whether a quota-store outage should fail closed.
+Choose limits that fit your app’s expected usage. If the quota store is
+unavailable, reject the request rather than issuing unlimited credentials. This
+example propagates the store error so the handler rejects the request.

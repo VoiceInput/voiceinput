@@ -1,13 +1,22 @@
 # `@voiceinput/provider`
 
-Versioned contracts and test utilities for VoiceInput adapters. Application
-authors normally receive this package through `@voiceinput/react`; adapter
-authors use it directly.
+Use this package when writing a transcription adapter. It defines the audio and
+transcript interface between your provider and VoiceInput, plus utilities for
+testing that interface. React application developers usually need only
+`@voiceinput/react` and an [existing provider](../../docs/providers.md).
 
 ## Install
 
+**npm**
+
 ```bash
 npm install @voiceinput/provider@next
+```
+
+**pnpm**
+
+```bash
+pnpm add @voiceinput/provider@next
 ```
 
 ## Provider contract
@@ -57,12 +66,16 @@ silently ignore or approximate it.
 
 ```ts
 type VoiceInputProviderV1StreamPart =
-  | { type: "interim"; text: string }
-  | { type: "final"; text: string }
+  | { type: "interim"; text: string; segmentId?: string }
+  | { type: "final"; text: string; segmentId?: string }
   | { type: "speech-start" }
   | { type: "speech-end" }
   | { type: "error"; error: VoiceInputError };
 ```
+
+Give each phrase a stable `segmentId` and keep it on all revisions of that
+phrase. It is optional for compatibility with older adapters; new adapters
+should always supply it. See [Segment identity](#segment-identity).
 
 ## Errors
 
@@ -163,7 +176,7 @@ Main entry point:
 ## Security boundary
 
 This package contains no credential handling. Official adapters expose browser
-code from their root and token minting from a separate `/server` export. Custom
+code from their root and token creation from a separate `/server` export. Custom
 adapters should preserve the same boundary: long-lived credentials must never
 enter browser code, payloads, or logs.
 

@@ -1,9 +1,24 @@
-# Editing contract
+# Editing and undo
 
 VoiceInput enhances native text, search, URL and telephone inputs and textareas.
 The application owns the field value; provider transcripts are a separate record
 of what was recognized. Suppressed or length-limited text remains available in
 transcript state and callbacks.
+
+## What to expect
+
+| Action                              | Result                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------- |
+| Place the cursor and speak          | Text is inserted at that position                                         |
+| Select text and speak               | Dictation replaces the selection                                          |
+| Edit a phrase while it is appearing | Your correction stays; later revisions of that phrase do not overwrite it |
+| Move the cursor during dictation    | The next phrase is inserted at the new position                           |
+| Undo                                | The last typing group or dictated phrase is reverted                      |
+| Reset the form                      | Recording stops and the field’s voice history is cleared                  |
+
+For example, if speech inserts “Meet at nine” and you change “nine” to “ten,” a
+later update to that same phrase cannot replace your correction. A new phrase
+can still be inserted at the cursor.
 
 ## Phrases and manual edits
 

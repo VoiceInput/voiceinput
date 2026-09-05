@@ -8,13 +8,30 @@ short-lived credential.
 Copy `.env.example` to `.env.local`, fill every value, then run these in two
 terminals:
 
+**npm**
+
 ```bash
 npm install
 npm run dev:api
 ```
 
+**pnpm**
+
+```bash
+pnpm install
+pnpm run dev:api
+```
+
+**npm**
+
 ```bash
 npm run dev:web
+```
+
+**pnpm**
+
+```bash
+pnpm run dev:web
 ```
 
 Configure Clerk for `APP_ORIGIN`. In production, serve the built Vite assets and

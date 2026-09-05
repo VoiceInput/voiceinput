@@ -1,8 +1,28 @@
 # Write a custom provider
 
-VoiceInput adapters implement the public `VoiceInputProviderV1` contract. The
-contract is deliberately small: validate portable settings, open one streaming
-session, accept mono PCM16, and emit normalized transcript parts.
+VoiceInput adapters implement the public `VoiceInputProviderV1` contract. An
+adapter validates settings, opens a transcription connection, sends audio, and
+reports text through a shared event format. React fields can then use it like
+any official provider.
+
+You should be familiar with your provider’s streaming protocol and temporary
+credential API. The transport below is a template: you implement its provider
+connection and authentication, then verify it with the conformance tests.
+
+**npm**
+
+```bash
+npm install @voiceinput/provider@next @voiceinput/core@next
+```
+
+**pnpm**
+
+```bash
+pnpm add @voiceinput/provider@next @voiceinput/core@next
+```
+
+See the [provider contract](../packages/provider/README.md) for the interface
+and [credential setup](authentication-recipes.md) for the server boundary.
 
 ## 1. Create a typed factory
 
@@ -70,8 +90,9 @@ import {
   type VoiceInputProviderV1StreamPart,
 } from "@voiceinput/provider";
 
+// Implement this interface using your provider’s actual streaming client.
 interface AcmeTransport {
-  sendAudio(chunk: Int16Array): void;
+  sendAudio(chunk: Int16Array): void | Promise<void>;
   finish(): void;
   close(reason?: unknown): void;
 }
@@ -146,7 +167,7 @@ function createAcmeSession(options: {
   return {
     stream,
     sendAudio(chunk) {
-      if (!closed && !finishing) transport?.sendAudio(chunk);
+      if (!closed && !finishing) return transport?.sendAudio(chunk);
     },
     finish() {
       if (closed || finishing) return;
@@ -163,13 +184,16 @@ function createAcmeSession(options: {
 ```
 
 The provider-specific `openAcmeTransport` maps real protocol events to
-normalized parts and invokes `onClose` only after graceful finalization.
-Production code must also reject malformed provider events. A normal stream
-close is terminal; `finish` and `abort` remain idempotent.
+normalized parts and invokes `onClose` only after graceful finalization. Give
+every transcript phrase a stable `segmentId` and keep it across revisions. Bound
+audio queues and return a promise from `sendAudio` when the transport needs the
+producer to wait. See [Segment identity](#segment-identity). Production code
+must also reject malformed provider events. A normal stream close is terminal;
+`finish` and `abort` remain idempotent.
 
 ## 3. Preserve the credential boundary
 
-Expose browser code from your package root and token minting from a separate
+Expose browser code from your package root and token creation from a separate
 `/server` export. The browser factory receives only a token endpoint. The server
 handler should:
 

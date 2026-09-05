@@ -1,7 +1,7 @@
 # VoiceInput
 
-Provider-agnostic, cursor-safe voice input for React. VoiceInput captures the
-microphone in the browser, streams audio directly to OpenAI, ElevenLabs, or
+Add dictation to your existing React inputs and textareas. VoiceInput captures
+the microphone in the browser, streams audio directly to OpenAI, ElevenLabs, or
 Deepgram, and inserts transcripts into the field the user is already editing.
 
 The headless hook is the primary API. Optional controls provide a quick start
@@ -19,94 +19,29 @@ without creating a second transcription stack.
 
 ## Quickstart
 
-This OpenAI example uses Next.js App Router. The same React component works with
-the other providers; only the adapter and server token handler change.
+Install the React package and one provider adapter:
 
-### 1. Install
+**npm**
 
 ```bash
 npm install @voiceinput/react@next @voiceinput/openai@next
 ```
 
-### 2. Add an authenticated server route
+**pnpm**
 
-```ts
-// src/app/api/voice-token/route.ts
-import { createOpenAITokenHandler } from "@voiceinput/openai/server";
-import { getAuthenticatedUser } from "@/lib/auth";
-
-const apiKey = process.env.OPENAI_API_KEY;
-if (!apiKey) throw new Error("OPENAI_API_KEY is required.");
-
-export const POST = createOpenAITokenHandler({
-  apiKey,
-  authorize: async (request) => {
-    const user = await getAuthenticatedUser(request);
-    return user ? { subject: user.id } : null;
-  },
-});
+```bash
+pnpm add @voiceinput/react@next @voiceinput/openai@next
 ```
 
-`authorize` is required. Returning `null` issues no credential. Keep
-`OPENAI_API_KEY` in a server-only environment variable—never use a public or
-client-prefixed variable.
+`@next` selects the beta release channel. Follow the
+[quickstart](docs/quickstart.md) to configure server credentials, add an
+authenticated token route, and connect an existing field. The example uses
+Next.js, OpenAI, and Clerk.
 
-### 3. Enhance a field
-
-```tsx
-"use client";
-
-import { useState } from "react";
-import { openai } from "@voiceinput/openai";
-import { useVoiceInput } from "@voiceinput/react";
-
-const voiceProvider = openai({ tokenEndpoint: "/api/voice-token" });
-
-export function Composer() {
-  const [message, setMessage] = useState("");
-  const { targetRef, getTriggerProps, status, error } = useVoiceInput({
-    provider: voiceProvider,
-    value: message,
-    onValueChange: setMessage,
-  });
-  return (
-    <div>
-      <textarea
-        ref={targetRef}
-        value={message}
-        onChange={(event) => setMessage(event.currentTarget.value)}
-      />
-      <button {...getTriggerProps()}>
-        {status === "idle" ? "Speak" : "Stop"}
-      </button>
-      {error ? <p role="alert">{error.message}</p> : null}
-    </div>
-  );
-}
-```
-
-Or use the thin controlled-field wrapper:
-
-```tsx
-import { VoiceTextarea } from "@voiceinput/react";
-
-<VoiceTextarea
-  value={message}
-  onValueChange={setMessage}
-  voice={{ provider: voiceProvider }}
-/>;
-```
-
-The controls work without CSS. To opt into the packaged theme, import it once:
-
-```ts
-import "@voiceinput/react/styles.css";
-```
-
-See the full [Next.js guide](docs/nextjs.md),
-[Vite/Hono guide](docs/vite-hono.md), or [Express bridge](docs/express.md). For
-copyable consumer projects, start with the [golden paths](docs/golden-paths.md)
-and [authentication recipes](docs/authentication-recipes.md).
+For other stacks, use [Vite + Hono](docs/vite-hono.md),
+[Express](docs/express.md), or the
+[authentication recipes](docs/authentication-recipes.md). See
+[overview and requirements](docs/overview.md) before choosing a provider.
 
 ## Try it without credentials
 

@@ -1,0 +1,77 @@
+@import "@fontsource-variable/manrope";
+@import "@fontsource/ibm-plex-mono/400.css";
+
+:root {
+  --sl-font: "Manrope Variable", sans-serif;
+  --sl-font-mono: "IBM Plex Mono", monospace;
+  --sl-content-width: 46rem;
+  --sl-sidebar-width: 17rem;
+  --sl-text-body: 1rem;
+  --sl-text-h1: 2.5rem;
+  --sl-text-h2: 1.625rem;
+  --sl-text-h3: 1.25rem;
+  --sl-line-height: 1.75;
+  --sl-color-accent-low: #182b53;
+  --sl-color-accent: #7da4ff;
+  --sl-color-accent-high: #d2e0ff;
+}
+:root[data-theme="light"] {
+  --sl-color-accent-low: #edf2ff;
+  --sl-color-accent: #2855d9;
+  --sl-color-accent-high: #2345aa;
+  --sl-color-white: #202226;
+  --sl-color-gray-1: #343b46;
+  --sl-color-gray-2: #4e5866;
+  --sl-color-gray-3: #667181;
+  --sl-color-gray-4: #a4acb8;
+  --sl-color-gray-5: #e4e8ed;
+  --sl-color-gray-6: #f7f8fa;
+  --sl-color-black: #ffffff;
+  --sl-color-bg-nav: #ffffff;
+  --sl-color-bg-sidebar: #ffffff;
+}
+.sl-markdown-content {
+  overflow-wrap: anywhere;
+}
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+h1#_top {
+  letter-spacing: -0.035em;
+}
+.sl-markdown-content :is(pre, code) {
+  overflow-wrap: normal;
+}
+.sl-markdown-content table {
+  font-size: 0.875rem;
+}
+.sl-markdown-content th {
+  white-space: normal;
+}
+.sidebar-content a {
+  font-size: 0.875rem;
+}
+starlight-tabs [role="tablist"] {
+  margin-top: 0;
+}
+starlight-tabs [role="tab"] {
+  min-height: 2.75rem;
+  align-items: center;
+  font-size: 0.875rem;
+}
+.expressive-code .copy button {
+  opacity: 1;
+}
+@media (max-width: 49.99rem) {
+  :root {
+    --sl-text-h1: 2rem;
+  }
+  .sl-markdown-content {
+    font-size: 1rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

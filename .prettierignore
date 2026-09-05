@@ -11,4 +11,5 @@ pnpm-lock.yaml
 *.tgz
 
 .astro/
+/apps/website/src/content/docs/
 .wrangler/

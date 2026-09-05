@@ -1,18 +1,30 @@
 # Next.js App Router integration
 
-This guide keeps the long-lived provider key in a server-only App Router route
-and streams microphone audio directly from the browser to the provider.
+Add dictation to a Next.js App Router app. Your server issues temporary
+credentials, and the browser streams audio directly to the provider.
+
+For a first integration, follow the [quickstart](quickstart.md). This guide adds
+shared configuration and deployment settings to an existing app.
 
 The examples use OpenAI. For ElevenLabs or Deepgram, substitute the adapter and
 token handler; the React field code stays the same.
 
 ## Install
 
+**npm**
+
 ```bash
 npm install @voiceinput/react@next @voiceinput/openai@next
 ```
 
-Set the key only in the server environment:
+**pnpm**
+
+```bash
+pnpm add @voiceinput/react@next @voiceinput/openai@next
+```
+
+Add these values to your app’s `.env.local`. During development, set
+`APP_ORIGIN` to your local URL, including the port:
 
 ```dotenv
 OPENAI_API_KEY=...
@@ -22,6 +34,14 @@ APP_ORIGIN=https://app.example.com
 Do not use a `NEXT_PUBLIC_` name.
 
 ## Create the token route
+
+`getAuthenticatedUser` and `consumeVoiceQuota` below are **your application
+helpers**, not VoiceInput exports. The first validates the request using your
+existing sign-in system and returns a user or `null`. The second checks a shared
+quota store and returns an allowed/denied result. Implement them using the
+[authentication and rate-limit recipes](authentication-recipes.md), or start
+from the
+[complete Next.js example](golden-paths.md#nextjs-with-clerk-and-upstash).
 
 ```ts
 // src/app/api/voice-token/route.ts
@@ -64,14 +84,18 @@ export const POST = createOpenAITokenHandler({
 });
 ```
 
-`authorize` is mandatory and runs before minting. Returning `null` produces a
-`401`. `rateLimit` is optional, but production deployments should back it with
-durable shared storage rather than a process-local map.
+`authorize` is mandatory and runs before a credential is issued. Returning
+`null` produces a `401`. `rateLimit` is optional, but production deployments
+should back it with durable shared storage rather than a process-local map.
 
 The handler accepts the standard web `Request` and returns a standard
 `Response`, so no Next.js-specific adapter is needed.
 
 ## Add the provider context
+
+This step is optional. Use context when several fields share a provider and
+should coordinate microphone access. For one field, pass `provider` directly to
+`useVoiceInput`, as shown in the [quickstart](quickstart.md).
 
 ```tsx
 // src/app/providers.tsx
@@ -124,17 +148,17 @@ export function Composer() {
     language: "en-US",
     vocabulary: ["VoiceInput"],
   });
+  const active = voice.status !== "idle" && voice.status !== "error";
 
   return (
     <form>
       <textarea
+        aria-label="Message"
         ref={voice.targetRef}
         value={message}
         onChange={(event) => setMessage(event.currentTarget.value)}
       />
-      <button {...voice.getTriggerProps()}>
-        {voice.status === "listening" ? "Stop" : "Speak"}
-      </button>
+      <button {...voice.getTriggerProps()}>{active ? "Stop" : "Speak"}</button>
       <output aria-live="polite">{voice.status}</output>
       {voice.error ? <p role="alert">{voice.error.message}</p> : null}
     </form>
@@ -149,16 +173,33 @@ For the optional component and theme:
 import "@voiceinput/react/styles.css";
 
 // In a client component:
-<VoiceTextarea
-  value={message}
-  onValueChange={setMessage}
-  onChange={(event) => setMessage(event.currentTarget.value)}
-/>;
+import { VoiceTextarea } from "@voiceinput/react";
+
+<VoiceTextarea value={message} onValueChange={setMessage} />;
 ```
 
-The stylesheet import is optional and never occurs automatically. The native
-`onChange` still owns keyboard edits; `onValueChange` receives voice-engine
-writes.
+The stylesheet is optional. A controlled `VoiceTextarea` needs `value` and
+`onValueChange`; that callback handles typing, dictation, undo, and redo. Do not
+attach a second state setter to `onChange`. When using the hook with your own
+native field, keep that field’s ordinary `onChange` for typing.
+
+## Run the app
+
+**npm**
+
+```bash
+npm run dev
+```
+
+**pnpm**
+
+```bash
+pnpm run dev
+```
+
+Sign in, open the page containing `Composer`, and press **Speak**. Allow the
+microphone and dictate a sentence. If the field remains empty, check the
+[token endpoint and microphone troubleshooting](troubleshooting.md).
 
 ## Switch providers
 
@@ -182,7 +223,7 @@ default. If clients may request more than one model, set an explicit
   `Sec-Fetch-Site: cross-site`; do not derive the trusted origin from `Host` or
   forwarded headers supplied by the request.
 - Use a shared quota store for multi-instance or serverless deployments.
-- Rate-limit before minting with a durable key such as
+- Rate-limit before issuing credentials with a durable key such as
   `voice-token:<authenticated-subject>`; the example permits 10 attempts per 60
   seconds. Add a separately trusted client-IP dimension when your proxy setup
   can supply one safely.

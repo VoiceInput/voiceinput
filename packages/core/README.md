@@ -1,13 +1,24 @@
 # `@voiceinput/core`
 
-Framework-neutral voice sessions, browser audio capture, and cursor-safe text
-ownership. React applications normally use `@voiceinput/react`, which composes
-these primitives.
+Use these APIs to build a custom framework integration or control audio capture
+and text editing directly. Most React apps should use
+[`@voiceinput/react`](../react/README.md) instead.
+
+The package provides a recording session, a browser audio source, and a text
+engine that inserts speech while preserving unrelated edits.
 
 ## Install
 
+**npm**
+
 ```bash
 npm install @voiceinput/core@next
+```
+
+**pnpm**
+
+```bash
+pnpm add @voiceinput/core@next
 ```
 
 ## Session
@@ -67,10 +78,11 @@ provider part as `text` and the cumulative normalized value as `transcript`.
 
 `VoiceAudioSource.prepare({ sampleRate, abortSignal, onAcquired })` returns a
 `PreparedVoiceAudioSource` with a PCM16 stream plus `start`, `stop`, and
-`abort`. Preparation can request permission, but audio delivery starts only
-after the provider connects. Custom sources must call the optional
-`onAcquired()` callback as soon as they hold live audio resources; this starts
-the connection deadline even if later preparation is still pending.
+`abort`. Preparation can request permission. Once acquired, audio is buffered
+while the provider connects; delivery to the provider starts after connection.
+Custom sources must call the optional `onAcquired()` callback as soon as they
+hold live audio resources; this starts the connection deadline even if later
+preparation is still pending.
 
 `createBrowserAudioSource` supplies the production browser implementation:
 

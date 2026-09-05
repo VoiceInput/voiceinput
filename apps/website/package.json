@@ -6,32 +6,38 @@
   "scripts": {
     "dev": "astro dev --host 127.0.0.1 --port 4321",
     "build": "astro build && node scripts/check-links.mjs",
-    "preview": "astro preview --host 127.0.0.1 --port 4321",
-    "typecheck": "astro check",
-    "lint": "oxlint --config ../../.oxlintrc.json src scripts",
-    "format:check": "prettier --check .",
+    "preview": "wrangler dev --env=\"\" --ip 127.0.0.1 --port 4322",
+    "typecheck": "astro check && tsc --project worker/tsconfig.json",
+    "lint": "oxlint --config ../../.oxlintrc.json --ignore-pattern worker/env.d.ts src scripts worker",
+    "format:check": "prettier --ignore-path ../../.prettierignore --check .",
     "deploy:preview": "wrangler deploy --env=\"\"",
     "deploy": "wrangler deploy --env production",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:server": "vitest run --config worker/vitest.config.ts",
+    "test": "pnpm run test:server"
   },
   "dependencies": {
     "@astrojs/markdown-remark": "7.3.0",
     "@astrojs/react": "6.0.5",
+    "@astrojs/starlight": "0.42.0",
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "@fontsource-variable/manrope": "^5.2.8",
+    "@fontsource-variable/wix-madefor-text": "^5.3.0",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@voiceinput/core": "workspace:*",
+    "@voiceinput/openai": "workspace:*",
     "@voiceinput/provider": "workspace:*",
     "@voiceinput/react": "workspace:*",
     "astro": "7.3.1",
     "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "three": "0.185.1"
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
+    "@cloudflare/workers-types": "5.20260905.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.3",
-    "@types/three": "^0.183.1",
+    "hono": "4.13.5",
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "6.0.3",
     "wrangler": "4.129.0"

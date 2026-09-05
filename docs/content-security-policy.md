@@ -1,13 +1,30 @@
 # Content Security Policy
 
-VoiceInput uses a Blob-backed AudioWorklet by default because it needs no asset
-setup. Applications that do not allow `blob:` scripts can self-host the same
-processor and pass its URL to the browser audio source.
+Use this guide if your app blocks the default audio processor with a strict
+Content Security Policy (CSP). VoiceInput normally loads this small browser
+audio processor, called an AudioWorklet, from a temporary Blob URL without extra
+asset setup. Applications that do not allow `blob:` scripts can self-host the
+same processor and pass its URL to the browser audio source.
 
 ## Self-host the worklet
 
-Install `@voiceinput/core` directly, then run a small build script to write the
-version-matched processor into the public assets directory:
+Install `@voiceinput/core` directly in the application, using the same release
+as your React package:
+
+**npm**
+
+```bash
+npm install @voiceinput/core@next
+```
+
+**pnpm**
+
+```bash
+pnpm add @voiceinput/core@next
+```
+
+Create a build script that writes the matching audio processor to your public
+assets directory:
 
 ```js
 // scripts/write-voiceinput-worklet.mjs
@@ -21,9 +38,16 @@ await writeFile(
 );
 ```
 
-Run the script before the application build. Next.js and Vite both serve files
-from `public/` at the origin root. Configure one stable audio source and pass it
-to the React provider:
+Run the script before the application build:
+
+```bash
+node scripts/write-voiceinput-worklet.mjs
+```
+
+Add this command to your existing build pipeline and run it again whenever
+VoiceInput is upgraded. Next.js and Vite both serve files from `public/` at the
+origin root. Configure one stable audio source and pass it to the React
+provider:
 
 ```tsx
 "use client";

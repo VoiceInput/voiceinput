@@ -1,9 +1,19 @@
-import { preview } from "astro";
-// Use the API so Astro's agent-aware CLI cannot detach the Playwright server.
-const server = await preview({ server: { host: "127.0.0.1", port: 4322 } });
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.once(signal, async () => {
-    await server.stop();
-    process.exit(0);
-  });
-}
+import { spawn } from "node:child_process";
+const worker = spawn(
+  "pnpm",
+  [
+    "exec",
+    "wrangler",
+    "dev",
+    "--env=",
+    "--ip",
+    "127.0.0.1",
+    "--port",
+    "4322",
+    "--show-interactive-dev-session=false",
+  ],
+  { stdio: "inherit" },
+);
+for (const signal of ["SIGINT", "SIGTERM"])
+  process.once(signal, () => worker.kill(signal));
+worker.once("exit", (code) => process.exit(code ?? 0));

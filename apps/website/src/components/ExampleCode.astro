@@ -1,0 +1,47 @@
+---
+import { Code } from "astro:components";
+interface Props {
+  code: string;
+  filename: string;
+  label: string;
+  href: string;
+  server?: boolean;
+}
+const { code, filename, label, href, server = false } = Astro.props;
+---
+
+<div class="example-code">
+  <div class="code-heading">
+    <span>{filename}</span>
+    <button
+      type="button"
+      data-copy={code.trim()}
+      aria-label={`Copy ${label} example`}
+      ><span data-copy-label>Copy</span></button
+    >
+  </div>
+  <Code
+    code={code.trim()}
+    lang={filename.endsWith("tsx") ? "tsx" : "ts"}
+    theme="github-light-high-contrast"
+    tabindex="0"
+    aria-label={`${label} code`}
+  />
+  <p class="code-footnote">
+    {
+      server ? (
+        <span>
+          <code>app-auth</code> contains your authentication and quota
+          helpers.{" "}
+        </span>
+      ) : (
+        <span>
+          {label === "Hook"
+            ? "Your field, with a voice button. "
+            : "A field and voice button, already connected. "}
+        </span>
+      )
+    }
+    <a href={href}>{server ? "Complete server setup" : "See the full setup"}</a>
+  </p>
+</div>

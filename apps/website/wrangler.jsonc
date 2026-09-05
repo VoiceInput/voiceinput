@@ -1,14 +1,47 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "voiceinput-website-preview",
+  "main": "worker/index.ts",
+  "alias": {
+    "@voiceinput/openai/server": "./node_modules/@voiceinput/openai/dist/server.js",
+  },
   "account_id": "310b3ee42e23227ea776963c4defaf36",
   "compatibility_date": "2026-09-04",
-  "assets": { "directory": "./dist", "not_found_handling": "404-page" },
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/demo/*"],
+  },
+  "vars": {
+    "DEMO_ORIGINS": "http://127.0.0.1:4322,http://127.0.0.1:4321,http://localhost:4321",
+  },
+  "secrets": { "required": ["OPENAI_API_KEY"] },
+  "durable_objects": {
+    "bindings": [{ "name": "DEMO_GUARD", "class_name": "DemoGuard" }],
+  },
+  "migrations": [{ "tag": "demo-v1", "new_sqlite_classes": ["DemoGuard"] }],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "logs": { "invocation_logs": false },
+  },
   "env": {
     "production": {
       "name": "voiceinput-website",
       "routes": [{ "pattern": "voiceinput.dev", "custom_domain": true }],
-      "assets": { "directory": "./dist", "not_found_handling": "404-page" },
+      "assets": {
+        "directory": "./dist",
+        "binding": "ASSETS",
+        "not_found_handling": "404-page",
+        "run_worker_first": ["/api/demo/*"],
+      },
+      "vars": { "DEMO_ORIGINS": "https://voiceinput.dev" },
+      "secrets": { "required": ["OPENAI_API_KEY"] },
+      "durable_objects": {
+        "bindings": [{ "name": "DEMO_GUARD", "class_name": "DemoGuard" }],
+      },
     },
   },
 }

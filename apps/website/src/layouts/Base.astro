@@ -1,20 +1,22 @@
 ---
-import "@fontsource-variable/manrope";
-import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource-variable/bricolage-grotesque";
+import "@fontsource-variable/wix-madefor-text";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import VoiceMark from "../components/VoiceMark.astro";
 import "../styles/global.css";
 interface Props {
   title?: string;
   description?: string;
 }
 const {
-  title = "VoiceInput — Voice input. Right where you type.",
-  description = "Add streaming voice input to your React fields. Keep your cursor, your edits, and your choice of OpenAI, ElevenLabs, or Deepgram. Open-source desktop beta.",
+  title = "VoiceInput — Add voice input to your React app",
+  description = "Add dictation to your existing React inputs and textareas. Choose OpenAI, ElevenLabs, or Deepgram. Open source, with cursor-aware editing and undo.",
 } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light" class="marketing-page">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -41,7 +43,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         >VoiceInput<span class="beta">beta</span></a
       >
       <nav aria-label="Main navigation">
-        <a href="/docs/quickstart">Docs</a><a href="/#demo">Demo</a><a
+        <a href="/docs/overview/">Docs</a><a href="/#demo">Demo</a><a
           class="github-link"
           href="https://github.com/VoiceInput/voiceinput"
           >GitHub <svg
@@ -60,16 +62,41 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     </header>
     <slot />
     <footer class="footer wrap">
-      <a class="wordmark" href="/">VoiceInput</a><p>
-        A little less typing. A little more flow.
-      </p><div>
-        <a href="/docs/support-policy">Desktop beta</a><a
-          href="https://github.com/VoiceInput/voiceinput/blob/main/LICENSE"
-          >MIT license</a
-        ><a href="https://github.com/VoiceInput/voiceinput">GitHub</a>
+      <div class="footer-invitation">
+        <div>
+          <h2>Make room for voice.</h2>
+          <p>Start with one field. Make it your own.</p>
+          <a class="button primary" href="/docs/quickstart/"
+            >Read the quickstart</a
+          >
+          <p class="footer-support">
+            React 18.2+ and React 19. <a href="/docs/support-policy/"
+              >Desktop beta support</a
+            >
+          </p>
+        </div>
+        <VoiceMark />
+      </div>
+      <div class="footer-bottom">
+        <a class="wordmark" href="/">VoiceInput</a>
+        <span class="footer-note">Open source. Built to fit.</span>
+        <nav aria-label="Footer navigation">
+          <a href="/docs/overview/">Documentation</a>
+          <a href="https://github.com/VoiceInput/voiceinput">GitHub</a>
+          <a href="https://github.com/VoiceInput/voiceinput/blob/main/LICENSE"
+            >MIT license</a
+          >
+          <a href="/docs/support-policy/">Support</a>
+        </nav>
       </div>
     </footer>
+    <div class="sr-only" id="copy-status" role="status" aria-live="polite">
+    </div>
     <script>
+      const copyTimers = new WeakMap<
+        HTMLButtonElement,
+        ReturnType<typeof setTimeout>
+      >();
       document.addEventListener("click", async (event) => {
         const button = (event.target as Element).closest<HTMLButtonElement>(
           "[data-copy]",
@@ -79,25 +106,31 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
           button.dataset.copy ||
           button.parentElement?.querySelector("code")?.textContent ||
           "";
+        const label = button.querySelector("[data-copy-label]") ?? button;
+        const original =
+          button.dataset.copyOriginal ?? label.textContent ?? "Copy";
+        button.dataset.copyOriginal = original;
+        clearTimeout(copyTimers.get(button));
         try {
           await navigator.clipboard.writeText(text);
-          const old = button.textContent;
-          button.textContent = "Copied";
-          setTimeout(() => {
-            button.textContent = old;
-          }, 1800);
+          label.textContent = "Copied";
+          const status = document.getElementById("copy-status");
+          if (status) status.textContent = "Copied to clipboard.";
         } catch {
-          button.textContent = "Select and copy";
+          label.textContent = "Select and copy";
+          const status = document.getElementById("copy-status");
+          if (status)
+            status.textContent =
+              "Copy unavailable. Select the code and copy it with your keyboard.";
         }
-      });
-      document.querySelectorAll(".prose pre").forEach((pre) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset.copy = "";
-        button.className = "code-copy";
-        button.textContent = "Copy";
-        button.setAttribute("aria-label", "Copy code");
-        pre.append(button);
+        copyTimers.set(
+          button,
+          setTimeout(() => {
+            label.textContent = original;
+            const status = document.getElementById("copy-status");
+            if (status) status.textContent = "";
+          }, 1800),
+        );
       });
     </script>
   </body>

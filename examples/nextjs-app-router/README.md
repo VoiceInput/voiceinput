@@ -7,9 +7,18 @@ browser credential.
 
 Copy `.env.example` to `.env.local`, fill every value, then run:
 
+**npm**
+
 ```bash
 npm install
 npm run dev
+```
+
+**pnpm**
+
+```bash
+pnpm install
+pnpm run dev
 ```
 
 Configure Clerk for `APP_ORIGIN`. Keep every non-`NEXT_PUBLIC_` value on the

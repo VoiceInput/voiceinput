@@ -1,8 +1,24 @@
 # Troubleshooting
 
-VoiceInput reports operational failures through `voice.error`, `onError`, and
-normalized session events. Start with `error.code`, then inspect `error.cause`
-only in developer diagnostics.
+If recording or text insertion fails, check `voice.error.code`. The same error
+is available in the `onError` callback. Use the code to choose a recovery
+action; error messages may change between releases.
+
+| Error or symptom                                | First thing to check                                          |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| `unsupported-browser` or disabled control       | HTTPS, microphone APIs, and AudioWorklet                      |
+| `permission-denied`                             | Site and operating-system microphone permissions              |
+| `device-not-found` / `device-busy`              | Connected microphone and other apps using it                  |
+| `unauthorized`, HTTP 401/403                    | Sign-in session, cookies, and configured origin               |
+| `rate-limited`, HTTP 429                        | Retry delay and your app’s quota                              |
+| `token-error`                                   | Server environment variables and provider credential response |
+| `network-error`                                 | Token endpoint, WebSocket connection, and CSP                 |
+| `audio-error`                                   | Microphone capture and AudioWorklet loading                   |
+| `provider-error`                                | Provider settings, server logs, and provider status           |
+| `invalid-configuration` / `unsupported-feature` | Option values and the selected provider’s supported settings  |
+
+Inspect `error.cause` in local developer diagnostics when you need more detail.
+Do not display raw provider or browser errors to end users.
 
 ## The control is disabled or `isSupported` is false
 
@@ -129,10 +145,12 @@ Review the selected provider README:
 
 ## Text appears in the wrong place
 
-- Spread `voice.triggerProps` onto the real activation button so selection is
-  captured before focus changes.
-- For controlled fields, provide both `value` and `onValueChange` and update
-  state from the native `onChange` handler as usual.
+- Spread `voice.getTriggerProps()` onto the real activation button so selection
+  is captured before focus changes.
+- For native controlled fields using the hook, pass `value` and `onValueChange`
+  and keep the field’s ordinary `onChange` handler for typing. Controlled
+  `VoiceInput` and `VoiceTextarea` wrappers use `onValueChange` for both typing
+  and dictation; they do not need a second state setter.
 - Do not use unsupported input types such as `email`, `number`, or `date`.
 - If the user edits or moves the caret during dictation, VoiceInput deliberately
   freezes text it can no longer prove ownership of and re-anchors later speech.
@@ -140,7 +158,7 @@ Review the selected provider README:
 Use `voice.getTextSnapshot()` in a development inspector to see the current
 selection and owned spans.
 
-## Playground login or quota behavior
+## Development playground login or quota behavior
 
 The repository playgrounds use a loopback-only signed cookie fixture and
 maintainer controls for unauthorized and expired states. The fixture is disabled

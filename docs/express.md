@@ -1,10 +1,37 @@
-# Express bridge
+# Express
 
-Official token handlers accept a standard web `Request` and return a standard
-web `Response`. An existing Express application can bridge those objects in a
-few lines; VoiceInput does not need an Express-specific package.
+Connect an existing Express API to your React voice field. Official token
+handlers accept a standard web `Request` and return a standard web `Response`.
+An existing Express application can bridge those objects in a few lines;
+VoiceInput does not need an Express-specific package.
 
-This example assumes `express.json()` has parsed the small JSON token request.
+## Before you start
+
+Use Node.js 22+ and an existing Express app with authentication. Install the
+server adapter and Express in your API project:
+
+**npm**
+
+```bash
+npm install @voiceinput/openai@next express
+```
+
+**pnpm**
+
+```bash
+pnpm add @voiceinput/openai@next express
+```
+
+Set `OPENAI_API_KEY` and `APP_ORIGIN` in the server environment. Install
+`@voiceinput/react` and the same provider adapter in your React app using the
+[quickstart](quickstart.md).
+
+## Add the token route
+
+`authenticateRequest` is your application’s sign-in helper. It must validate the
+incoming request and return a user or `null`; use the
+[authentication recipes](authentication-recipes.md) to implement it. The bridge
+below uses `express.json()` to parse the small token request.
 
 ```ts
 import { createOpenAITokenHandler } from "@voiceinput/openai/server";
@@ -18,9 +45,16 @@ import { authenticateRequest } from "./auth.js";
 const apiKey = process.env.OPENAI_API_KEY;
 if (!apiKey) throw new Error("OPENAI_API_KEY is required.");
 
+const appOrigin = new URL(process.env.APP_ORIGIN!).origin;
+
 const issueVoiceToken = createOpenAITokenHandler({
   apiKey,
   authorize: async (request) => {
+    if (
+      request.headers.get("origin") !== appOrigin ||
+      request.headers.get("sec-fetch-site") === "cross-site"
+    )
+      return null;
     const user = await authenticateRequest(request);
     return user ? { subject: user.id } : null;
   },
@@ -87,6 +121,8 @@ async function sendWebResponse(
 }
 ```
 
+## How the bridge works
+
 The copied headers preserve cookies and authorization headers for your
 `authorize` implementation. Re-serializing the parsed JSON body is safe for the
 provider token handlers, which accept a small JSON object and reject unknown
@@ -99,3 +135,15 @@ same-origin token endpoint in the browser.
 The same bridge works with `createElevenLabsTokenHandler` and
 `createDeepgramTokenHandler`. Keep the selected provider's long-lived key in the
 Express server environment and retain the required `authorize` callback.
+
+## Connect the React field
+
+Configure the browser adapter with `tokenEndpoint: "/api/voice-token"` and pass
+it to the hook. Serve or proxy the React app and API through the same origin so
+cookies reach the endpoint. Run your existing Express server and React app, sign
+in, and try dictation in the field.
+
+Before production, add a
+[shared rate limit](authentication-recipes.md#durable-upstash-quota) and use
+HTTPS. See [troubleshooting](troubleshooting.md) for token or connection
+failures.
