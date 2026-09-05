@@ -9,6 +9,7 @@ import type { VoiceInputProviderV1 } from "@voiceinput/provider";
 import { act, StrictMode, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 
 import { VoiceInputProvider, useVoiceInput } from "./index.js";
 import type { VoiceInputActivationMode } from "./types.js";
@@ -72,6 +73,53 @@ describe("useVoiceInput", () => {
       "stopping",
       "idle",
     ]);
+  });
+
+  it("preserves clearing a dictated controlled field and streams the next recording", async () => {
+    const fake = createFakeVoiceInputProvider();
+    render(
+      <VoiceInputProvider
+        provider={fake.provider}
+        audioSource={createFakeAudioSource()}
+      >
+        <ControlledField initialValue="" onStatus={() => {}} />
+      </VoiceInputProvider>,
+    );
+    const textarea = getTextarea("controlled");
+    const button = getButton("controlled trigger");
+    await waitForEnabled(button);
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({ type: "final", text: "By Harry Quilter" });
+    });
+    await vi.waitFor(() => expect(textarea.value).toBe("By Harry Quilter"));
+    await act(async () => {
+      button.click();
+    });
+    await vi.waitFor(() =>
+      expect(button.getAttribute("aria-pressed")).toBe("false"),
+    );
+    textarea.focus();
+    await act(() =>
+      userEvent.keyboard("{ControlOrMeta>}a{/ControlOrMeta}{Backspace}"),
+    );
+    expect(textarea.value).toBe("");
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession(1);
+    });
+    expect(textarea.value).toBe("");
+    await act(async () => {
+      fake.controller.emit({ type: "interim", text: "By" });
+    });
+    await act(async () => {
+      fake.controller.emit({ type: "interim", text: "By Harry" });
+    });
+    await act(async () => {
+      fake.controller.emit({ type: "final", text: "By Harry Quilter" });
+    });
+    expect(textarea.value).toBe("By Harry Quilter");
   });
 
   it("updates uncontrolled fields and dispatches a native input event", async () => {
@@ -643,10 +691,12 @@ function ComposedTriggerField({
 
 function ControlledField({
   onStatus,
+  initialValue = "Say old now",
 }: {
   onStatus: (status: string) => void;
+  initialValue?: string;
 }): React.JSX.Element {
-  const [value, setValue] = useState("Say old now");
+  const [value, setValue] = useState(initialValue);
   const voice = useVoiceInput({
     value,
     onValueChange: setValue,

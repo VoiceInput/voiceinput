@@ -145,7 +145,11 @@ export class TextTargetAdapter {
       return;
     }
     this.#withGuard(() => {
-      setNativeValue(target, mutation.value);
+      // Callback-controlled fields must keep framework value trackers in sync.
+      // Bypass the setter only when an input event will notify the framework.
+      if (this.#controlled && !this.#controlled.dispatchInput)
+        target.value = mutation.value;
+      else setNativeValue(target, mutation.value);
       restoreSelection(target, mutation.selection);
       if (!mutation.changed) {
         return;

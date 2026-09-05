@@ -52,9 +52,10 @@ async function setup(hangOnFinish = false) {
     validateOptions() {},
     doOpen: async () => session,
   };
-  const done = relaySession(socket as WebSocket, provider);
+  const onRecordingStarted = vi.fn<() => void>();
+  const done = relaySession(socket as WebSocket, provider, onRecordingStarted);
   await Promise.resolve();
-  return { socket, session, done, controller };
+  return { socket, session, done, controller, onRecordingStarted };
 }
 
 test("a client cannot extend the recording beyond 20 seconds", async () => {
@@ -135,4 +136,14 @@ test("only a ready provider commits a recording reservation", async () => {
   expect(ready).not.toHaveBeenCalled();
   expect(socket.sent.at(-1)?.type).toBe("error");
   expect(socket.readyState).toBe(3);
+});
+
+test("empty connections are free and the first audio frame charges exactly once", async () => {
+  const { socket, done, onRecordingStarted } = await setup();
+  expect(onRecordingStarted).not.toHaveBeenCalled();
+  socket.message(new ArrayBuffer(480));
+  socket.message(new ArrayBuffer(480));
+  socket.message('{"type":"finish"}');
+  await done;
+  expect(onRecordingStarted).toHaveBeenCalledOnce();
 });

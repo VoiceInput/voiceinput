@@ -1,6 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, test } from "vitest";
 import { DemoQuota } from "./quota";
+import {
+  DAILY_SESSIONS,
+  DAILY_SESSIONS_PER_IP,
+  HOURLY_SESSIONS_PER_IP,
+} from "./limits";
 
 const databases: DatabaseSync[] = [];
 afterEach(() => {
@@ -34,11 +39,10 @@ async function ticket(quota: DemoQuota, client = "client", time = now) {
   return ((await response.json()) as { ticket: string }).ticket;
 }
 
-test("tickets expire, belong to one visitor, and can only be consumed once", async () => {
+test("tickets survive network changes, expire, and can only be consumed once", async () => {
   const { quota } = setup();
   const first = await ticket(quota);
-  expect(quota.consume(first, "different-client", now)?.status).toBe(401);
-  expect(quota.consume(first, "client", now)).toBeUndefined();
+  expect(quota.consume(first, "different-client", now)).toBeUndefined();
   expect(quota.consume(first, "client", now)?.status).toBe(401);
   const second = await ticket(quota, "other");
   expect(quota.consume(second, "other", now + 60_000)?.status).toBe(401);
@@ -46,12 +50,14 @@ test("tickets expire, belong to one visitor, and can only be consumed once", asy
 
 test("concurrent reservations cannot bypass hourly limits", async () => {
   const { quota } = setup();
-  const responses = Array.from({ length: 13 }, () =>
+  const responses = Array.from({ length: HOURLY_SESSIONS_PER_IP + 1 }, () =>
     quota.issue("client", now),
   );
-  expect(responses.filter((r) => r.status === 200)).toHaveLength(12);
+  expect(responses.filter((r) => r.status === 200)).toHaveLength(
+    HOURLY_SESSIONS_PER_IP,
+  );
   expect(responses.at(-1)?.status).toBe(429);
-  expect(responses.at(-1)?.headers.get("Retry-After")).toBe("3600");
+  expect(responses.at(-1)?.headers.get("Retry-After")).toBe("60");
 });
 
 async function record(quota: DemoQuota, client: string, time: number) {
@@ -63,16 +69,17 @@ async function record(quota: DemoQuota, client: string, time: number) {
 
 test("successful recordings retain hourly and daily quotas", async () => {
   const { quota } = setup();
-  for (let hour = 0; hour < 3; hour++) {
-    for (let i = 0; i < (hour < 2 ? 12 : 6); i++)
-      await record(quota, "client", now + hour * 3_600_000);
+  for (let i = 0; i < DAILY_SESSIONS_PER_IP; i++) {
+    const hour = Math.floor(i / HOURLY_SESSIONS_PER_IP);
+    await record(quota, "client", now + hour * 3_600_000);
   }
-  expect(quota.issue("client", now + 10_800_000).status).toBe(429);
+  expect(quota.issue("client", now + 14_400_000).status).toBe(429);
 });
 
 test("daily global budget persists across object reconstruction", async () => {
   const { quota, sql } = setup();
-  for (let i = 0; i < 100; i++) await record(quota, `client-${i}`, now);
+  for (let i = 0; i < DAILY_SESSIONS; i++)
+    await record(quota, `client-${i}`, now);
   const restarted = new DemoQuota(sql);
   expect(restarted.issue("new-client", now).status).toBe(429);
   expect(restarted.issue("new-client", now + 86_400_000).status).toBe(200);
@@ -149,4 +156,68 @@ test("a late refund never decrements the next hour's usage", async () => {
       )
       .one().count,
   ).toBe(1);
+});
+
+test("network changes never move quota or concurrency ownership to the new IP", async () => {
+  const { quota, sql } = setup();
+  const a = await ticket(quota, "issuer");
+  const b = await ticket(quota, "issuer");
+  expect(quota.consume(a, "websocket-egress-1", now)).toBeUndefined();
+  expect(
+    sql
+      .exec<{ client: string }>("SELECT client FROM active WHERE id = ?", a)
+      .one().client,
+  ).toBe("issuer");
+  expect(quota.consume(b, "websocket-egress-2", now)?.status).toBe(429);
+  quota.started(a);
+  quota.release(a);
+  expect(
+    sql
+      .exec<{ count: number }>(
+        "SELECT count FROM usage WHERE key = 'issuer:hour'",
+      )
+      .one().count,
+  ).toBe(1);
+  expect(
+    sql
+      .exec("SELECT key FROM usage WHERE key = 'websocket-egress-1:hour'")
+      .toArray(),
+  ).toHaveLength(0);
+});
+
+test("a ticket issued before UTC midnight remains valid after the IP hash rotates", async () => {
+  const { quota } = setup();
+  const midnight = Date.UTC(2026, 8, 6);
+  const id = await ticket(quota, "yesterday-hash", midnight - 1000);
+  expect(quota.consume(id, "today-hash", midnight + 1000)).toBeUndefined();
+  quota.started(id);
+  quota.release(id);
+  expect(quota.consume(id, "today-hash", midnight + 1001)?.status).toBe(401);
+});
+
+test("1000 ticket exchanges across changing networks remain single-use and refund empty starts", async () => {
+  const { quota, sql } = setup();
+  for (let i = 0; i < 1000; i++) {
+    const time = now + i * 2100;
+    const id = await ticket(quota, "issuer", time);
+    expect(quota.consume(id, `egress-${i % 4}`, time)).toBeUndefined();
+    expect(quota.consume(id, "issuer", time)?.status).toBe(401);
+    quota.release(id);
+  }
+  expect(
+    sql
+      .exec<{ count: number }>(
+        "SELECT count FROM usage WHERE key = 'issuer:hour'",
+      )
+      .one().count,
+  ).toBe(0);
+  expect(
+    sql.exec<{ count: number }>("SELECT COUNT(*) AS count FROM active").one()
+      .count,
+  ).toBe(0);
+  expect(
+    sql
+      .exec<{ count: number }>("SELECT COUNT(*) AS count FROM reservations")
+      .one().count,
+  ).toBe(0);
 });

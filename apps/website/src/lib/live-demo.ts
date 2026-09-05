@@ -7,7 +7,7 @@ import { sendWithBackpressure } from "@voiceinput/provider/transport";
 import { DEMO_PROTOCOL, DEMO_SAMPLE_RATE } from "./demo-config";
 
 export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
-  return {
+  const provider: VoiceInputProviderV1 = {
     specificationVersion: "v1",
     provider: "voiceinput-demo",
     modelId: "gpt-transcribe",
@@ -142,7 +142,12 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
             finishing = true;
             onServerStop();
           } else if (part.type === "finished") {
-            close();
+            if (!ready)
+              fail(
+                "The demo ended before connecting. Please try again.",
+                "token-error",
+              );
+            else close();
           } else if (part.type === "error") {
             fail(
               typeof part.message === "string"
@@ -209,6 +214,24 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
         },
         abort: close,
       };
+    },
+  };
+  return {
+    ...provider,
+    async doOpen(options) {
+      try {
+        return await provider.doOpen(options);
+      } catch (error) {
+        // Retry only startup, before any audio can be sent. Never loop on quotas.
+        if (
+          options.abortSignal.aborted ||
+          !(error instanceof VoiceInputError) ||
+          !error.retryable ||
+          (error.code !== "token-error" && error.code !== "network-error")
+        )
+          throw error;
+        return provider.doOpen(options);
+      }
     },
   };
 }

@@ -123,26 +123,27 @@ export class DemoQuota {
   consume(ticket: string, client: string, now: number): Response | undefined {
     this.clean(now);
     const grant = this.sql
-      .exec<{ id: string }>(
-        "DELETE FROM tickets WHERE id = ? AND client = ? AND expires > ? RETURNING id",
+      .exec<{ id: string; client: string }>(
+        "DELETE FROM tickets WHERE id = ? AND expires > ? RETURNING id, client",
         ticket,
-        client,
         now,
       )
       .toArray()[0];
     if (!grant) {
-      const existing =
-        this.sql.exec("SELECT id FROM tickets WHERE id = ?", ticket).toArray()
-          .length > 0;
       console.warn(
         JSON.stringify({
           event: "demo-ticket-rejected",
-          reason: existing ? "client-changed" : "expired-or-used",
+          reason: "expired-or-used",
         }),
       );
       return jsonError(401, "Start a new demo session.");
     }
-    const busy = this.busy(client, now);
+    // The ticket is an unguessable, one-use bearer capability. Networks may route
+    // HTTP and WebSocket requests through different IPs (and hashes rotate at UTC midnight).
+    // Always enforce concurrency and recording quotas against the ticket's issuer.
+    if (grant.client !== client)
+      console.info(JSON.stringify({ event: "demo-network-changed" }));
+    const busy = this.busy(grant.client, now);
     if (busy) {
       this.refund(ticket);
       return busy;
@@ -150,7 +151,7 @@ export class DemoQuota {
     this.sql.exec(
       "INSERT INTO active VALUES (?, ?, ?)",
       ticket,
-      client,
+      grant.client,
       now +
         CONNECT_TIMEOUT_MS +
         DEMO_SECONDS * 1_000 +
@@ -183,7 +184,7 @@ export class DemoQuota {
     }
   }
 
-  /** A connected provider commits the reservation; startup failures return it. */
+  /** The first audio frame commits the reservation; empty/failed starts return it. */
   started(ticket: string) {
     this.sql.exec("DELETE FROM reservations WHERE ticket = ?", ticket);
   }

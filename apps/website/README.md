@@ -48,17 +48,22 @@ Keep this separation when changing the build configuration.
 Put `OPENAI_API_KEY` in the website's ignored `.dev.vars` for local development.
 The browser receives only a short-lived, single-use demo ticket. Both the
 long-lived API key and OpenAI's temporary credential stay in the Worker. The
+ticket is a bearer capability and is not bound to the WebSocket connection’s IP:
+HTTP and WebSocket requests can take different network routes. Concurrency and
+usage are always charged to the original issuer. Origin checks, unpredictable
+tickets, 60-second expiry, and atomic single-use consumption remain enforced. The
 server uses the official OpenAI adapter; a small browser adapter transports
 PCM16 and transcript events through the relay.
 
 The relay permits 20 seconds / 960,000 bytes of audio, with separate 10-second
 connection and finalization deadlines. SQLite-backed Durable Object storage
-limits recordings to 12 per IP per hour, 30 per IP per UTC day, and 100 across the demo
-per UTC day. It permits at most 4 concurrent sessions, one per IP. Grants reserve allowance atomically; successful connections commit it.
-Failed startups and busy handshakes return their reservation, and unused tickets
+limits recordings to 30 per IP per hour, 100 per IP per UTC day, and 1,000 across the demo
+per UTC day. It permits at most 4 concurrent sessions, one per IP. Grants reserve allowance atomically; the first audio frame commits it.
+Empty sessions, failed startups, and busy handshakes return their reservation, and unused tickets
 return it when they expire after 60 seconds. A separate 30-attempts-per-minute
 IP limit protects against repeated failed connections. Refreshing the page or restarting the Worker does not reset
-these budgets. Limits live in `worker/limits.ts` and `src/lib/demo-config.ts`.
+these budgets. Startup can retry once before sending audio; quota responses
+are not automatically retried. Limits live in `worker/limits.ts` and `src/lib/demo-config.ts`.
 
 Audio and transcripts are streamed in memory and are never logged or stored.
 Fixed relay error messages, connection phase, and elapsed time are logged for
@@ -94,3 +99,22 @@ programmatic API; SDK packages use the workspace TypeScript version.
 responsive screenshots produced under `output/playwright`. A custom `404.html`
 handles unknown static routes. Ship the npm beta and public repository before
 attaching the production domain so the installation and source links work.
+
+## Demo reliability checks
+
+Run the real Worker with the local OpenAI secret, then exercise the landing-page
+button and repeat recordings in each browser. Only microphone input is replaced
+with the repository's prerecorded speech sample; HTTP, WebSocket, the SDK,
+transcription, and microphone cleanup all run normally.
+
+```sh
+node apps/website/scripts/check-demo.mjs --origin http://127.0.0.1:4323 --browser all --runs 3
+node apps/website/scripts/check-demo-admission.mjs http://127.0.0.1:4323
+node apps/website/scripts/check-demo.mjs --origin https://voiceinput.dev --runs 5 --connections 20
+```
+
+The admission check is local-only: it changes trusted proxy addresses between
+ticket issuance and WebSocket connection and opens eight simultaneous sessions.
+The live check uses production quota and provider audio. Its report is written to
+`output/playwright/demo-reliability-<host>-<browser>.json`. Each recording must receive a fresh
+`ready`, final transcript, and `finished` event; leftover text cannot pass a run.

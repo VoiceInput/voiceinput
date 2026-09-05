@@ -15,7 +15,7 @@ import {
 export async function relaySession(
   socket: WebSocket,
   provider: VoiceInputProviderV1,
-  onReady: () => void = () => {},
+  onRecordingStarted: () => void = () => {},
 ): Promise<void> {
   const abort = new AbortController();
   const startedAt = Date.now();
@@ -116,6 +116,7 @@ export async function relaySession(
       return;
     }
     const chunk = new Int16Array(event.data);
+    if (audioBytes === 0) onRecordingStarted();
     audioBytes += size;
     queuedBytes += size;
     queue = queue
@@ -140,7 +141,6 @@ export async function relaySession(
     }
     clearTimeout(connectTimer);
     recordingTimer = setTimeout(finish, DEMO_SECONDS * 1_000);
-    onReady();
     send({ type: "ready" });
     const pump = (async () => {
       try {
