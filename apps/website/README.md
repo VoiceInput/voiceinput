@@ -53,12 +53,16 @@ PCM16 and transcript events through the relay.
 
 The relay permits 20 seconds / 960,000 bytes of audio, with separate 10-second
 connection and finalization deadlines. SQLite-backed Durable Object storage
-limits grants to 3 per IP per hour, 6 per IP per UTC day, and 100 across the demo
-per UTC day. It permits at most 4 concurrent sessions, one per IP. Grants count
-even if unused. Refreshing the page or restarting the Worker does not reset
+limits recordings to 12 per IP per hour, 30 per IP per UTC day, and 100 across the demo
+per UTC day. It permits at most 4 concurrent sessions, one per IP. Grants reserve allowance atomically; successful connections commit it.
+Failed startups and busy handshakes return their reservation, and unused tickets
+return it when they expire after 60 seconds. A separate 30-attempts-per-minute
+IP limit protects against repeated failed connections. Refreshing the page or restarting the Worker does not reset
 these budgets. Limits live in `worker/limits.ts` and `src/lib/demo-config.ts`.
 
 Audio and transcripts are streamed in memory and are never logged or stored.
+Fixed relay error messages, connection phase, and elapsed time are logged for
+diagnostics; provider payloads and credentials are excluded.
 Quota records use a salted daily hash of the Cloudflare-provided IP address;
 expired records are pruned on subsequent requests. The SDK's normal direct
 browser-to-provider connection is unchanged. The site uses no analytics.

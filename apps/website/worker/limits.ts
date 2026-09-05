@@ -8,8 +8,8 @@ export const FINALIZE_TIMEOUT_MS = 10_000;
 export const TICKET_TTL_MS = 60_000;
 export const MAX_CONCURRENT = 4;
 export const DAILY_SESSIONS = 100;
-export const HOURLY_SESSIONS_PER_IP = 3;
-export const DAILY_SESSIONS_PER_IP = 6;
+export const HOURLY_SESSIONS_PER_IP = 12;
+export const DAILY_SESSIONS_PER_IP = 30;
 
 export function jsonError(
   status: number,

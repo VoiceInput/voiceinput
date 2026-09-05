@@ -117,3 +117,22 @@ test("closing the browser immediately aborts the upstream session", async () => 
   await done;
   expect(session.abort).toHaveBeenCalledTimes(1);
 });
+
+test("only a ready provider commits a recording reservation", async () => {
+  const ready = vi.fn<() => void>();
+  const provider: VoiceInputProviderV1 = {
+    specificationVersion: "v1",
+    provider: "test",
+    modelId: "test",
+    sampleRate: 24000,
+    validateOptions() {},
+    doOpen: async () => {
+      throw new Error("connection failed");
+    },
+  };
+  const socket = new TestSocket();
+  await relaySession(socket as WebSocket, provider, ready);
+  expect(ready).not.toHaveBeenCalled();
+  expect(socket.sent.at(-1)?.type).toBe("error");
+  expect(socket.readyState).toBe(3);
+});

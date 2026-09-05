@@ -122,7 +122,26 @@ export class DemoGuard extends DurableObject<Env> {
     if (!ticket || !protocols.includes(DEMO_PROTOCOL))
       return jsonError(401, "Start a new demo session.");
     const denied = this.quota.consume(ticket, client, Date.now());
-    if (denied) return denied;
+    if (denied) {
+      // Browsers hide HTTP handshake errors. Deliver the reason over the socket.
+      const pair = new WebSocketPair();
+      pair[1].accept();
+      const { error } = (await denied.json()) as { error: string };
+      pair[1].send(
+        JSON.stringify({
+          type: "error",
+          message: error,
+          code: denied.status === 429 ? "rate-limited" : "token-error",
+          retryAfterMs: Number(denied.headers.get("Retry-After") ?? 0) * 1000,
+        }),
+      );
+      pair[1].close(1000, "Demo unavailable");
+      return new Response(null, {
+        status: 101,
+        webSocket: pair[0],
+        headers: { "Sec-WebSocket-Protocol": DEMO_PROTOCOL },
+      });
+    }
     const issue = createOpenAITokenHandler({
       apiKey: this.env.OPENAI_API_KEY,
       authorize: () => ({ subject: client }),
@@ -137,9 +156,11 @@ export class DemoGuard extends DurableObject<Env> {
     pair[1].binaryType = "arraybuffer";
     pair[1].accept();
     this.ctx.waitUntil(
-      relaySession(pair[1], provider).finally(() => {
-        this.quota.release(ticket);
-      }),
+      relaySession(pair[1], provider, () => this.quota.started(ticket)).finally(
+        () => {
+          this.quota.release(ticket);
+        },
+      ),
     );
     return new Response(null, {
       status: 101,

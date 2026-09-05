@@ -20,11 +20,23 @@ export class DemoQuota {
       "CREATE TABLE IF NOT EXISTS tickets (id TEXT PRIMARY KEY, client TEXT NOT NULL, expires INTEGER NOT NULL)",
     );
     sql.exec(
+      "CREATE TABLE IF NOT EXISTS reservations (ticket TEXT NOT NULL, key TEXT NOT NULL, expires INTEGER NOT NULL, PRIMARY KEY(ticket, key))",
+    );
+    sql.exec(
       "CREATE TABLE IF NOT EXISTS active (id TEXT PRIMARY KEY, client TEXT NOT NULL, expires INTEGER NOT NULL)",
     );
   }
 
   clean(now: number) {
+    // Return unused/failed reservations before removing their tickets or slots.
+    const expired = this.sql
+      .exec<{ id: string }>(
+        "SELECT id FROM tickets WHERE expires <= ? UNION SELECT id FROM active WHERE expires <= ?",
+        now,
+        now,
+      )
+      .toArray();
+    for (const { id } of expired) this.refund(id);
     this.sql.exec("DELETE FROM usage WHERE expires <= ?", now);
     this.sql.exec("DELETE FROM tickets WHERE expires <= ?", now);
     this.sql.exec("DELETE FROM active WHERE expires <= ?", now);
@@ -32,6 +44,26 @@ export class DemoQuota {
 
   issue(client: string, now: number): Response {
     this.clean(now);
+    const attemptKey = client + ":attempt";
+    const attempts = this.sql
+      .exec<{ count: number; expires: number }>(
+        "SELECT count, expires FROM usage WHERE key = ?",
+        attemptKey,
+      )
+      .toArray()[0];
+    if (attempts && attempts.count >= 30)
+      return jsonError(
+        429,
+        "Please wait a moment before starting another demo.",
+        Math.max(1, Math.ceil((attempts.expires - now) / 1000)),
+      );
+    this.sql.exec(
+      "INSERT INTO usage VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET count = count + 1",
+      attemptKey,
+      now + 60_000,
+    );
+    const busy = this.busy(client, now);
+    if (busy) return busy;
     const limits = [
       { key: "global", limit: DAILY_SESSIONS, window: 86_400_000 },
       {
@@ -61,6 +93,7 @@ export class DemoQuota {
           Math.max(1, Math.ceil((row.expires - now) / 1_000)),
         );
     }
+    const id = crypto.randomUUID();
     for (const limit of limits) {
       const expires = (Math.floor(now / limit.window) + 1) * limit.window;
       this.sql.exec(
@@ -68,8 +101,13 @@ export class DemoQuota {
         limit.key,
         expires,
       );
+      this.sql.exec(
+        "INSERT INTO reservations VALUES (?, ?, ?)",
+        id,
+        limit.key,
+        expires,
+      );
     }
-    const id = crypto.randomUUID();
     this.sql.exec(
       "INSERT INTO tickets VALUES (?, ?, ?)",
       id,
@@ -93,6 +131,24 @@ export class DemoQuota {
       )
       .toArray()[0];
     if (!grant) return jsonError(401, "Start a new demo session.");
+    const busy = this.busy(client, now);
+    if (busy) {
+      this.refund(ticket);
+      return busy;
+    }
+    this.sql.exec(
+      "INSERT INTO active VALUES (?, ?, ?)",
+      ticket,
+      client,
+      now +
+        CONNECT_TIMEOUT_MS +
+        DEMO_SECONDS * 1_000 +
+        FINALIZE_TIMEOUT_MS +
+        5_000,
+    );
+  }
+
+  private busy(client: string, now: number): Response | undefined {
     if (
       this.sql
         .exec<{ count: number }>(
@@ -114,19 +170,30 @@ export class DemoQuota {
         60,
       );
     }
-    this.sql.exec(
-      "INSERT INTO active VALUES (?, ?, ?)",
-      ticket,
-      client,
-      now +
-        CONNECT_TIMEOUT_MS +
-        DEMO_SECONDS * 1_000 +
-        FINALIZE_TIMEOUT_MS +
-        5_000,
-    );
+  }
+
+  /** A connected provider commits the reservation; startup failures return it. */
+  started(ticket: string) {
+    this.sql.exec("DELETE FROM reservations WHERE ticket = ?", ticket);
+  }
+
+  private refund(ticket: string) {
+    const rows = this.sql
+      .exec<{ key: string; expires: number }>(
+        "DELETE FROM reservations WHERE ticket = ? RETURNING key, expires",
+        ticket,
+      )
+      .toArray();
+    for (const row of rows)
+      this.sql.exec(
+        "UPDATE usage SET count = MAX(0, count - 1) WHERE key = ? AND expires = ?",
+        row.key,
+        row.expires,
+      );
   }
 
   release(ticket: string) {
+    this.refund(ticket);
     this.sql.exec("DELETE FROM active WHERE id = ?", ticket);
   }
 }

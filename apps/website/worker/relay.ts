@@ -15,8 +15,10 @@ import {
 export async function relaySession(
   socket: WebSocket,
   provider: VoiceInputProviderV1,
+  onReady: () => void = () => {},
 ): Promise<void> {
   const abort = new AbortController();
+  const startedAt = Date.now();
   let session: VoiceInputProviderV1Session | undefined;
   let closed = false;
   let finishing = false;
@@ -47,6 +49,16 @@ export async function relaySession(
     resolveDone();
   };
   const fail = (message: string) => {
+    if (closed) return;
+    // Only fixed operational messages; never log provider payloads, audio, or text.
+    console.warn(
+      JSON.stringify({
+        event: "demo-relay-error",
+        phase: !session ? "connecting" : finishing ? "finishing" : "streaming",
+        elapsedMs: Date.now() - startedAt,
+        message,
+      }),
+    );
     send({ type: "error", message });
     close();
   };
@@ -128,6 +140,7 @@ export async function relaySession(
     }
     clearTimeout(connectTimer);
     recordingTimer = setTimeout(finish, DEMO_SECONDS * 1_000);
+    onReady();
     send({ type: "ready" });
     const pump = (async () => {
       try {

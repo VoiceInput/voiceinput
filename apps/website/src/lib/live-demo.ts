@@ -33,14 +33,31 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
         signal: abortSignal,
       });
       if (!response.ok) {
-        const message =
+        let message =
           response.status === 429
-            ? "The demo limit has been reached. Please try again later."
+            ? "The demo limit has been reached."
             : "The voice demo is unavailable right now. Please try again later.";
+        try {
+          const body: unknown = await response.json();
+          if (
+            typeof body === "object" &&
+            body &&
+            "error" in body &&
+            typeof body.error === "string" &&
+            body.error.length <= 500
+          )
+            message = body.error;
+        } catch {
+          /* Proxies may return a non-JSON error page. */
+        }
+        const seconds = Number(response.headers.get("Retry-After"));
+        const retryAfterMs =
+          Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined;
         throw new VoiceInputError({
           code: response.status === 429 ? "rate-limited" : "network-error",
-          message,
+          message: withRetryDelay(message, retryAfterMs),
           retryable: true,
+          retryAfterMs,
         });
       }
       const data: unknown = await response.json();
@@ -86,11 +103,17 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
         controller.close();
         socket.close();
       };
-      const fail = (message: string) => {
+      const fail = (
+        message: string,
+        code:
+          "network-error" | "rate-limited" | "token-error" = "network-error",
+        retryAfterMs?: number,
+      ) => {
         if (closed) return;
         const error = new VoiceInputError({
-          code: "network-error",
-          message,
+          code,
+          message: withRetryDelay(message, retryAfterMs),
+          retryAfterMs,
           retryable: true,
         });
         if (!ready) rejectReady(error);
@@ -125,6 +148,14 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
               typeof part.message === "string"
                 ? part.message
                 : "Transcription stopped. Please try again.",
+              part.code === "rate-limited" || part.code === "token-error"
+                ? part.code
+                : "network-error",
+              typeof part.retryAfterMs === "number" &&
+                Number.isFinite(part.retryAfterMs) &&
+                part.retryAfterMs > 0
+                ? part.retryAfterMs
+                : undefined,
             );
           } else if (
             (part.type === "interim" || part.type === "final") &&
@@ -180,4 +211,14 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
       };
     },
   };
+}
+
+function withRetryDelay(message: string, retryAfterMs?: number): string {
+  if (!retryAfterMs) return message;
+  const seconds = Math.ceil(retryAfterMs / 1000);
+  const delay =
+    seconds < 60
+      ? `${seconds} ${seconds === 1 ? "second" : "seconds"}`
+      : `${Math.ceil(seconds / 60)} ${seconds <= 60 ? "minute" : "minutes"}`;
+  return `${message} You can retry in ${delay}.`;
 }
