@@ -130,7 +130,18 @@ export class DemoQuota {
         now,
       )
       .toArray()[0];
-    if (!grant) return jsonError(401, "Start a new demo session.");
+    if (!grant) {
+      const existing =
+        this.sql.exec("SELECT id FROM tickets WHERE id = ?", ticket).toArray()
+          .length > 0;
+      console.warn(
+        JSON.stringify({
+          event: "demo-ticket-rejected",
+          reason: existing ? "client-changed" : "expired-or-used",
+        }),
+      );
+      return jsonError(401, "Start a new demo session.");
+    }
     const busy = this.busy(client, now);
     if (busy) {
       this.refund(ticket);
