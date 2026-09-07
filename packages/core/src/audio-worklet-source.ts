@@ -1,5 +1,7 @@
 export const VOICE_INPUT_PROCESSOR_NAME = "voiceinput-pcm16";
 
+export { AUDIO_WORKLET_SOURCE } from "./audio-worklet.generated.js";
+
 interface ProcessorOptions {
   readonly processorOptions?: {
     readonly frameSamples?: number;
@@ -29,7 +31,7 @@ type WorkletProcessorConstructor = new (
   options: ProcessorOptions,
 ) => VoiceInputWorkletProcessor;
 
-/** Self-contained so the emitted function can also be loaded as a worklet. */
+/** Kept self-contained so the build generator can bundle it as a worklet. */
 export function registerVoiceInputPcm16Processor(
   ProcessorBase: WorkletProcessorBase,
   sourceSampleRate: number,
@@ -167,7 +169,7 @@ export function registerVoiceInputPcm16Processor(
     }
 
     #flush(): void {
-      const lastSample = this.#input.at(-1);
+      const lastSample = this.#input[this.#input.length - 1];
       if (lastSample !== undefined) {
         this.#input.push(lastSample);
         this.#drain();
@@ -189,7 +191,3 @@ export function registerVoiceInputPcm16Processor(
 
   register(processorName, VoiceInputPcm16Processor);
 }
-
-export const AUDIO_WORKLET_SOURCE = `(${registerVoiceInputPcm16Processor.toString()})(AudioWorkletProcessor, sampleRate, registerProcessor, ${JSON.stringify(
-  VOICE_INPUT_PROCESSOR_NAME,
-)});`;

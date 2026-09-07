@@ -1,5 +1,6 @@
 import {
   VoiceInputError,
+  reportUnhandledError,
   type VoiceInputErrorCode,
   type VoiceInputProviderV1,
   type VoiceInputProviderV1Session,
@@ -23,7 +24,7 @@ export type {
 const DEFAULT_MAX_DURATION_MS = 300_000;
 const DEFAULT_CONNECTION_TIMEOUT_MS = 15_000;
 const DURATION_WARNING_MS = 30_000;
-const FINALIZATION_TIMEOUT_MS = 5_000;
+const DEFAULT_FINALIZATION_TIMEOUT_MS = 15_000;
 
 export type VoiceInputStatus =
   | "idle"
@@ -40,7 +41,8 @@ export type VoiceInputStopReason =
   | "replaced"
   | "max-length"
   | "target-unavailable"
-  | "backgrounded";
+  | "backgrounded"
+  | "finalization-timeout";
 
 export interface VoiceInputSnapshot {
   readonly status: VoiceInputStatus;
@@ -108,6 +110,10 @@ export interface CreateVoiceInputSessionOptions extends VoiceTranscriptionOption
   textEngine?: VoiceInputTextEngine;
   maxDurationMs?: number;
   connectionTimeoutMs?: number;
+  /** Audio/provider shutdown budget, including the final audio flush. Default: 15 seconds. */
+  finalizationTimeoutMs?: number;
+  /** Stop on visibility loss. Default: true; set false for desktop background dictation. */
+  stopWhenHidden?: boolean;
 }
 
 export interface VoiceInputSession {
@@ -126,6 +132,8 @@ export interface VoiceInputSession {
 interface SessionConfiguration extends VoiceTranscriptionOptions {
   maxDurationMs: number;
   connectionTimeoutMs: number;
+  finalizationTimeoutMs: number;
+  stopWhenHidden: boolean;
 }
 
 interface ActiveRun {
@@ -144,6 +152,7 @@ interface ActiveRun {
   durationTimer?: ReturnType<typeof setTimeout>;
   connectionTimer?: ReturnType<typeof setTimeout>;
   connectionDeadlineStarted?: boolean;
+  inputClosed?: boolean;
 }
 
 export function createVoiceInputSession(
@@ -255,7 +264,7 @@ class VoiceInputSessionController implements VoiceInputSession {
     if (this.#textEngine) {
       run.cleanup.push(
         this.#textEngine.subscribe((event) => {
-          if (!this.#isActive(run)) return;
+          if (!this.#isActive(run) || event.type === "writable-change") return;
           if (event.type === "text-limit") this.#emit(event);
           const reason =
             event.type === "text-limit"
@@ -271,9 +280,22 @@ class VoiceInputSessionController implements VoiceInputSession {
     }
     if (typeof document !== "undefined") {
       const onVisibility = (): void => {
-        if (document.hidden && this.#isActive(run))
+        if (
+          this.#configuration.stopWhenHidden &&
+          document.hidden &&
+          this.#isActive(run)
+        )
           void this.stop("backgrounded");
       };
+      const onPageExit = (): void => {
+        if (this.#isActive(run)) void this.stop("backgrounded");
+      };
+      document.addEventListener("freeze", onPageExit);
+      globalThis.addEventListener?.("pagehide", onPageExit);
+      run.cleanup.push(() => {
+        document.removeEventListener("freeze", onPageExit);
+        globalThis.removeEventListener?.("pagehide", onPageExit);
+      });
       document.addEventListener("visibilitychange", onVisibility);
       run.cleanup.push(() =>
         document.removeEventListener("visibilitychange", onVisibility),
@@ -457,27 +479,37 @@ class VoiceInputSessionController implements VoiceInputSession {
     }
 
     try {
-      await withTimeout(
+      const finished = await withTimeout(
         (async () => {
           await audio?.stop();
           await run.captureTask;
           await audioTask;
 
-          if (!this.#isActive(run)) {
+          if (!this.#isActive(run) || run.inputClosed) {
             return;
           }
 
           await providerSession.finish();
           await providerTask;
         })(),
-        FINALIZATION_TIMEOUT_MS,
-        this.#provider.provider,
+        this.#configuration.finalizationTimeoutMs,
+        run.abortController.signal,
       );
 
       if (!this.#isActive(run)) {
         return;
       }
 
+      if (!finished) {
+        // Close input before aborting: provider abort callbacks must not undo
+        // the text that graceful completion is about to preserve.
+        run.inputClosed = true;
+        this.#abortRun(run, "finalization-timeout");
+        this.#setSnapshot({
+          finalTranscript: this.#snapshot.transcript,
+          interimTranscript: "",
+        });
+      }
       const completed = await this.#completeTextEngine(run);
       if (!completed) {
         return;
@@ -488,7 +520,10 @@ class VoiceInputSessionController implements VoiceInputSession {
       for (const cleanup of run.cleanup.splice(0)) cleanup();
       run.queue.close(true);
       this.#transition("idle");
-      this.#emit({ type: "stop", reason });
+      this.#emit({
+        type: "stop",
+        reason: finished ? reason : "finalization-timeout",
+      });
     } catch (error) {
       if (this.#isActive(run)) {
         this.#failRun(run, this.#normalizeError(error, "provider-error"));
@@ -503,10 +538,10 @@ class VoiceInputSessionController implements VoiceInputSession {
     const reader = session.stream.getReader();
 
     try {
-      while (this.#isActive(run)) {
+      while (this.#isActive(run) && !run.inputClosed) {
         const result = await reader.read();
 
-        if (result.done || !this.#isActive(run)) {
+        if (result.done || !this.#isActive(run) || run.inputClosed) {
           break;
         }
 
@@ -517,6 +552,7 @@ class VoiceInputSessionController implements VoiceInputSession {
 
       if (
         this.#isActive(run) &&
+        !run.inputClosed &&
         this.#snapshot.status !== "stopping" &&
         this.#snapshot.status !== "error"
       ) {
@@ -531,7 +567,7 @@ class VoiceInputSessionController implements VoiceInputSession {
         );
       }
     } catch (error) {
-      if (this.#isActive(run)) {
+      if (this.#isActive(run) && !run.inputClosed) {
         this.#failRun(run, this.#normalizeError(error, "provider-error"));
       }
     } finally {
@@ -543,7 +579,7 @@ class VoiceInputSessionController implements VoiceInputSession {
     run: ActiveRun,
     part: VoiceInputProviderV1StreamPart,
   ): boolean {
-    if (!this.#isActive(run)) {
+    if (!this.#isActive(run) || run.inputClosed) {
       return true;
     }
 
@@ -639,10 +675,10 @@ class VoiceInputSessionController implements VoiceInputSession {
     });
 
     try {
-      while (this.#isActive(run)) {
+      while (this.#isActive(run) && !run.inputClosed) {
         const result = await reader.read();
 
-        if (result.done || !this.#isActive(run)) {
+        if (result.done || !this.#isActive(run) || run.inputClosed) {
           break;
         }
 
@@ -656,7 +692,7 @@ class VoiceInputSessionController implements VoiceInputSession {
         run.queue.push(result.value);
       }
     } catch (error) {
-      if (this.#isActive(run)) {
+      if (this.#isActive(run) && !run.inputClosed) {
         this.#failRun(run, this.#normalizeError(error, "audio-error"));
       }
     } finally {
@@ -671,16 +707,16 @@ class VoiceInputSessionController implements VoiceInputSession {
     session: VoiceInputProviderV1Session,
   ): Promise<void> {
     try {
-      while (this.#isActive(run)) {
+      while (this.#isActive(run) && !run.inputClosed) {
         const chunk = await run.queue.read();
-        if (!chunk || !this.#isActive(run)) return;
+        if (!chunk || !this.#isActive(run) || run.inputClosed) return;
         await untilAborted(
           Promise.resolve(session.sendAudio(chunk)),
           run.abortController.signal,
         );
       }
     } catch (error) {
-      if (this.#isActive(run))
+      if (this.#isActive(run) && !run.inputClosed)
         this.#failRun(run, this.#normalizeError(error, "audio-error"));
     }
   }
@@ -913,6 +949,8 @@ function validateSessionConfiguration(
   const endpointing: unknown = options.endpointing;
   const maxDurationMs: unknown = options.maxDurationMs;
   const connectionTimeoutMs: unknown = options.connectionTimeoutMs;
+  const finalizationTimeoutMs: unknown = options.finalizationTimeoutMs;
+  const stopWhenHidden: unknown = options.stopWhenHidden;
   let validatedLanguage: string | undefined;
   let validatedVocabulary: readonly string[] | undefined;
   let validatedEndpointing: VoiceTranscriptionOptions["endpointing"];
@@ -974,6 +1012,16 @@ function validateSessionConfiguration(
     issues.push("connectionTimeoutMs: must be a positive safe integer.");
   }
 
+  if (
+    finalizationTimeoutMs !== undefined &&
+    !isPositiveInteger(finalizationTimeoutMs)
+  ) {
+    issues.push("finalizationTimeoutMs: must be a positive safe integer.");
+  }
+  if (stopWhenHidden !== undefined && typeof stopWhenHidden !== "boolean") {
+    issues.push("stopWhenHidden: must be a boolean.");
+  }
+
   if (issues.length > 0) {
     const cause = new TypeError(issues.join("; "));
     throw new VoiceInputError({
@@ -994,6 +1042,10 @@ function validateSessionConfiguration(
     connectionTimeoutMs:
       (connectionTimeoutMs as number | undefined) ??
       DEFAULT_CONNECTION_TIMEOUT_MS,
+    finalizationTimeoutMs:
+      (finalizationTimeoutMs as number | undefined) ??
+      DEFAULT_FINALIZATION_TIMEOUT_MS,
+    stopWhenHidden: (stopWhenHidden as boolean | undefined) ?? true,
   };
 }
 
@@ -1075,22 +1127,6 @@ function safely(operation: () => void): void {
   }
 }
 
-function reportUnhandledError(error: unknown): void {
-  const reportError = (
-    globalThis as typeof globalThis & {
-      reportError?: (error: unknown) => void;
-    }
-  ).reportError;
-
-  if (typeof reportError === "function") {
-    reportError(error);
-  } else {
-    queueMicrotask(() => {
-      throw error;
-    });
-  }
-}
-
 async function untilAborted<T>(
   promise: PromiseLike<T>,
   signal: AbortSignal,
@@ -1118,29 +1154,20 @@ async function untilAborted<T>(
 async function withTimeout(
   promise: Promise<void>,
   timeoutMs: number,
-  provider: string,
-): Promise<void> {
+  signal: AbortSignal,
+): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-
   try {
-    await Promise.race([
-      promise,
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => {
-          reject(
-            new VoiceInputError({
-              code: "provider-error",
-              message: `${provider} did not finish the transcription session in time.`,
-              provider,
-              retryable: true,
-            }),
-          );
-        }, timeoutMs);
-      }),
-    ]);
+    return await untilAborted(
+      Promise.race([
+        promise.then(() => true),
+        new Promise<false>((resolve) => {
+          timer = setTimeout(() => resolve(false), timeoutMs);
+        }),
+      ]),
+      signal,
+    );
   } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
+    if (timer !== undefined) clearTimeout(timer);
   }
 }

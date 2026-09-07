@@ -110,3 +110,19 @@ After this one-time bootstrap, configure each package to trust
 permission. Require an owner review on the `npm` GitHub environment, retaining
 its `main` restriction. All later versions use the existing publication
 workflow.
+
+## Next release after the launch hardening pass
+
+The controlled-field restart fix and the launch-hardening Changeset must both be
+consumed by the next version PR before publishing. Keep the beta channel until
+stable-release support gates are complete; pushing fixes to main does not update
+npm. Validate the versioned candidate and publish its immutable CI artifacts.
+
+As verified on September 6, 2026, both `latest` and `next` point to
+`0.1.0-beta.1`. `@next` explicitly follows beta releases; it does not imply that
+an untagged install currently selects a stable version. For the first stable
+release, exit Changesets prerelease mode, update all SDK install snippets to
+untagged versions, and publish with explicit dist-tag `latest`. Check the tags
+with `npm view @voiceinput/react dist-tags` after publishing, then test a fresh
+registry install. Do not remove the only usable `latest` tag before a stable
+replacement exists.

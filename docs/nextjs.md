@@ -137,7 +137,7 @@ export default function RootLayout({
 ```tsx
 "use client";
 
-import { useVoiceInput } from "@voiceinput/react";
+import { getVoiceInputErrorMessage, useVoiceInput } from "@voiceinput/react";
 import { useState } from "react";
 
 export function Composer() {
@@ -160,7 +160,9 @@ export function Composer() {
       />
       <button {...voice.getTriggerProps()}>{active ? "Stop" : "Speak"}</button>
       <output aria-live="polite">{voice.status}</output>
-      {voice.error ? <p role="alert">{voice.error.message}</p> : null}
+      {voice.error ? (
+        <p role="alert">{getVoiceInputErrorMessage(voice.error)}</p>
+      ) : null}
     </form>
   );
 }

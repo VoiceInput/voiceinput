@@ -53,8 +53,15 @@ export interface VoiceInputTextLimit {
   readonly source: "interim" | "final" | "transform";
 }
 
+export interface VoiceInputTextWritableChange {
+  readonly type: "writable-change";
+  readonly writable: boolean;
+}
+
 export type VoiceInputTextEngineEvent =
-  VoiceInputTextLimit | { type: "target-unavailable" | "reset" };
+  | VoiceInputTextLimit
+  | VoiceInputTextWritableChange
+  | { type: "target-unavailable" | "reset" };
 
 export interface CreateVoiceInputTextEngineOptions {
   interimBehavior?: VoiceInputInterimBehavior;

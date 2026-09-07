@@ -2,6 +2,7 @@ import {
   VoiceInputError,
   type VoiceInputProviderV1,
   type VoiceInputProviderV1Session,
+  type VoiceInputProviderV1StreamPart,
   type VoiceTranscriptionOptions,
 } from "@voiceinput/provider";
 import {
@@ -195,6 +196,8 @@ function createSession(
     audio?: FakeAudioSource;
     maxDurationMs?: number;
     connectionTimeoutMs?: number;
+    finalizationTimeoutMs?: number;
+    stopWhenHidden?: boolean;
     language?: string;
     vocabulary?: readonly string[];
     textEngine?: VoiceInputTextEngine;
@@ -216,6 +219,12 @@ function createSession(
     ...(options.connectionTimeoutMs === undefined
       ? {}
       : { connectionTimeoutMs: options.connectionTimeoutMs }),
+    ...(options.finalizationTimeoutMs === undefined
+      ? {}
+      : { finalizationTimeoutMs: options.finalizationTimeoutMs }),
+    ...(options.stopWhenHidden === undefined
+      ? {}
+      : { stopWhenHidden: options.stopWhenHidden }),
     ...(options.language === undefined ? {} : { language: options.language }),
     ...(options.vocabulary === undefined
       ? {}
@@ -310,6 +319,12 @@ describe("configuration", () => {
       { connectionTimeoutMs: Number.POSITIVE_INFINITY },
       /connectionTimeoutMs/,
     ],
+    [
+      "finalization timeout",
+      { finalizationTimeoutMs: 0 },
+      /finalizationTimeoutMs/,
+    ],
+    ["hidden policy", { stopWhenHidden: "false" }, /stopWhenHidden/],
   ])("rejects invalid %s configuration", (_name, configuration, message) => {
     const provider = createFakeVoiceInputProvider();
     const audio = createFakeAudioSource();
@@ -934,20 +949,86 @@ describe("graceful finalization", () => {
     });
   });
 
-  it("fails safely when the provider does not finish in time", async () => {
+  it("preserves interim text and completes normally when finalization times out", async () => {
     vi.useFakeTimers();
-    const provider = createFakeVoiceInputProvider({
-      autoCloseOnFinish: false,
+    const provider = createFakeVoiceInputProvider({ autoCloseOnFinish: false });
+    const textEngine = createFakeTextEngine();
+    const { session, events, audio } = createSession({
+      provider,
+      textEngine,
+      finalizationTimeoutMs: 12_000,
     });
-    const { session } = createSession({ provider });
     await session.start();
-
+    provider.controller.emit({ type: "interim", text: "keep my last phrase" });
+    await vi.advanceTimersByTimeAsync(0);
     const stopPromise = session.stop();
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(11_999);
+    expect(session.getSnapshot().status).toBe("stopping");
+    await vi.advanceTimersByTimeAsync(1);
     await stopPromise;
+    expect(session.getSnapshot()).toMatchObject({
+      status: "idle",
+      error: null,
+      transcript: "keep my last phrase",
+      finalTranscript: "keep my last phrase",
+      interimTranscript: "",
+    });
+    expect(textEngine.complete).toHaveBeenCalledOnce();
+    expect(textEngine.cancel).not.toHaveBeenCalled();
+    expect(audio.sessions[0]?.closed).toBe(true);
+    expect(events).toContainEqual({
+      type: "stop",
+      reason: "finalization-timeout",
+    });
+    await session.start();
+    expect(session.getSnapshot().status).toBe("listening");
+    await session.cancel();
+  });
 
-    expect(session.getSnapshot().status).toBe("error");
-    expect(session.getSnapshot().error?.code).toBe("provider-error");
+  it("ignores late events from a timed-out provider after restarting", async () => {
+    vi.useFakeTimers();
+    const controllers: ReadableStreamDefaultController<VoiceInputProviderV1StreamPart>[] =
+      [];
+    const fake = createFakeVoiceInputProvider();
+    const audio = createFakeAudioSource();
+    const session = createVoiceInputSession({
+      provider: {
+        ...fake.provider,
+        doOpen() {
+          return Promise.resolve({
+            stream: new ReadableStream<VoiceInputProviderV1StreamPart>({
+              start(controller) {
+                controllers.push(controller);
+              },
+            }),
+            sendAudio() {},
+            finish() {},
+            // Deliberately broken custom adapter: ignore cancellation.
+            abort() {},
+          });
+        },
+      },
+      audioSource: audio.audioSource,
+      finalizationTimeoutMs: 100,
+    });
+    await session.start();
+    controllers[0]!.enqueue({ type: "interim", text: "old phrase" });
+    await vi.advanceTimersByTimeAsync(0);
+    const stop = session.stop();
+    await vi.advanceTimersByTimeAsync(100);
+    await stop;
+    await session.start();
+    controllers[1]!.enqueue({ type: "interim", text: "new phrase" });
+    controllers[0]!.enqueue({ type: "final", text: "late old final" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.getSnapshot()).toMatchObject({
+      status: "listening",
+      transcript: "new phrase",
+      finalTranscript: "",
+      error: null,
+    });
+    await session.cancel();
+    for (const controller of controllers) controller.close();
   });
 
   it("bounds shutdown when sending the last audio frame stalls", async () => {
@@ -967,12 +1048,12 @@ describe("graceful finalization", () => {
     await waitFor(() => expect(sendAudio).toHaveBeenCalledOnce());
 
     const stop = session.stop();
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await stop;
 
     expect(session.getSnapshot()).toMatchObject({
-      status: "error",
-      error: { code: "provider-error" },
+      status: "idle",
+      error: null,
     });
   });
 
@@ -991,13 +1072,13 @@ describe("graceful finalization", () => {
     await session.start();
 
     const stop = session.stop();
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(15_000);
     await stop;
 
     expect(finish).toHaveBeenCalledOnce();
     expect(session.getSnapshot()).toMatchObject({
-      status: "error",
-      error: { code: "provider-error" },
+      status: "idle",
+      error: null,
     });
   });
 });
@@ -1111,6 +1192,23 @@ describe("text engine integration", () => {
 });
 
 describe("duration limits", () => {
+  it("can keep recording while hidden but stops when the page freezes", async () => {
+    const document = Object.assign(new EventTarget(), { hidden: false });
+    vi.stubGlobal("document", document);
+    try {
+      const { session, events } = createSession({ stopWhenHidden: false });
+      await session.start();
+      document.hidden = true;
+      document.dispatchEvent(new Event("visibilitychange"));
+      expect(session.getSnapshot().status).toBe("listening");
+      document.dispatchEvent(new Event("freeze"));
+      await waitFor(() => expect(session.getSnapshot().status).toBe("idle"));
+      expect(events).toContainEqual({ type: "stop", reason: "backgrounded" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("stops on backgrounding, releases capture, and can record again", async () => {
     const document = Object.assign(new EventTarget(), { hidden: false });
     vi.stubGlobal("document", document);

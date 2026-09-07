@@ -34,6 +34,8 @@ interface UseVoiceInputCommonOptions {
   endpointing?: false | VoiceEndpointingOptions;
   maxDurationMs?: number;
   connectionTimeoutMs?: number;
+  finalizationTimeoutMs?: number;
+  stopWhenHidden?: boolean;
   interimBehavior?: VoiceInputInterimBehavior;
   transformTranscript?: VoiceInputTransformTranscript;
   transformTimeoutMs?: number;

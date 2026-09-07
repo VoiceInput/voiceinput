@@ -3,9 +3,13 @@ import { userEvent } from "vitest/browser";
 
 import {
   VoiceInputError,
+  createVoiceInputSession,
   createVoiceInputTextEngine,
+  type PreparedVoiceAudioSource,
+  type VoiceAudioSource,
   type VoiceInputTextEngine,
 } from "./index.js";
+import { createFakeVoiceInputProvider } from "@voiceinput/provider/test";
 
 const engines: VoiceInputTextEngine[] = [];
 
@@ -62,6 +66,90 @@ afterEach(() => {
 });
 
 describe("text ownership", () => {
+  it.each(["input", "textarea"] as const)(
+    "appends to a never-focused prefilled %s and honors a focused start caret",
+    (tagName) => {
+      const container = document.createElement("div");
+      container.innerHTML =
+        tagName === "input"
+          ? '<input type="text" value="Existing text">'
+          : "<textarea>Existing text</textarea>";
+      document.body.append(container);
+      const target = container.firstElementChild;
+      if (!(
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      )) {
+        throw new Error("Expected a text control.");
+      }
+      expect(target.selectionStart).toBe(0);
+      const engine = createEngine();
+      engine.setTarget(target);
+      engine.begin();
+      engine.applyFinal("dictated", "append");
+      expect(target.value).toBe("Existing text dictated");
+
+      engine.setTarget(null);
+      target.value = "Existing text";
+      engine.setTarget(target);
+      target.focus();
+      target.setSelectionRange(0, 0);
+      engine.begin();
+      engine.applyFinal("dictated", "prepend");
+      expect(target.value).toBe("dictated Existing text");
+    },
+  );
+
+  it("publishes writability changes from its single target observer", async () => {
+    const target = createTextarea();
+    const engine = createEngine();
+    const events: unknown[] = [];
+    engine.subscribe((event) => events.push(event));
+    engine.setTarget(target);
+    expect(events).toContainEqual({ type: "writable-change", writable: true });
+
+    target.readOnly = true;
+    await Promise.resolve();
+    expect(events).toContainEqual({ type: "writable-change", writable: false });
+    expect(events).toContainEqual({ type: "target-unavailable" });
+
+    target.readOnly = false;
+    await Promise.resolve();
+    expect(events.at(-1)).toEqual({ type: "writable-change", writable: true });
+  });
+
+  it("keeps visible interim text when provider finalization times out", async () => {
+    const target = createTextarea();
+    const textEngine = createEngine();
+    textEngine.setTarget(target);
+    const fake = createFakeVoiceInputProvider({ autoCloseOnFinish: false });
+    const session = createVoiceInputSession({
+      provider: fake.provider,
+      audioSource: createFakeAudioSource(),
+      textEngine,
+      finalizationTimeoutMs: 20,
+    });
+    const stopReasons: string[] = [];
+    session.subscribe((event) => {
+      if (event.type === "stop") stopReasons.push(event.reason);
+    });
+
+    await session.start();
+    await fake.controller.waitForSession();
+    fake.controller.emit({
+      type: "interim",
+      text: "visible draft",
+      segmentId: "a",
+    });
+    await vi.waitFor(() => expect(target.value).toBe("visible draft"));
+
+    await session.stop();
+    expect(target.value).toBe("visible draft");
+    expect(textEngine.getSnapshot().spans[0]?.state).toBe("finalized");
+    expect(session.getSnapshot().status).toBe("idle");
+    expect(stopReasons).toEqual(["finalization-timeout"]);
+  });
+
   it("freezes a disabled fieldset and never mutates a replacement with old speech", async () => {
     const target = createTextarea();
     const fieldset = document.createElement("fieldset");
@@ -198,7 +286,9 @@ describe("text ownership", () => {
     target.maxLength = 8;
     const engine = createEngine();
     const limits: unknown[] = [];
-    engine.subscribe((event) => limits.push(event));
+    engine.subscribe((event) => {
+      if (event.type === "text-limit") limits.push(event);
+    });
     activate(engine, target, 2, 5);
     engine.applyFinal("👍🏽 hello", "a");
     expect(target.value).toBe("L 👍🏽 R");
@@ -439,6 +529,26 @@ describe("text ownership", () => {
     }
   });
 });
+
+function createFakeAudioSource(): VoiceAudioSource {
+  return {
+    async prepare(): Promise<PreparedVoiceAudioSource> {
+      let controller: ReadableStreamDefaultController<Int16Array> | undefined;
+      let closed = false;
+      const stream = new ReadableStream<Int16Array>({
+        start(streamController) {
+          controller = streamController;
+        },
+      });
+      const close = (): void => {
+        if (closed) return;
+        closed = true;
+        controller?.close();
+      };
+      return { stream, start() {}, stop: close, abort: close };
+    },
+  };
+}
 
 describe("controlled reconciliation", () => {
   it("keeps revising shadow text while controlled commits are deferred", () => {

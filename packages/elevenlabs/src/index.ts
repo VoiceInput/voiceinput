@@ -19,7 +19,7 @@ import {
 
 const DEFAULT_REALTIME_URL =
   "wss://api.elevenlabs.io/v1/speech-to-text/realtime";
-const DEFAULT_FINISH_TIMEOUT_MS = 4_000;
+const DEFAULT_FINISH_TIMEOUT_MS = 20_000;
 const FINISH_DRAIN_MS = 250;
 
 export interface ElevenLabsVoiceInputProviderOptions extends ElevenLabsRealtimeSettings {
@@ -520,9 +520,13 @@ function normalizeRealtimeError(
   return new VoiceInputError({
     code,
     message:
-      typeof value["error"] === "string"
-        ? value["error"]
-        : `ElevenLabs Realtime reported ${type}.`,
+      code === "unauthorized"
+        ? "ElevenLabs rejected the Realtime session."
+        : code === "rate-limited"
+          ? "ElevenLabs Realtime rate limit was exceeded."
+          : code === "audio-error"
+            ? "ElevenLabs could not process the audio input."
+            : "ElevenLabs Realtime reported an error.",
     provider: "elevenlabs",
     retryable,
     cause: value,

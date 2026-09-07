@@ -96,13 +96,14 @@ All adapters implement the same versioned session contract and normalize interim
 text, final text, speech boundaries, closure, and errors. They do not pretend
 provider capabilities are identical.
 
-| Capability           | OpenAI                                         | ElevenLabs           | Deepgram                                                      |
-| -------------------- | ---------------------------------------------- | -------------------- | ------------------------------------------------------------- |
-| Default model        | `gpt-transcribe`                               | `scribe_v2_realtime` | `nova-3`                                                      |
-| PCM16 rate           | 24 kHz                                         | 16 kHz               | 16 kHz                                                        |
-| Omitted language     | Automatic                                      | Automatic            | `multi` on known multilingual Nova models; otherwise required |
-| Vocabulary mapping   | Prompt, or keywords for live-transcribe models | Key terms            | Nova-3 key terms                                              |
-| `endpointing: false` | Manual commit                                  | Manual commit        | Disables endpointing                                          |
+| Capability                             | OpenAI                                         | ElevenLabs           | Deepgram                                                      |
+| -------------------------------------- | ---------------------------------------------- | -------------------- | ------------------------------------------------------------- |
+| Default model                          | `gpt-transcribe`                               | `scribe_v2_realtime` | `nova-3`                                                      |
+| PCM16 rate                             | 24 kHz                                         | 16 kHz               | 16 kHz                                                        |
+| Omitted language                       | Automatic                                      | Automatic            | `multi` on known multilingual Nova models; otherwise required |
+| Vocabulary mapping                     | Prompt, or keywords for live-transcribe models | Key terms            | Nova-3 key terms                                              |
+| Omitted `endpointing` on default model | Server VAD, 500 ms silence                     | VAD, 650 ms silence  | Provider default                                              |
+| `endpointing: false`                   | Manual commit                                  | Manual commit        | Disables endpointing                                          |
 
 Unsupported or invalid normalized options fail before microphone permission is
 requested; adapters never silently discard them.

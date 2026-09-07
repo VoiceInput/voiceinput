@@ -2,11 +2,13 @@
 
 If recording or text insertion fails, check `voice.error.code`. The same error
 is available in the `onError` callback. Use the code to choose a recovery
-action; error messages may change between releases.
+action. Display `getVoiceInputErrorMessage(voice.error)` from
+`@voiceinput/react` when the user needs an explanation.
 
 | Error or symptom                                | First thing to check                                          |
 | ----------------------------------------------- | ------------------------------------------------------------- |
 | `unsupported-browser` or disabled control       | HTTPS, microphone APIs, and AudioWorklet                      |
+| `user-activation-required`                      | Start again from a direct button or keyboard activation       |
 | `permission-denied`                             | Site and operating-system microphone permissions              |
 | `device-not-found` / `device-busy`              | Connected microphone and other apps using it                  |
 | `unauthorized`, HTTP 401/403                    | Sign-in session, cookies, and configured origin               |
@@ -17,8 +19,8 @@ action; error messages may change between releases.
 | `provider-error`                                | Provider settings, server logs, and provider status           |
 | `invalid-configuration` / `unsupported-feature` | Option values and the selected provider’s supported settings  |
 
-Inspect `error.cause` in local developer diagnostics when you need more detail.
-Do not display raw provider or browser errors to end users.
+Inspect `error.message` and `error.cause` in local developer diagnostics when
+you need more detail. Do not display those diagnostic values to end users.
 
 ## The control is disabled or `isSupported` is false
 
@@ -36,7 +38,9 @@ microphone access for the frame's origin.
 
 ## Permission is denied
 
-`permission-denied` means the browser or operating system rejected access.
+`user-activation-required` means the browser requires another direct activation
+before it can start audio. `permission-denied` means the browser or operating
+system rejected access.
 
 - Trigger recording from a real click, pointer press, Enter, or Space event.
 - Check the site's microphone permission in browser settings.
@@ -132,10 +136,10 @@ This is intentional. Core and adapter validation runs before audio preparation.
 means the value is well formed but the selected model/provider cannot implement
 that portable option faithfully, including provider-specific capability limits.
 
-Treat `code` as the stable branching contract; messages are diagnostic and may
-improve between releases. `provider`, `retryable`, and `retryAfterMs` add
-provider identity and retry guidance, while `cause` is for debugging rather than
-application control flow.
+Treat `code` as the stable branching contract. `error.message` and `cause` are
+diagnostic and may change between releases. `provider`, `retryable`, and
+`retryAfterMs` add provider identity and retry guidance. Use
+`getVoiceInputErrorMessage(error)` for safe, stable user-facing copy.
 
 Review the selected provider README:
 

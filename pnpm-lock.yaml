@@ -35,6 +35,9 @@ importers:
       browserstack-node-sdk:
         specifier: 1.66.4
         version: 1.66.4(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       fflate:
         specifier: 0.8.2
         version: 0.8.2

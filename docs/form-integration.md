@@ -20,6 +20,8 @@ The following excerpt belongs inside your existing composer component. Import
 and `voiceProvider` are your existing component, state, and provider.
 
 ```tsx
+import { getVoiceInputErrorMessage, useVoiceInput } from "@voiceinput/react";
+
 const { targetRef, getTriggerProps, status, error } = useVoiceInput({
   provider: voiceProvider,
   value: message,
@@ -36,7 +38,7 @@ return (
     <button {...getTriggerProps()}>
       {status === "idle" ? "Speak" : "Stop"}
     </button>
-    {error ? <p role="alert">{error.message}</p> : null}
+    {error ? <p role="alert">{getVoiceInputErrorMessage(error)}</p> : null}
   </>
 );
 ```

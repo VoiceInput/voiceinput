@@ -5,6 +5,10 @@ App Router, OpenAI, and an existing Clerk sign-in setup**. For another stack,
 follow [Vite + Hono](vite-hono.md), [Express](express.md), or the
 [authentication recipes](authentication-recipes.md).
 
+To try your own microphone before setting up a project, use the
+[live demo](https://voiceinput.dev/). The demo handles temporary credentials;
+your app should use an authenticated server endpoint as shown below.
+
 ## Before you start
 
 - A Next.js app using React 18.2+ or React 19 and Node.js 22+.
@@ -32,7 +36,9 @@ npm install @voiceinput/react@next @voiceinput/openai@next
 pnpm add @voiceinput/react@next @voiceinput/openai@next
 ```
 
-`@next` selects the VoiceInput beta release channel. It is unrelated to Next.js.
+`@next` explicitly follows the VoiceInput beta release channel. It is unrelated
+to Next.js. Until the first stable release, untagged installs also resolve to
+the initial beta; use `@next` to receive subsequent beta versions.
 
 ## 2. Set your server environment variables
 
@@ -99,7 +105,7 @@ Keep a native textarea's ordinary `onChange` handler for typing. The hook's
 
 import { useState } from "react";
 import { openai } from "@voiceinput/openai";
-import { useVoiceInput } from "@voiceinput/react";
+import { getVoiceInputErrorMessage, useVoiceInput } from "@voiceinput/react";
 
 const provider = openai({ tokenEndpoint: "/api/voice-token" });
 
@@ -123,7 +129,9 @@ export function Composer() {
       />
       <button {...voice.getTriggerProps()}>{active ? "Stop" : "Speak"}</button>
       <output aria-live="polite">{voice.status}</output>
-      {voice.error ? <p role="alert">{voice.error.message}</p> : null}
+      {voice.error ? (
+        <p role="alert">{getVoiceInputErrorMessage(voice.error)}</p>
+      ) : null}
     </div>
   );
 }

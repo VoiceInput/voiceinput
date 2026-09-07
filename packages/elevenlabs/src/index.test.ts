@@ -367,6 +367,43 @@ describe("elevenlabs", () => {
     }
   });
 
+  it("keeps the default finish deadline beyond core's graceful fallback", async () => {
+    vi.useFakeTimers();
+    try {
+      const transport = createTransport();
+      const provider = createProvider(transport);
+      const sessionPromise = Promise.resolve(
+        provider.doOpen({ abortSignal: new AbortController().signal }),
+      );
+      const socket = await transport.waitForSocket();
+      socket.open();
+      const session = await sessionPromise;
+      const partsPromise = readStream(session.stream);
+
+      session.sendAudio(new Int16Array([1]));
+      const finishError = Promise.resolve(session.finish()).catch(
+        (error: unknown) => error,
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(socket.closeReason).toBeUndefined();
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(finishError).resolves.toMatchObject({
+        code: "network-error",
+        provider: "elevenlabs",
+        retryable: true,
+      });
+      await expect(partsPromise).resolves.toEqual([
+        expect.objectContaining({
+          type: "error",
+          error: expect.objectContaining({ code: "network-error" }),
+        }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the finish deadline absolute after transcript activity", async () => {
     vi.useFakeTimers();
     try {
@@ -533,7 +570,13 @@ describe("elevenlabs", () => {
     const result = await reader.read();
     expect(result.value).toMatchObject({
       type: "error",
-      error: { code: "rate-limited", provider: "elevenlabs", retryable: true },
+      error: {
+        code: "rate-limited",
+        provider: "elevenlabs",
+        retryable: true,
+        message: "ElevenLabs Realtime rate limit was exceeded.",
+        cause: { error: "Slow down." },
+      },
     });
     expect(
       result.value?.type === "error" &&

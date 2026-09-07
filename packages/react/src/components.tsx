@@ -1,9 +1,11 @@
+import { getVoiceInputErrorMessage } from "@voiceinput/provider";
 import {
   forwardRef,
   useCallback,
   useId,
   useImperativeHandle,
   useRef,
+  useState,
   type ButtonHTMLAttributes,
   type CSSProperties,
   type ForwardedRef,
@@ -245,6 +247,13 @@ const VoiceButtonElement = /* @__PURE__ */ forwardRef<
   forwardedRef,
 ) {
   const announcementId = useId();
+  const [announcementState, setAnnouncementState] = useState({
+    status: voice.status,
+    hasStatusChanged: false,
+  });
+  if (announcementState.status !== voice.status) {
+    setAnnouncementState({ status: voice.status, hasStatusChanged: true });
+  }
   const active = isActive(voice);
   const label = defaultButtonLabel(voice);
   const describedBy = [props["aria-describedby"], announce && announcementId]
@@ -296,7 +305,7 @@ const VoiceButtonElement = /* @__PURE__ */ forwardRef<
           role={voice.error === null ? "status" : "alert"}
           style={visuallyHiddenStyle}
         >
-          {getAnnouncement(voice)}
+          {announcementState.hasStatusChanged ? getAnnouncement(voice) : ""}
         </span>
       ) : null}
     </>
@@ -428,7 +437,7 @@ function defaultAnnouncement(voice: UseVoiceInputResult): string {
     return "Voice input is unavailable in this browser.";
   }
   if (voice.error !== null) {
-    return `Voice input error: ${voice.error.message}`;
+    return `Voice input error: ${getVoiceInputErrorMessage(voice.error)}`;
   }
   switch (voice.status) {
     case "idle":

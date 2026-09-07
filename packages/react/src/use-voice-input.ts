@@ -35,6 +35,10 @@ import type {
 const ACTIVE_KEYS = new Set(["Enter", " "]);
 const useIsomorphicLayoutEffect =
   typeof window === "undefined" ? useEffect : useLayoutEffect;
+const subscribeToBrowserSupport = (): (() => void) => () => {};
+const getBrowserSupportSnapshot = (): boolean =>
+  getBrowserVoiceInputSupport().isSupported;
+const getServerBrowserSupportSnapshot = (): boolean => false;
 
 export function useVoiceInput(
   options: UseVoiceInputOptions = {},
@@ -52,7 +56,7 @@ export function useVoiceInputInternal(
     throw new VoiceInputError({
       code: "invalid-configuration",
       message:
-        "useVoiceInput requires a provider option or a parent VoiceInputProvider.",
+        "useVoiceInput requires either a provider option or a parent VoiceInputProvider. See https://voiceinput.dev/docs/react/#shared-provider-configuration.",
     });
   }
 
@@ -66,7 +70,7 @@ export function useVoiceInputInternal(
     throw new VoiceInputError({
       code: "invalid-configuration",
       message:
-        "Controlled voice input requires both value and onValueChange options.",
+        "Pass both value and onValueChange to useVoiceInput for a controlled field, or omit both for an uncontrolled field. See https://voiceinput.dev/docs/react/#headless-hook.",
     });
   }
 
@@ -75,7 +79,7 @@ export function useVoiceInputInternal(
     throw new VoiceInputError({
       code: "invalid-configuration",
       message:
-        "A voice field cannot switch between controlled and uncontrolled modes. Remount it with a new key.",
+        "A voice field cannot switch between controlled and uncontrolled modes. Remount it with a new key. See https://voiceinput.dev/docs/editing-contract/#react-notifications.",
     });
   }
   const latest = useRef(options);
@@ -173,6 +177,12 @@ export function useVoiceInputInternal(
       ...(options.connectionTimeoutMs === undefined
         ? {}
         : { connectionTimeoutMs: options.connectionTimeoutMs }),
+      ...(options.finalizationTimeoutMs === undefined
+        ? {}
+        : { finalizationTimeoutMs: options.finalizationTimeoutMs }),
+      ...(options.stopWhenHidden === undefined
+        ? {}
+        : { stopWhenHidden: options.stopWhenHidden }),
     });
   }, [
     session,
@@ -184,6 +194,8 @@ export function useVoiceInputInternal(
     endpointing,
     options.maxDurationMs,
     options.connectionTimeoutMs,
+    options.finalizationTimeoutMs,
+    options.stopWhenHidden,
     options.interimBehavior,
     options.transformTranscript,
     options.transformTimeoutMs,
@@ -222,11 +234,11 @@ export function useVoiceInputInternal(
   );
   const getSnapshot = useCallback(() => session.getSnapshot(), [session]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const [isSupported, setIsSupported] = useState(false);
-
-  useEffect(() => {
-    setIsSupported(getBrowserVoiceInputSupport().isSupported);
-  }, []);
+  const isSupported = useSyncExternalStore(
+    subscribeToBrowserSupport,
+    getBrowserSupportSnapshot,
+    getServerBrowserSupportSnapshot,
+  );
 
   useIsomorphicLayoutEffect(() => {
     if (controlled) {
@@ -350,30 +362,22 @@ export function useVoiceInputInternal(
     return () => window.removeEventListener("blur", releaseHold);
   }, [releaseHold]);
 
-  const [targetWritable, setTargetWritable] = useState(true);
-  useIsomorphicLayoutEffect(() => {
-    const target = targetNodeRef.current;
-    const update = (): void =>
-      setTargetWritable(target === null || textEngine.isWritable());
-    update();
-    if (target === null) return;
-    const observer = new MutationObserver(update);
-    observer.observe(target, {
-      attributes: true,
-      attributeFilter: ["disabled", "readonly", "type"],
-    });
-    for (
-      let ancestor = target.parentElement;
-      ancestor;
-      ancestor = ancestor.parentElement
-    ) {
-      observer.observe(ancestor, {
-        attributes: true,
-        attributeFilter: ["disabled"],
-      });
-    }
-    return () => observer.disconnect();
-  });
+  const subscribeToWritability = useCallback(
+    (listener: () => void) =>
+      textEngine.subscribe((event) => {
+        if (event.type === "writable-change") listener();
+      }),
+    [textEngine],
+  );
+  const getWritabilitySnapshot = useCallback(
+    () => targetNodeRef.current === null || textEngine.isWritable(),
+    [textEngine],
+  );
+  const targetWritable = useSyncExternalStore(
+    subscribeToWritability,
+    getWritabilitySnapshot,
+    () => true,
+  );
   useEffect(() => {
     if (disabled || !targetWritable) void stop("target-unavailable");
   }, [disabled, targetWritable, stop]);

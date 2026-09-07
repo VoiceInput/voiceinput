@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   VoiceInputError,
+  getVoiceInputErrorMessage,
+  reportUnhandledError,
   type VoiceInputProviderV1,
   type VoiceTranscriptionOptions,
 } from "./index.js";
@@ -30,6 +32,66 @@ describe("VoiceInputError", () => {
     expect(error.retryAfterMs).toBe(2_000);
     expect(VoiceInputError.isInstance(error)).toBe(true);
     expect(VoiceInputError.isInstance(new Error("other"))).toBe(false);
+  });
+
+  it("maps diagnostic errors to stable user-facing messages", () => {
+    const upstreamMessage = "sensitive upstream request id: req_123";
+    const error = new VoiceInputError({
+      code: "provider-error",
+      message: upstreamMessage,
+      provider: "fake",
+    });
+
+    expect(getVoiceInputErrorMessage(error)).toBe(
+      "The transcription service could not process the recording. Try again.",
+    );
+    expect(getVoiceInputErrorMessage(error)).not.toContain(upstreamMessage);
+  });
+
+  it("uses the platform error reporter when available", () => {
+    const reported: unknown[] = [];
+    const target = globalThis as typeof globalThis & {
+      reportError?: (error: unknown) => void;
+    };
+    const previous = target.reportError;
+    target.reportError = (error) => reported.push(error);
+    const error = new Error("callback failed");
+
+    try {
+      reportUnhandledError(error);
+      expect(reported).toEqual([error]);
+    } finally {
+      if (previous === undefined) {
+        delete target.reportError;
+      } else {
+        target.reportError = previous;
+      }
+    }
+  });
+
+  it("rethrows asynchronously when the platform has no error reporter", () => {
+    const target = globalThis as typeof globalThis & {
+      reportError?: (error: unknown) => void;
+    };
+    const previousReportError = target.reportError;
+    const previousQueueMicrotask = globalThis.queueMicrotask;
+    let queued: VoidFunction | undefined;
+    delete target.reportError;
+    globalThis.queueMicrotask = (callback) => {
+      queued = callback;
+    };
+    const error = new Error("callback failed");
+
+    try {
+      reportUnhandledError(error);
+      expect(queued).toBeTypeOf("function");
+      expect(() => queued?.()).toThrow(error);
+    } finally {
+      globalThis.queueMicrotask = previousQueueMicrotask;
+      if (previousReportError !== undefined) {
+        target.reportError = previousReportError;
+      }
+    }
   });
 });
 

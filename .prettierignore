@@ -13,3 +13,6 @@ pnpm-lock.yaml
 .astro/
 /apps/website/src/content/docs/
 .wrangler/
+
+# Installed agent instruction packages retain their upstream formatting.
+.agents/skills/

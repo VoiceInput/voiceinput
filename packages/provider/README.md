@@ -88,16 +88,21 @@ exposes:
 - `retryable: boolean`
 - `retryAfterMs?: number`
 
-Error codes are `unsupported-browser`, `permission-denied`, `device-not-found`,
-`device-busy`, `unauthorized`, `rate-limited`, `token-error`, `network-error`,
-`provider-error`, `unsupported-feature`, `invalid-configuration`, `audio-error`,
-and `transform-error`.
+Error codes are `unsupported-browser`, `user-activation-required`,
+`permission-denied`, `device-not-found`, `device-busy`, `unauthorized`,
+`rate-limited`, `token-error`, `network-error`, `provider-error`,
+`unsupported-feature`, `invalid-configuration`, `audio-error`, and
+`transform-error`.
 
 Branch on `code`, never on the message. `invalid-configuration` means the value
 is malformed; `unsupported-feature` means the value is valid but the selected
 provider or model cannot implement it faithfully. Adapters and core preserve an
 existing `VoiceInputError`, including `provider`, `retryable`, `retryAfterMs`,
 and safe causes, instead of recategorizing it.
+
+Use `getVoiceInputErrorMessage(error)` for stable, user-facing copy. Keep
+`error.message` and `error.cause` in developer diagnostics because adapters and
+custom providers may preserve service-specific details there.
 
 ## Test export
 
@@ -153,6 +158,8 @@ transport. See the
 Main entry point:
 
 - `VoiceInputError`
+- `getVoiceInputErrorMessage`
+- `reportUnhandledError`
 - `VoiceInputErrorCode`, `VoiceInputErrorOptions`
 - `VoiceEndpointingOptions`, `VoiceTranscriptionOptions`
 - `VoiceInputProviderV1`

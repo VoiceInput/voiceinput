@@ -6,7 +6,7 @@ import {
 } from "./coordinator.js";
 
 describe("VoiceInputCoordinator", () => {
-  it("waits for the active session before granting the next claim", async () => {
+  it("grants the next claim after initiating the active session's stop", async () => {
     const coordinator = new VoiceInputCoordinator();
     const stop = deferred();
     const first = session(() => stop.promise);
@@ -14,16 +14,9 @@ describe("VoiceInputCoordinator", () => {
 
     await expect(coordinator.activate(first)).resolves.toBe(true);
     const activation = coordinator.activate(second);
-    let acquired = false;
-    void activation.then((value) => {
-      acquired = value;
-    });
-    await Promise.resolve();
-
-    expect(first.stop).toHaveBeenCalledWith("replaced");
-    expect(acquired).toBe(false);
-    stop.resolve();
     await expect(activation).resolves.toBe(true);
+    expect(first.stop).toHaveBeenCalledWith("replaced");
+    stop.resolve();
   });
 
   it("grants only the latest rapid claim", async () => {
@@ -57,6 +50,7 @@ describe("VoiceInputCoordinator", () => {
       await coordinator.activate(first);
       await expect(coordinator.activate(second)).resolves.toBe(true);
       expect(first.stop).toHaveBeenCalledOnce();
+      await Promise.resolve();
       expect(reportError).toHaveBeenCalledWith(failure);
     } finally {
       vi.unstubAllGlobals();
@@ -71,14 +65,14 @@ describe("VoiceInputCoordinator", () => {
 
     await coordinator.activate(first);
     const activation = coordinator.activate(second);
-    await Promise.resolve();
     coordinator.cancel(second);
-    stop.resolve();
 
     await expect(activation).resolves.toBe(false);
+    expect(first.stop).not.toHaveBeenCalled();
+    stop.resolve();
   });
 
-  it("keeps an unmounted active session owned until cleanup finishes", async () => {
+  it("does not wait for an unmounted active session's cleanup", async () => {
     const coordinator = new VoiceInputCoordinator();
     const stop = deferred();
     const first = session(() => stop.promise);
@@ -90,16 +84,9 @@ describe("VoiceInputCoordinator", () => {
       .stop("replaced")
       .then(() => coordinator.release(first));
     const activation = coordinator.activate(second);
-    let acquired = false;
-    void activation.then((value) => {
-      acquired = value;
-    });
-    await Promise.resolve();
-
-    expect(acquired).toBe(false);
+    await expect(activation).resolves.toBe(true);
     stop.resolve();
     await cleanup;
-    await expect(activation).resolves.toBe(true);
   });
 });
 

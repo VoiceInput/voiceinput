@@ -29,6 +29,7 @@ export class TextTargetAdapter {
   #observer: MutationObserver | undefined;
   #form: HTMLFormElement | null = null;
   #composing = false;
+  #hasBeenFocused = false;
 
   constructor(
     controlled: VoiceInputControlledTextBinding | undefined,
@@ -50,6 +51,7 @@ export class TextTargetAdapter {
     assertSupportedTarget(target);
     this.detach();
     this.#target = target;
+    this.#hasBeenFocused = target.ownerDocument.activeElement === target;
     const value = this.#controlled?.getValue() ?? target.value;
     this.#withGuard(() => {
       if (target.value !== value) target.value = value;
@@ -58,6 +60,7 @@ export class TextTargetAdapter {
     target.addEventListener("keydown", this.#handleKeyDown);
     target.addEventListener("compositionstart", this.#handleCompositionStart);
     target.addEventListener("compositionend", this.#handleCompositionEnd);
+    target.addEventListener("focus", this.#handleFocus);
     this.#form = target.form;
     this.#form?.addEventListener("reset", this.#handleReset);
     this.#observer = new MutationObserver(() =>
@@ -98,11 +101,13 @@ export class TextTargetAdapter {
       this.#handleCompositionStart,
     );
     target.removeEventListener("compositionend", this.#handleCompositionEnd);
+    target.removeEventListener("focus", this.#handleFocus);
     this.#form?.removeEventListener("reset", this.#handleReset);
     this.#form = null;
     this.#observer?.disconnect();
     this.#observer = undefined;
     this.#composing = false;
+    this.#hasBeenFocused = false;
     target.removeEventListener("input", this.#handleInput);
     target.removeEventListener("select", this.#handleSelectionChange);
     target.ownerDocument.removeEventListener(
@@ -129,6 +134,23 @@ export class TextTargetAdapter {
     return this.#target === null || !isSupportedTarget(this.#target)
       ? null
       : readSelection(this.#target);
+  }
+
+  readSelectionForCapture(): VoiceInputTextSelection | null {
+    if (this.#target === null || !isSupportedTarget(this.#target)) {
+      return null;
+    }
+    const selection = readSelection(this.#target);
+    if (
+      !this.#hasBeenFocused &&
+      selection.start === 0 &&
+      selection.end === 0 &&
+      this.#target.value.length > 0
+    ) {
+      const end = this.#target.value.length;
+      return { start: end, end, direction: "none" };
+    }
+    return selection;
   }
 
   readSelectionWhenValueIs(value: string): VoiceInputTextSelection | null {
@@ -221,6 +243,10 @@ export class TextTargetAdapter {
   #handleCompositionStart = (): void => {
     this.#composing = true;
     this.#callbacks.onComposition(true);
+  };
+
+  #handleFocus = (): void => {
+    this.#hasBeenFocused = true;
   };
 
   #handleCompositionEnd = (): void => {

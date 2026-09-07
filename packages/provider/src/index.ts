@@ -4,6 +4,7 @@ const voiceInputErrorMarker = Symbol.for(
 
 export type VoiceInputErrorCode =
   | "unsupported-browser"
+  | "user-activation-required"
   | "permission-denied"
   | "device-not-found"
   | "device-busy"
@@ -55,6 +56,58 @@ export class VoiceInputError extends Error {
       voiceInputErrorMarker in value &&
       (value as Record<PropertyKey, unknown>)[voiceInputErrorMarker] === true
     );
+  }
+}
+
+/** Returns a stable, user-facing message for a normalized VoiceInput error. */
+export function getVoiceInputErrorMessage(error: VoiceInputError): string {
+  switch (error.code) {
+    case "unsupported-browser":
+      return "Voice input is not supported in this browser.";
+    case "user-activation-required":
+      return "Select the microphone button again to start voice input.";
+    case "permission-denied":
+      return "Microphone access was denied. Check your browser and system permissions.";
+    case "device-not-found":
+      return "No microphone was found. Connect one and try again.";
+    case "device-busy":
+      return "The microphone is being used by another application.";
+    case "unauthorized":
+      return "Voice input could not be authorized. Sign in again and retry.";
+    case "rate-limited":
+      return "Too many voice input requests. Wait a moment and try again.";
+    case "token-error":
+    case "network-error":
+      return "Voice input could not connect. Check your connection and try again.";
+    case "provider-error":
+      return "The transcription service could not process the recording. Try again.";
+    case "unsupported-feature":
+      return "This voice input option is not supported.";
+    case "invalid-configuration":
+      return "Voice input is not configured correctly.";
+    case "audio-error":
+      return "The microphone audio could not be processed. Try again.";
+    case "transform-error":
+      return "The transcript could not be processed. Try again.";
+    default:
+      return "Voice input failed. Try again.";
+  }
+}
+
+/** Reports an exception without silently swallowing it when reportError is absent. */
+export function reportUnhandledError(error: unknown): void {
+  const reportError = (
+    globalThis as typeof globalThis & {
+      reportError?: (error: unknown) => void;
+    }
+  ).reportError;
+
+  if (typeof reportError === "function") {
+    reportError(error);
+  } else {
+    queueMicrotask(() => {
+      throw error;
+    });
   }
 }
 

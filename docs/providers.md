@@ -31,12 +31,16 @@ The shared API exposes language, vocabulary hints, and phrase detection
 (`endpointing`). Providers support different settings and may return text at
 different times. Read the provider guide before overriding those options.
 
-| Behavior                              | Where to check                                                            |
-| ------------------------------------- | ------------------------------------------------------------------------- |
-| Model defaults and supported settings | Each provider's configuration reference                                   |
-| Languages and vocabulary limits       | Each provider's shared-option mapping                                     |
-| When a phrase becomes final           | Provider endpointing settings and [editing behavior](editing-contract.md) |
-| Usage charges and audio retention     | Your provider's account settings and agreement                            |
+| Behavior                               | OpenAI                      | ElevenLabs                  | Deepgram                     |
+| -------------------------------------- | --------------------------- | --------------------------- | ---------------------------- |
+| Default model                          | `gpt-transcribe`            | `scribe_v2_realtime`        | `nova-3`                     |
+| Omitted `endpointing` on default model | Server VAD, 500 ms silence  | VAD, 650 ms silence         | Provider default             |
+| Explicit phrase endpointing            | `{ silenceMs }`             | `{ silenceMs }`             | `{ silenceMs }`              |
+| Manual/disabled endpointing            | `false` means manual commit | `false` means manual commit | `false` disables endpointing |
+
+For language and vocabulary limits, see each provider's shared-option mapping.
+Phrase boundaries also affect [editing behavior](editing-contract.md). Usage
+charges and audio retention follow your provider account settings and agreement.
 
 Invalid settings fail before microphone permission is requested. VoiceInput
 reports unsupported options instead of silently ignoring them. If you need a

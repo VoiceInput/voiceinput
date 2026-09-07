@@ -1,7 +1,7 @@
 "use client";
 
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
-import { useVoiceInput } from "@voiceinput/react";
+import { getVoiceInputErrorMessage, useVoiceInput } from "@voiceinput/react";
 import { useState } from "react";
 
 export default function Page() {
@@ -30,7 +30,7 @@ export default function Page() {
           {status === "listening" ? "Stop" : "Speak"}
         </button>
         <output aria-live="polite">{status}</output>
-        {error ? <p role="alert">{error.message}</p> : null}
+        {error ? <p role="alert">{getVoiceInputErrorMessage(error)}</p> : null}
       </Show>
     </main>
   );

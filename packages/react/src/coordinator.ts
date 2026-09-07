@@ -1,4 +1,5 @@
 import type { VoiceInputStopReason } from "@voiceinput/core";
+import { reportUnhandledError } from "@voiceinput/provider";
 
 export interface CoordinatedVoiceInputSession {
   stop(reason: VoiceInputStopReason): Promise<void>;
@@ -13,7 +14,7 @@ export class VoiceInputCoordinator {
   activate(session: CoordinatedVoiceInputSession): Promise<boolean> {
     const generation = ++this.#generation;
     this.#requested = session;
-    const activation = this.#queue.then(async () => {
+    const activation = this.#queue.then(() => {
       if (!this.#isCurrentRequest(session, generation)) {
         return false;
       }
@@ -21,7 +22,7 @@ export class VoiceInputCoordinator {
       const previous = this.#active;
       if (previous !== undefined && previous !== session) {
         try {
-          await previous.stop("replaced");
+          void previous.stop("replaced").catch(reportUnhandledError);
         } catch (error) {
           reportUnhandledError(error);
         }
@@ -63,13 +64,4 @@ export class VoiceInputCoordinator {
   ): boolean {
     return this.#requested === session && this.#generation === generation;
   }
-}
-
-function reportUnhandledError(error: unknown): void {
-  const reportError = (
-    globalThis as typeof globalThis & {
-      reportError?: (error: unknown) => void;
-    }
-  ).reportError;
-  reportError?.(error);
 }

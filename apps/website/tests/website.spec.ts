@@ -44,13 +44,19 @@ test("rate limits stop the microphone and show a useful message", async ({
 }) => {
   await mockDemo(page);
   await page.route("**/api/demo/session", (route) =>
-    route.fulfill({ status: 429, headers: { "Retry-After": "3600" } }),
+    route.fulfill({
+      status: 429,
+      contentType: "application/json",
+      headers: { "Retry-After": "3600" },
+      body: JSON.stringify({ error: "raw quota service detail: secret-123" }),
+    }),
   );
   await page.goto("/");
   await page.getByRole("button", { name: "Start recording" }).click();
-  await expect(page.locator(".demo-status:visible")).toContainText(
-    "demo limit has been reached",
-  );
+  const status = page.locator(".demo-status:visible");
+  await expect(status).toContainText("The demo limit has been reached.");
+  await expect(status).toContainText("You can retry in 60 minutes.");
+  await expect(status).not.toContainText("secret-123");
   await expect(page.locator("html")).toHaveAttribute(
     "data-microphone-stopped",
     "true",
@@ -65,13 +71,19 @@ test("an unavailable server shows an error and releases the microphone", async (
 }) => {
   await mockDemo(page);
   await page.route("**/api/demo/session", (route) =>
-    route.fulfill({ status: 503 }),
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "raw upstream failure: secret-456" }),
+    }),
   );
   await page.goto("/");
   await page.getByRole("button", { name: "Start recording" }).click();
-  await expect(page.locator(".demo-status:visible")).toContainText(
-    "unavailable right now",
+  const status = page.locator(".demo-status:visible");
+  await expect(status).toContainText(
+    "The voice demo is unavailable right now. Please try again later.",
   );
+  await expect(status).not.toContainText("secret-456");
   await expect(page.locator("html")).toHaveAttribute(
     "data-microphone-stopped",
     "true",

@@ -390,7 +390,11 @@ function normalizeMessageError(
       : rateLimited
         ? "rate-limited"
         : "provider-error",
-    message: description || "Deepgram reported a streaming error.",
+    message: unauthorized
+      ? "Deepgram rejected the streaming session."
+      : rateLimited
+        ? "Deepgram streaming rate limit was exceeded."
+        : "Deepgram reported a streaming error.",
     provider: "deepgram",
     retryable: rateLimited || /internal|unavailable/iu.test(source),
     cause: value,

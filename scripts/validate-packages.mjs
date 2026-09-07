@@ -16,6 +16,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { rolldown } from "rolldown";
+import { build as esbuild } from "esbuild";
 import { gzipSync } from "node:zlib";
 
 const rootDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -255,6 +256,11 @@ for (const entrypoint of serverEntrypoints) {
     throw new Error(\`Browser conditions did not block \${entrypoint}\`);
   }
 }
+`;
+
+const workletBrowserConsumer = `
+import { VOICE_INPUT_AUDIO_WORKLET_SOURCE } from "@voiceinput/core";
+globalThis.__voiceInputAudioWorkletSource = VOICE_INPUT_AUDIO_WORKLET_SOURCE;
 `;
 
 const ssrConsumer = `
@@ -511,6 +517,10 @@ for (const reactVersion of reactVersions) {
     writeFileSync(join(consumerDirectory, "consumer.mts"), typeConsumer);
     writeFileSync(join(consumerDirectory, "consumer.cts"), typeConsumer);
     writeFileSync(join(consumerDirectory, "browser.mjs"), browserConsumer);
+    writeFileSync(
+      join(consumerDirectory, "worklet-browser.mjs"),
+      workletBrowserConsumer,
+    );
     writeFileSync(join(consumerDirectory, "ssr.mjs"), ssrConsumer);
     writeFileSync(
       join(consumerDirectory, "react-browser.mjs"),
@@ -584,6 +594,9 @@ for (const reactVersion of reactVersions) {
       { cwd: rootDirectory },
     );
     await validateTreeShaking(consumerDirectory);
+    if (reactVersion === reactVersions[0]) {
+      await validateBundledAudioWorklet(consumerDirectory);
+    }
     await validateReactBrowserConsumer(consumerDirectory);
     if (reactVersion.runtime.startsWith("19.")) {
       const nextDirectory = join(consumerDirectory, "next-app");
@@ -769,6 +782,83 @@ async function validateReactBrowserConsumer(directory) {
         consumerError ?? pageErrors.map((error) => error.stack).join("\n"),
       );
     }
+  } finally {
+    await browser?.close();
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+async function validateBundledAudioWorklet(directory) {
+  const bundlePath = join(directory, "worklet-browser.js");
+  await esbuild({
+    bundle: true,
+    entryPoints: [join(directory, "worklet-browser.mjs")],
+    format: "iife",
+    keepNames: true,
+    outfile: bundlePath,
+    platform: "browser",
+    target: "es2019",
+  });
+
+  const server = createServer((request, response) => {
+    if (request.url === "/worklet-browser.js") {
+      response.setHeader("Content-Type", "text/javascript; charset=utf-8");
+      response.end(readFileSync(bundlePath));
+      return;
+    }
+    response.setHeader("Content-Type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><script src="/worklet-browser.js"></script>`);
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    server.close();
+    throw new Error("Could not bind the AudioWorklet validation server");
+  }
+
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${address.port}`);
+    await page.evaluate(async () => {
+      const source = globalThis.__voiceInputAudioWorkletSource;
+      if (typeof source !== "string" || source.length === 0) {
+        throw new Error("The bundled worklet source export is missing.");
+      }
+      const context = new AudioContext({ sampleRate: 16_000 });
+      const url = URL.createObjectURL(
+        new Blob([source], { type: "text/javascript" }),
+      );
+      try {
+        await context.audioWorklet.addModule(url);
+        const node = new AudioWorkletNode(context, "voiceinput-pcm16");
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error("The bundled worklet did not respond.")),
+            1_000,
+          );
+          node.port.onmessage = (event) => {
+            if (event.data?.type === "flushed") {
+              clearTimeout(timeout);
+              resolve();
+            }
+          };
+          node.port.postMessage({ type: "flush" });
+        });
+        node.port.close();
+        node.disconnect();
+      } finally {
+        URL.revokeObjectURL(url);
+        await context.close();
+      }
+    });
+    console.log(
+      "AudioWorklet survived an ES2019 consumer bundle with keepNames enabled",
+    );
   } finally {
     await browser?.close();
     await new Promise((resolve) => server.close(resolve));

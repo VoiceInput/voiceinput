@@ -16,6 +16,11 @@ transcript state and callbacks.
 | Undo                                | The last typing group or dictated phrase is reverted                      |
 | Reset the form                      | Recording stops and the field’s voice history is cleared                  |
 
+If a prefilled field has never received focus and still exposes the browser's
+initial `0, 0` selection, the first dictated phrase is appended to the existing
+value. Once the field has been focused, VoiceInput always honors its actual
+selection, including a caret intentionally placed at the start.
+
 For example, if speech inserts “Meet at nine” and you change “nine” to “ten,” a
 later update to that same phrase cannot replace your correction. A new phrase
 can still be inserted at the cursor.

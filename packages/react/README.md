@@ -89,29 +89,38 @@ dispatches a bubbling native `input` event.
 
 ### `UseVoiceInputOptions`
 
-| Option                    | Purpose                                                           |
-| ------------------------- | ----------------------------------------------------------------- |
-| `provider`, `audioSource` | Override context configuration                                    |
-| `value`, `onValueChange`  | Controlled text binding; supply both or neither                   |
-| `language`                | BCP 47 language hint                                              |
-| `vocabulary`              | Domain terms mapped by the selected adapter                       |
-| `endpointing`             | Provider default, `false`, or `{ silenceMs }`                     |
-| `connectionTimeoutMs`     | Provider connection deadline after audio acquisition; default 15s |
-| `maxDurationMs`           | Positive finite duration; default five minutes                    |
-| `interimBehavior`         | `"inline"` (default) or `"expose"`                                |
-| `transformTranscript`     | Sync or async post-stop transform for unedited voice-owned spans  |
-| `transformTimeoutMs`      | Transform deadline; default 10 seconds                            |
-| `activationMode`          | `"toggle"` (default) or `"hold"`                                  |
-| `disabled`                | Prevent activation and stop active recording                      |
-| `onTextLimit`             | Called when a voice insertion reaches the field’s `maxLength`     |
-| `onEvent`                 | Receive every normalized session event                            |
-| `onStatusChange`          | Receive current and previous status                               |
-| `onInterimTranscript`     | Current raw interim provider part                                 |
-| `onFinalTranscriptPart`   | Each raw provider-final part                                      |
-| `onFinalTranscript`       | Cumulative normalized provider-final transcript                   |
-| `onTranscriptChange`      | Cumulative normalized transcript, including interim text          |
-| `onDurationWarning`       | Called before maximum-duration cutoff                             |
-| `onStop`, `onError`       | Terminal callbacks                                                |
+| Option                    | Purpose                                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `provider`, `audioSource` | Override context configuration                                                                            |
+| `value`, `onValueChange`  | Controlled text binding; supply both or neither                                                           |
+| `language`                | BCP 47 language hint                                                                                      |
+| `vocabulary`              | Domain terms mapped by the selected adapter                                                               |
+| `endpointing`             | Default-model endpointing (OpenAI 500ms, ElevenLabs 650ms, Deepgram default), `false`, or `{ silenceMs }` |
+| `connectionTimeoutMs`     | Provider connection deadline after audio acquisition; default 15s                                         |
+| `finalizationTimeoutMs`   | Audio/provider shutdown deadline; default 15s                                                             |
+| `stopWhenHidden`          | Stop when the page becomes hidden; default `true`                                                         |
+| `maxDurationMs`           | Positive finite duration; default five minutes                                                            |
+| `interimBehavior`         | `"inline"` (default) or `"expose"`                                                                        |
+| `transformTranscript`     | Sync or async post-stop transform for unedited voice-owned spans                                          |
+| `transformTimeoutMs`      | Transform deadline; default 10 seconds                                                                    |
+| `activationMode`          | `"toggle"` (default) or `"hold"`                                                                          |
+| `disabled`                | Prevent activation and stop active recording                                                              |
+| `onTextLimit`             | Called when a voice insertion reaches the field’s `maxLength`                                             |
+| `onEvent`                 | Receive every normalized session event                                                                    |
+| `onStatusChange`          | Receive current and previous status                                                                       |
+| `onInterimTranscript`     | Current raw interim provider part                                                                         |
+| `onFinalTranscriptPart`   | Each raw provider-final part                                                                              |
+| `onFinalTranscript`       | Cumulative normalized provider-final transcript                                                           |
+| `onTranscriptChange`      | Cumulative normalized transcript, including interim text                                                  |
+| `onDurationWarning`       | Called before maximum-duration cutoff                                                                     |
+| `onStop`, `onError`       | Terminal callbacks                                                                                        |
+
+Set `stopWhenHidden: false` when desktop users should be able to keep dictating
+after switching tabs. VoiceInput still stops on page exit or browser freeze. The
+`finalizationTimeoutMs` deadline includes the final audio flush; a transcript
+transform runs afterward with its separate `transformTimeoutMs` deadline. On
+expiry, visible interim text is preserved and `onStop` receives
+`finalization-timeout`.
 
 ### `UseVoiceInputResult`
 
@@ -243,7 +252,9 @@ dependency.
 - Toggle mode works with native button click, Enter, and Space.
 - Hold mode starts on primary-pointer/key press and stops on release,
   cancellation, lost capture, blur, disable, or window blur.
-- Pointer activation preserves the target selection instead of moving focus.
+- Toggle-mode pointer activation calls `preventDefault()` on `pointerdown`, so a
+  mouse click preserves the target selection and leaves focus in the field.
+  Keyboard navigation and activation still focus the trigger normally.
 - Triggers expose `aria-pressed`; controls announce status and errors.
 - The optional CSS provides visible focus and reduced-motion handling.
 
@@ -254,6 +265,7 @@ render `status`/`error` in your existing accessibility system.
 
 Runtime exports:
 
+- `getVoiceInputErrorMessage`
 - `VoiceInputProvider`
 - `useVoiceInput`
 - `VoiceButton`
@@ -287,9 +299,9 @@ observe. `disabled` and `readOnly` are safe mounting states.
 
 `onTextLimit` receives the `text-limit` event: `maxLength`, attempted `text`,
 `insertedText`, and `source` (`interim`, `final`, `transform`). Stop reasons
-include `max-length`, `target-unavailable`, and `backgrounded` in addition to
-the original reasons. Full recognized text remains in transcript callbacks even
-when it cannot be inserted.
+include `max-length`, `target-unavailable`, `backgrounded`, and
+`finalization-timeout` in addition to the original reasons. Full recognized text
+remains in transcript callbacks even when it cannot be inserted.
 
 See [editing behavior and history limits](../../docs/editing-contract.md) and
 [form integration](../../docs/form-integration.md). Mobile microphones and

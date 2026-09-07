@@ -301,7 +301,17 @@ describe("openai", () => {
     await expect(failedParts).resolves.toMatchObject([
       {
         type: "error",
-        error: { code: "provider-error", provider: "openai" },
+        error: {
+          code: "provider-error",
+          provider: "openai",
+          message: "OpenAI could not transcribe an audio turn.",
+          cause: {
+            error: {
+              code: "transcription_failed",
+              message: "Could not decode.",
+            },
+          },
+        },
       },
     ]);
 
@@ -413,7 +423,13 @@ describe("openai", () => {
     const result = await reader.read();
     expect(result.value).toMatchObject({
       type: "error",
-      error: { code: "rate-limited", provider: "openai", retryable: true },
+      error: {
+        code: "rate-limited",
+        provider: "openai",
+        retryable: true,
+        message: "OpenAI Realtime rate limit was exceeded.",
+        cause: { error: { message: "Slow down." } },
+      },
     });
     expect(
       result.value?.type === "error" &&

@@ -12,6 +12,7 @@ import type {
 
 const DEFAULT_FRAME_DURATION_MS = 20;
 const FLUSH_TIMEOUT_MS = 500;
+const USER_ACTIVATION_RESUME_TIMEOUT_MS = 1_000;
 
 export type BrowserVoiceInputCapability =
   | "secure-context"
@@ -99,7 +100,6 @@ export function createBrowserAudioSource(
   return {
     async prepare(prepareOptions) {
       assertBrowserSupport();
-      assertUserActivation();
       return prepareBrowserAudio(prepareOptions, {
         constraints: options.constraints,
         frameDurationMs,
@@ -212,7 +212,9 @@ async function prepareBrowserAudio(
       throw new VoiceInputError({
         code: "audio-error",
         message:
-          "The microphone AudioWorklet could not be loaded. Check workletModuleUrl and the page's Content Security Policy.",
+          options.workletModuleUrl === undefined
+            ? "The built-in microphone AudioWorklet could not be loaded. Allow blob: scripts in the page's Content Security Policy or configure workletModuleUrl."
+            : "The microphone AudioWorklet at workletModuleUrl could not be loaded. Check the URL and the page's Content Security Policy.",
         retryable: true,
         cause,
       });
@@ -220,25 +222,35 @@ async function prepareBrowserAudio(
     throwIfAborted(abortSignal);
 
     sourceNode = audioContext.createMediaStreamSource(mediaStream);
-    workletNode = new AudioWorkletNode(
-      audioContext,
-      VOICE_INPUT_PROCESSOR_NAME,
-      {
-        numberOfInputs: 1,
-        numberOfOutputs: 1,
-        outputChannelCount: [1],
-        channelCount: 1,
-        channelCountMode: "explicit",
-        channelInterpretation: "speakers",
-        processorOptions: {
-          frameSamples: Math.max(
-            1,
-            Math.round((sampleRate * options.frameDurationMs) / 1_000),
-          ),
-          targetSampleRate: sampleRate,
+    try {
+      workletNode = new AudioWorkletNode(
+        audioContext,
+        VOICE_INPUT_PROCESSOR_NAME,
+        {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1],
+          channelCount: 1,
+          channelCountMode: "explicit",
+          channelInterpretation: "speakers",
+          processorOptions: {
+            frameSamples: Math.max(
+              1,
+              Math.round((sampleRate * options.frameDurationMs) / 1_000),
+            ),
+            targetSampleRate: sampleRate,
+          },
         },
-      },
-    );
+      );
+    } catch (cause) {
+      throw new VoiceInputError({
+        code: "audio-error",
+        message:
+          "The AudioWorklet module did not register the voiceinput-pcm16 processor. If you configured workletModuleUrl, serve VOICE_INPUT_AUDIO_WORKLET_SOURCE from that URL.",
+        retryable: true,
+        cause,
+      });
+    }
     silentOutput = audioContext.createGain();
     silentOutput.gain.value = 0;
     workletNode.connect(silentOutput);
@@ -318,9 +330,24 @@ async function prepareBrowserAudio(
     // Safari commonly creates a suspended context. Resume it while the original
     // activation is still available; audio frames do not flow until start().
     if (audioContext.state !== "running") {
-      await audioContext.resume();
+      try {
+        await resumeAudioContext(audioContext, abortSignal);
+      } catch (cause) {
+        throwIfAborted(abortSignal);
+        if (
+          audioContext.state === "suspended" &&
+          (getErrorName(cause) === "NotAllowedError" ||
+            getErrorName(cause) === "SecurityError")
+        ) {
+          throw userActivationRequired(cause);
+        }
+        throw cause;
+      }
     }
     throwIfAborted(abortSignal);
+    if (audioContext.state !== "running") {
+      throw userActivationRequired();
+    }
     audioContext.addEventListener("statechange", () => {
       if (started && !closed && audioContext?.state !== "running") {
         cleanup(
@@ -416,16 +443,54 @@ function assertBrowserSupport(): void {
   }
 }
 
-function assertUserActivation(): void {
-  if (
-    navigator.userActivation !== undefined &&
-    navigator.userActivation.isActive === false
-  ) {
-    throw new VoiceInputError({
-      code: "permission-denied",
-      message:
-        "Microphone access must be started directly from a user interaction.",
-    });
+function userActivationRequired(cause?: unknown): VoiceInputError {
+  return new VoiceInputError({
+    code: "user-activation-required",
+    message:
+      "The browser requires a new user interaction before microphone audio can start.",
+    retryable: true,
+    cause,
+  });
+}
+
+async function resumeAudioContext(
+  context: AudioContext,
+  abortSignal: AbortSignal,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let handleAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    handleAbort = () => {
+      try {
+        throwIfAborted(abortSignal);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    abortSignal.addEventListener("abort", handleAbort, { once: true });
+  });
+  const attempts: Promise<unknown>[] = [context.resume(), aborted];
+
+  if (navigator.userActivation?.isActive === false) {
+    attempts.push(
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(userActivationRequired()),
+          USER_ACTIVATION_RESUME_TIMEOUT_MS,
+        );
+      }),
+    );
+  }
+
+  try {
+    await Promise.race(attempts);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+    if (handleAbort !== undefined) {
+      abortSignal.removeEventListener("abort", handleAbort);
+    }
   }
 }
 

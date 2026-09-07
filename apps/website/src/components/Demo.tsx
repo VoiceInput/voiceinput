@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useVoiceInput } from "@voiceinput/react";
+import { getVoiceInputErrorMessage, useVoiceInput } from "@voiceinput/react";
+import type { VoiceInputError } from "@voiceinput/provider";
 import { liveDemo } from "../lib/live-demo";
 import { DEMO_SECONDS } from "../lib/demo-config";
 
@@ -128,7 +129,6 @@ function Composer({
   const attachField = useCallback(
     (node: HTMLTextAreaElement | null) => {
       field.current = node;
-      if (node) node.setSelectionRange(node.value.length, node.value.length);
       return targetRef(node);
     },
     [targetRef],
@@ -189,7 +189,7 @@ function Composer({
   const statusText = !isSupported
     ? "Voice input needs a supported browser and a secure connection. You can still type."
     : error
-      ? error.message
+      ? getDemoErrorMessage(error)
       : status === "requesting-permission"
         ? "Allow microphone access in your browser to start dictating."
         : status === "connecting"
@@ -381,6 +381,29 @@ function Composer({
       </output>
     </div>
   );
+}
+
+function getDemoErrorMessage(error: VoiceInputError): string {
+  const message =
+    error.code === "rate-limited"
+      ? "The demo limit has been reached."
+      : error.code === "network-error"
+        ? "The voice demo is unavailable right now. Please try again later."
+        : getVoiceInputErrorMessage(error);
+  const retryAfterMs = error.retryAfterMs;
+  if (
+    retryAfterMs === undefined ||
+    !Number.isFinite(retryAfterMs) ||
+    retryAfterMs <= 0
+  ) {
+    return message;
+  }
+  const seconds = Math.ceil(retryAfterMs / 1_000);
+  const delay =
+    seconds < 60
+      ? `${seconds} ${seconds === 1 ? "second" : "seconds"}`
+      : `${Math.ceil(seconds / 60)} ${seconds <= 60 ? "minute" : "minutes"}`;
+  return `${message} You can retry in ${delay}.`;
 }
 
 function Icon({

@@ -632,14 +632,12 @@ function normalizeRealtimeError(
 ): VoiceInputError {
   const error = isRecord(value["error"]) ? value["error"] : value;
   const code = typeof error["code"] === "string" ? error["code"] : "";
-  const message =
-    typeof error["message"] === "string"
-      ? error["message"]
-      : "OpenAI Realtime reported an error.";
   const rateLimited = code.includes("rate_limit");
   return new VoiceInputError({
     code: rateLimited ? "rate-limited" : "provider-error",
-    message,
+    message: rateLimited
+      ? "OpenAI Realtime rate limit was exceeded."
+      : "OpenAI Realtime reported an error.",
     provider: "openai",
     retryable: rateLimited || code.includes("server_error"),
     cause: value,
@@ -652,10 +650,7 @@ function normalizeTranscriptionFailure(
   const error = isRecord(value["error"]) ? value["error"] : {};
   return new VoiceInputError({
     code: "provider-error",
-    message:
-      typeof error["message"] === "string"
-        ? error["message"]
-        : "OpenAI could not transcribe an audio turn.",
+    message: "OpenAI could not transcribe an audio turn.",
     provider: "openai",
     retryable:
       typeof error["code"] === "string" &&

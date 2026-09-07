@@ -6,7 +6,11 @@ import {
   UserButton,
 } from "@clerk/react";
 import { openai } from "@voiceinput/openai";
-import { VoiceInputProvider, useVoiceInput } from "@voiceinput/react";
+import {
+  VoiceInputProvider,
+  getVoiceInputErrorMessage,
+  useVoiceInput,
+} from "@voiceinput/react";
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -55,7 +59,7 @@ function VoiceComposer({
         {status === "listening" ? "Stop" : "Speak"}
       </button>
       <output aria-live="polite">{status}</output>
-      {error ? <p role="alert">{error.message}</p> : null}
+      {error ? <p role="alert">{getVoiceInputErrorMessage(error)}</p> : null}
     </>
   );
 }

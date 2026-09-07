@@ -28,6 +28,7 @@ afterEach(async () => {
   });
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("useVoiceInput", () => {
@@ -348,17 +349,17 @@ describe("useVoiceInput", () => {
     });
     await act(async () => {
       second.click();
-      await Promise.resolve();
+      await secondFake.controller.waitForSession();
     });
 
     expect(firstFake.controller.sessions[0]?.finishCallCount).toBe(1);
-    expect(secondFake.controller.sessions).toHaveLength(0);
-    expect(audioSource.prepareCallCount).toBe(1);
+    expect(secondFake.controller.sessions).toHaveLength(1);
+    expect(audioSource.prepareCallCount).toBe(2);
+    expect(second.getAttribute("aria-pressed")).toBe("true");
 
     await act(async () => {
       firstFake.controller.emit({ type: "final", text: "preserved" });
       firstFake.controller.close();
-      await secondFake.controller.waitForSession();
     });
     await vi.waitFor(() =>
       expect(first.getAttribute("aria-pressed")).toBe("false"),
@@ -367,6 +368,54 @@ describe("useVoiceInput", () => {
     expect(second.getAttribute("aria-pressed")).toBe("true");
     expect(audioSource.prepareCallCount).toBe(2);
     expect(firstTextarea.value).toBe("hello preserved");
+  });
+
+  it("uses the text engine's observer across controlled rerenders", async () => {
+    const NativeMutationObserver = MutationObserver;
+    let observerCount = 0;
+    class CountingMutationObserver implements MutationObserver {
+      readonly #delegate: MutationObserver;
+
+      constructor(callback: MutationCallback) {
+        observerCount += 1;
+        this.#delegate = new NativeMutationObserver(callback);
+      }
+
+      disconnect(): void {
+        this.#delegate.disconnect();
+      }
+
+      observe(target: Node, options?: MutationObserverInit): void {
+        this.#delegate.observe(target, options);
+      }
+
+      takeRecords(): MutationRecord[] {
+        return this.#delegate.takeRecords();
+      }
+    }
+    vi.stubGlobal("MutationObserver", CountingMutationObserver);
+    const fake = createFakeVoiceInputProvider();
+    render(
+      <VoiceInputProvider
+        provider={fake.provider}
+        audioSource={createFakeAudioSource()}
+      >
+        <ControlledField onStatus={() => {}} initialValue="" />
+      </VoiceInputProvider>,
+    );
+    const trigger = getButton("controlled trigger");
+    await waitForEnabled(trigger);
+
+    await act(async () => {
+      trigger.click();
+      await fake.controller.waitForSession();
+      fake.controller.emit({ type: "interim", text: "one" });
+      fake.controller.emit({ type: "interim", text: "one two" });
+    });
+    await vi.waitFor(() =>
+      expect(getTextarea("controlled").value).toBe("one two"),
+    );
+    expect(observerCount).toBe(1);
   });
 
   it("does not freeze provisional text when a real toggle gesture stops", async () => {

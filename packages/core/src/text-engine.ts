@@ -1,12 +1,11 @@
 import { VoiceInputError } from "@voiceinput/provider";
 
 import { VoiceInputTextEngineController } from "./text-engine/controller.js";
+import { DEFAULT_TRANSFORM_TIMEOUT_MS } from "./text-engine/transform.js";
 import type {
   CreateVoiceInputTextEngineOptions,
   VoiceInputTextEngine,
 } from "./text-engine/types.js";
-
-const DEFAULT_TRANSFORM_TIMEOUT_MS = 10_000;
 
 export type {
   CreateVoiceInputTextEngineOptions,
@@ -21,6 +20,7 @@ export type {
   VoiceInputTextSpan,
   VoiceInputTextSpanState,
   VoiceInputTextTarget,
+  VoiceInputTextWritableChange,
   VoiceInputTransformTranscript,
 } from "./text-engine/types.js";
 

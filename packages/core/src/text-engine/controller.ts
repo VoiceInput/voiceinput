@@ -1,4 +1,4 @@
-import { VoiceInputError } from "@voiceinput/provider";
+import { VoiceInputError, reportUnhandledError } from "@voiceinput/provider";
 
 import { TextHistory, type HistoryValue } from "./history.js";
 import { TextTargetAdapter } from "./dom-target.js";
@@ -7,7 +7,11 @@ import {
   type MutableTextSpan,
   type TextMutation,
 } from "./ownership-model.js";
-import { TransformTimeoutError, runTransformWithTimeout } from "./transform.js";
+import {
+  DEFAULT_TRANSFORM_TIMEOUT_MS,
+  TransformTimeoutError,
+  runTransformWithTimeout,
+} from "./transform.js";
 import type {
   VoiceInputControlledTextBinding,
   CreateVoiceInputTextEngineOptions,
@@ -42,7 +46,8 @@ export class VoiceInputTextEngineController implements VoiceInputTextEngine {
     }
     if (
       options.transformTimeoutMs !== undefined &&
-      (!Number.isInteger(options.transformTimeoutMs) ||
+      (!Number.isFinite(options.transformTimeoutMs) ||
+        !Number.isInteger(options.transformTimeoutMs) ||
         options.transformTimeoutMs <= 0)
     ) {
       throw invalidConfiguration(
@@ -68,6 +73,7 @@ export class VoiceInputTextEngineController implements VoiceInputTextEngine {
   #composing = false;
   #beforeInput: HistoryValue | undefined;
   #inputType = "insertText";
+  #writable: boolean | null = null;
 
   subscribe(listener: (event: VoiceInputTextEngineEvent) => void): () => void {
     this.#listeners.add(listener);
@@ -121,7 +127,12 @@ export class VoiceInputTextEngineController implements VoiceInputTextEngine {
   }
 
   #availabilityChanged(): void {
-    if (!this.isWritable()) {
+    const writable = this.isWritable();
+    if (writable !== this.#writable) {
+      this.#writable = writable;
+      this.#emit({ type: "writable-change", writable });
+    }
+    if (!writable) {
       this.#takeOwnership();
       this.#invalidateCompletion();
       this.#emit({ type: "target-unavailable" });
@@ -195,12 +206,14 @@ export class VoiceInputTextEngineController implements VoiceInputTextEngine {
     if (target === null) {
       this.#target.detach();
       this.#model.replaceTarget("");
+      this.#setWritable(null);
       return;
     }
 
     const value = this.#target.attach(target);
     this.#model.replaceTarget(value);
     this.#target.synchronize(this.#model.value, this.#model.selection);
+    this.#setWritable(this.isWritable());
   }
 
   captureSelection(): VoiceInputTextSelection | null {
@@ -209,7 +222,7 @@ export class VoiceInputTextEngineController implements VoiceInputTextEngine {
     }
 
     this.#reconcileUncontrolledDomValue();
-    const selection = this.#target.readSelection();
+    const selection = this.#target.readSelectionForCapture();
     if (selection === null) {
       return null;
     }
@@ -248,7 +261,8 @@ export class VoiceInputTextEngineController implements VoiceInputTextEngine {
         this.#nextOptions.interimBehavior ?? "inline",
       );
       this.#transformTranscript = this.#nextOptions.transformTranscript;
-      this.#transformTimeoutMs = this.#nextOptions.transformTimeoutMs ?? 10_000;
+      this.#transformTimeoutMs =
+        this.#nextOptions.transformTimeoutMs ?? DEFAULT_TRANSFORM_TIMEOUT_MS;
     }
     this.#invalidateCompletion();
     this.#model.begin();
@@ -495,6 +509,12 @@ export class VoiceInputTextEngineController implements VoiceInputTextEngine {
   #invalidateCompletion(): void {
     this.#completionGeneration += 1;
   }
+
+  #setWritable(writable: boolean | null): void {
+    if (writable === this.#writable) return;
+    this.#writable = writable;
+    this.#emit({ type: "writable-change", writable: writable ?? false });
+  }
 }
 
 function invalidConfiguration(message: string): VoiceInputError {
@@ -505,21 +525,6 @@ function isVoiceInputError(
   error: VoiceInputError | null,
 ): error is VoiceInputError {
   return error !== null;
-}
-
-function reportUnhandledError(error: unknown): void {
-  const reportError = (
-    globalThis as typeof globalThis & {
-      reportError?: (error: unknown) => void;
-    }
-  ).reportError;
-  if (typeof reportError === "function") {
-    reportError(error);
-  } else {
-    queueMicrotask(() => {
-      throw error;
-    });
-  }
 }
 
 function sameSelection(

@@ -77,6 +77,11 @@ describe("PCM16 AudioWorklet processor", () => {
   });
 
   it("emits a self-contained module for the registered processor name", () => {
+    expect(AUDIO_WORKLET_SOURCE).not.toContain("toString");
+    expect(AUDIO_WORKLET_SOURCE).not.toContain(
+      "registerVoiceInputPcm16Processor",
+    );
+
     let registeredName: string | undefined;
     // oxlint-disable-next-line typescript/no-implied-eval -- This parses the generated worklet exactly as the browser does.
     const initialize = new Function(

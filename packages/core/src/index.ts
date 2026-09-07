@@ -1,3 +1,4 @@
+export { getVoiceInputErrorMessage } from "@voiceinput/provider";
 export {
   createBrowserAudioSource,
   getBrowserVoiceInputSupport,
@@ -36,5 +37,6 @@ export {
   type VoiceInputTextSpan,
   type VoiceInputTextSpanState,
   type VoiceInputTextTarget,
+  type VoiceInputTextWritableChange,
   type VoiceInputTransformTranscript,
 } from "./text-engine.js";

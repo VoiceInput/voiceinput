@@ -9,6 +9,7 @@ export async function mockDemo(
   await page.addInitScript(
     ({ permissionDelayMs }) => {
       const cleanup = new Map<string, () => void>();
+      // oxlint-disable-next-line typescript/unbound-method -- Called with the active track below.
       const nativeStop = MediaStreamTrack.prototype.stop;
       MediaStreamTrack.prototype.stop = function () {
         nativeStop.call(this);

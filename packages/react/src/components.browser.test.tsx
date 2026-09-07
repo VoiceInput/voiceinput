@@ -6,6 +6,7 @@ import {
 import type { VoiceInputProviderV1 } from "@voiceinput/provider";
 import { createFakeVoiceInputProvider } from "@voiceinput/provider/test";
 import { act, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -29,6 +30,63 @@ afterEach(async () => {
 });
 
 describe("React controls", () => {
+  it("renders browser support correctly on the first client commit", () => {
+    const fake = createFakeVoiceInputProvider();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+
+    act(() => {
+      flushSync(() => {
+        root.render(
+          <VoiceButton
+            voice={{
+              provider: fake.provider,
+              audioSource: createFakeAudioSource(),
+            }}
+          />,
+        );
+      });
+
+      const button = getButton("Start voice input");
+      expect(button.disabled).toBe(false);
+      expect(button.dataset["voiceinputSupported"]).toBe("true");
+      expect(document.querySelector('[role="status"]')?.textContent).toBe("");
+    });
+  });
+
+  it("announces a programmatically started VoiceButton after its first status change", async () => {
+    const fake = createFakeVoiceInputProvider();
+    let start: (() => Promise<void>) | undefined;
+    render(
+      <VoiceButton
+        aria-label="Programmatic voice input"
+        voice={{
+          provider: fake.provider,
+          audioSource: createFakeAudioSource(),
+        }}
+      >
+        {(voice) => {
+          start = voice.start;
+          return voice.status;
+        }}
+      </VoiceButton>,
+    );
+    expect(document.querySelector('[role="status"]')?.textContent).toBe("");
+
+    await act(async () => {
+      await start?.();
+      await fake.controller.waitForSession();
+    });
+
+    await vi.waitFor(() =>
+      expect(document.querySelector('[role="status"]')?.textContent).toBe(
+        "Voice input is listening.",
+      ),
+    );
+  });
+
   it("uses one controlled callback for typing, voice, undo, and redo", async () => {
     const fake = createFakeVoiceInputProvider();
     const audioSource = createFakeAudioSource();
@@ -225,7 +283,7 @@ describe("React controls", () => {
     });
     await vi.waitFor(() =>
       expect(document.querySelector('[role="alert"]')?.textContent).toBe(
-        "Voice input error: The provider is unavailable.",
+        "Voice input error: The transcription service could not process the recording. Try again.",
       ),
     );
     expect(button.dataset["voiceinputError"]).toBe("provider-error");
@@ -391,9 +449,7 @@ describe("React controls", () => {
 
     const button = getButton("Voice input unavailable");
     expect(button.disabled).toBe(true);
-    expect(document.querySelector('[role="status"]')?.textContent).toBe(
-      "Voice input is unavailable in this browser.",
-    );
+    expect(document.querySelector('[role="status"]')?.textContent).toBe("");
   });
 });
 

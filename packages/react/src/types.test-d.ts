@@ -8,6 +8,10 @@ const setValue = (_value: string): void => {};
 
 ({ value: "hello", onValueChange: setValue }) satisfies UseVoiceInputOptions;
 ({}) satisfies UseVoiceInputOptions;
+({
+  finalizationTimeoutMs: 15_000,
+  stopWhenHidden: false,
+}) satisfies UseVoiceInputOptions;
 ({ value: "hello", onValueChange: setValue }) satisfies VoiceInputProps;
 ({}) satisfies VoiceTextareaProps;
 

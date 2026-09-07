@@ -1,6 +1,6 @@
 "use client";
 
-export { VoiceInputError } from "@voiceinput/core";
+export { getVoiceInputErrorMessage, VoiceInputError } from "@voiceinput/core";
 export type {
   VoiceInputSessionEvent,
   VoiceInputSnapshot,

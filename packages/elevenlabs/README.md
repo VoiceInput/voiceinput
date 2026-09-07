@@ -100,7 +100,7 @@ permission with distinct error codes.
 | ----------------------------------- | ------------------------------------------------------------- |
 | `tokenEndpoint`                     | Required same-origin endpoint that returns a single-use token |
 | `model`                             | Model ID; default `scribe_v2_realtime`                        |
-| `finishTimeoutMs`                   | Graceful final-commit deadline; default 4 seconds             |
+| `finishTimeoutMs`                   | Standalone final-commit deadline; default 20 seconds          |
 | `vadThreshold`                      | VAD threshold from 0.1 to 0.9                                 |
 | `minSpeechDurationMs`               | Integer from 50 to 2000                                       |
 | `minSilenceDurationMs`              | Integer from 50 to 2000                                       |
@@ -109,7 +109,9 @@ permission with distinct error codes.
 | `fetch`, `webSocket`, `realtimeUrl` | Transport/endpoint overrides                                  |
 
 Provider-only VAD settings customize the VAD behavior used by the portable 650
-ms default.
+ms default. When used through `@voiceinput/core` or `@voiceinput/react`, the
+session's `finalizationTimeoutMs` (15 seconds by default) governs graceful
+fallback first. `finishTimeoutMs` is the adapter's standalone safety limit.
 
 ## Public API
 

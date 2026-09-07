@@ -1,3 +1,5 @@
+export const DEFAULT_TRANSFORM_TIMEOUT_MS = 10_000;
+
 export class TransformTimeoutError extends Error {
   constructor() {
     super("Transcript transform timed out.");

@@ -18,9 +18,6 @@
   ],
   "type": "module",
   "license": "MIT",
-  "engines": {
-    "node": ">=22"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VoiceInput/voiceinput.git",
@@ -52,10 +49,11 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown src/index.ts",
-    "dev": "tsdown src/index.ts --watch --no-clean",
+    "build": "pnpm generate:worklet && tsdown src/index.ts",
+    "dev": "pnpm generate:worklet && tsdown src/index.ts --watch --no-clean",
+    "generate:worklet": "node ../../scripts/generate-audio-worklet.mjs",
     "pack": "pnpm pack --pack-destination .",
-    "test": "vitest run --config vitest.config.ts",
+    "test": "node ../../scripts/generate-audio-worklet.mjs --check && vitest run --config vitest.config.ts",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "lint": "oxlint --config ../../.oxlintrc.json .",

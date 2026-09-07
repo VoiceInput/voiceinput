@@ -39,6 +39,8 @@ const session = createVoiceInputSession({
   vocabulary: ["VoiceInput"],
   endpointing: { silenceMs: 650 },
   connectionTimeoutMs: 15_000,
+  finalizationTimeoutMs: 15_000,
+  stopWhenHidden: true,
   maxDurationMs: 5 * 60 * 1_000,
 });
 
@@ -52,20 +54,34 @@ unsubscribe();
 ```
 
 Actions are `start`, `stop`, `cancel`, and `toggle`. `stop` is graceful and
-preserves trusted final text; `cancel` aborts immediately. The default maximum
-duration is five minutes, with one warning 30 seconds before cutoff.
+preserves visible dictated text; `cancel` aborts immediately. The default
+maximum duration is five minutes, with one warning 30 seconds before cutoff.
 
 Once microphone audio is acquired, provider connection and audio activation must
 complete within `connectionTimeoutMs` (15 seconds by default). Expiry aborts the
 full run, releases acquired audio, reports a retryable `network-error`, and
 permits a fresh `start()`.
 
+Audio/provider shutdown has a `finalizationTimeoutMs` budget (15 seconds by
+default), including the final audio flush. A text transform runs afterward with
+its own `transformTimeoutMs` budget. If it expires, the session releases
+resources, promotes the last interim text, completes any text transform, returns
+to `idle`, and emits `stop` with reason `finalization-timeout`. The snapshot
+`finalTranscript` includes that preserved fallback; it is not a guarantee that
+the provider finalized every phrase. Other provider failures still report
+errors.
+
+`stopWhenHidden` defaults to `true`: switching tabs or apps stops recording. Set
+it to `false` for desktop workflows that need background dictation. Page
+hide/freeze still stops the session, and browsers may interrupt microphone
+capture regardless of this option.
+
 The immutable snapshot exposes `status`, `transcript`, `interimTranscript`,
 `finalTranscript`, and `error`. Status values are `idle`,
 `requesting-permission`, `connecting`, `listening`, `stopping`, `processing`,
 and `error`. Stop reasons are `user`, `max-duration`, `replaced`, `max-length`,
-`target-unavailable`, and `backgrounded`. A `text-limit` event reports a
-constrained insertion.
+`target-unavailable`, `backgrounded`, and `finalization-timeout`. A `text-limit`
+event reports a constrained insertion.
 
 Final parts use the same boundary policy as field insertion: outer provider
 whitespace is normalized, word boundaries are added when needed, punctuation is
@@ -148,6 +164,7 @@ interim text out of the field while still reporting it in snapshots.
 Session and errors:
 
 - `createVoiceInputSession`
+- `getVoiceInputErrorMessage`
 - `VoiceInputSession`, `CreateVoiceInputSessionOptions`
 - `VoiceInputSnapshot`, `VoiceInputStatus`, `VoiceInputSessionEvent`
 - `VoiceInputStopReason`
@@ -193,12 +210,13 @@ Omitting it retains sequential compatibility: every final closes the current
 implicit segment. This legacy mode cannot distinguish duplicate final delivery.
 
 The text engine exposes `undo()`, `redo()`, `isWritable()`, and `subscribe()`.
-Subscribers receive `text-limit`, `target-unavailable`, and `reset` events. See
-the [editing contract](../../docs/editing-contract.md) for behavior.
+Subscribers receive `writable-change`, `text-limit`, `target-unavailable`, and
+`reset` events. See the [editing contract](../../docs/editing-contract.md) for
+behavior.
 
 Capture starts while connecting and queues up to fifteen seconds of PCM in
 memory. It drains in order once connected; overflow or sustained transport
 stalls stop with a recoverable error. Recording duration includes buffered
-capture. Backgrounding stops capture; unexpected AudioContext or track
-interruption is a recoverable audio error. Audio and transcript data are never
-persisted by core.
+capture. Backgrounding stops capture by default; unexpected AudioContext or
+track interruption is a recoverable audio error. Audio and transcript data are
+never persisted by core.

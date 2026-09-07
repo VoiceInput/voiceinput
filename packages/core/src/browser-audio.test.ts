@@ -229,8 +229,40 @@ describe("browser audio lifecycle", () => {
     expect(BlockedWorkletAudioContext.instance?.closeCallCount).toBe(1);
   });
 
-  it("requires a user gesture before requesting microphone access", async () => {
-    const getUserMedia = vi.fn<() => void>();
+  it("identifies a worklet module that did not register the processor", async () => {
+    class MissingProcessorAudioWorkletNode {
+      constructor() {
+        throw new DOMException("Processor is not defined", "InvalidStateError");
+      }
+    }
+    const track = new FakeTrack();
+    stubSupportedBrowser(track);
+    vi.stubGlobal("AudioWorkletNode", MissingProcessorAudioWorkletNode);
+
+    await expect(
+      createBrowserAudioSource({
+        workletModuleUrl: "/voiceinput-worklet.js",
+      }).prepare({
+        sampleRate: 16_000,
+        abortSignal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({
+      code: "audio-error",
+      message: expect.stringContaining("did not register"),
+    });
+    expect(track.stopCallCount).toBe(1);
+    expect(FakeAudioContext.instance?.closeCallCount).toBe(1);
+  });
+
+  it("requests microphone access after transient activation has expired", async () => {
+    const track = new FakeTrack();
+    const mediaStream = {
+      getAudioTracks: () => [track],
+      getTracks: () => [track],
+    };
+    const getUserMedia = vi.fn<() => Promise<typeof mediaStream>>(async () =>
+      Promise.resolve(mediaStream),
+    );
     vi.stubGlobal("isSecureContext", true);
     vi.stubGlobal("navigator", {
       mediaDevices: { getUserMedia },
@@ -239,14 +271,68 @@ describe("browser audio lifecycle", () => {
     vi.stubGlobal("AudioContext", FakeAudioContext);
     vi.stubGlobal("AudioWorkletNode", FakeAudioWorkletNode);
 
-    const source = createBrowserAudioSource();
+    const prepared = await createBrowserAudioSource().prepare({
+      sampleRate: 16_000,
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(getUserMedia).toHaveBeenCalledOnce();
+    await prepared.stop();
+  });
+
+  it("reports when the audio context still requires user activation", async () => {
+    class SuspendedAudioContext extends FakeAudioContext {
+      override async resume(): Promise<void> {
+        this.resumeCallCount += 1;
+      }
+    }
+    const track = new FakeTrack();
+    stubSupportedBrowser(track, SuspendedAudioContext);
+
     await expect(
-      source.prepare({
+      createBrowserAudioSource().prepare({
         sampleRate: 16_000,
         abortSignal: new AbortController().signal,
       }),
-    ).rejects.toMatchObject({ code: "permission-denied" });
-    expect(getUserMedia).not.toHaveBeenCalled();
+    ).rejects.toMatchObject({
+      code: "user-activation-required",
+      retryable: true,
+    });
+    expect(track.stopCallCount).toBe(1);
+    expect(SuspendedAudioContext.instance?.closeCallCount).toBe(1);
+  });
+
+  it("does not hang when resume waits for a new user activation", async () => {
+    class HangingResumeAudioContext extends FakeAudioContext {
+      override async resume(): Promise<void> {
+        this.resumeCallCount += 1;
+        return new Promise(() => {});
+      }
+    }
+    const track = new FakeTrack();
+    const mediaStream = {
+      getAudioTracks: () => [track],
+      getTracks: () => [track],
+    };
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: async () => mediaStream },
+      userActivation: { isActive: false },
+    });
+    vi.stubGlobal("AudioContext", HangingResumeAudioContext);
+    vi.stubGlobal("AudioWorkletNode", FakeAudioWorkletNode);
+
+    await expect(
+      createBrowserAudioSource().prepare({
+        sampleRate: 16_000,
+        abortSignal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({
+      code: "user-activation-required",
+      retryable: true,
+    });
+    expect(track.stopCallCount).toBe(1);
+    expect(HangingResumeAudioContext.instance?.closeCallCount).toBe(1);
   });
 
   it("stops a microphone that arrives after cancellation", async () => {

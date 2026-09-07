@@ -8,7 +8,7 @@
     "build": "astro build && node scripts/check-links.mjs",
     "preview": "wrangler dev --env=\"\" --ip 127.0.0.1 --port 4322",
     "typecheck": "astro check && tsc --project worker/tsconfig.json",
-    "lint": "oxlint --config ../../.oxlintrc.json --ignore-pattern worker/env.d.ts src scripts worker",
+    "lint": "oxlint --config ../../.oxlintrc.json --ignore-pattern worker/env.d.ts src scripts tests worker",
     "format:check": "prettier --ignore-path ../../.prettierignore --check .",
     "deploy:preview": "wrangler deploy --env=\"\"",
     "deploy": "wrangler deploy --env production",

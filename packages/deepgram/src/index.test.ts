@@ -181,7 +181,14 @@ describe("deepgram", () => {
     await expect(reader.read()).resolves.toMatchObject({
       value: {
         type: "error",
-        error: { code: "provider-error", provider: "deepgram" },
+        error: {
+          code: "provider-error",
+          provider: "deepgram",
+          message: "Deepgram reported a streaming error.",
+          cause: {
+            description: "Keyterms exceed the 500-token maximum.",
+          },
+        },
       },
     });
   });
