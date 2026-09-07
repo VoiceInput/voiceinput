@@ -109,6 +109,11 @@ jobs:
       - run: npm install --global npm@12.0.2
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Start Linux audio backend for Firefox
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pulseaudio
+          pulseaudio --start --exit-idle-time=-1
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
