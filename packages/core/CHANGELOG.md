@@ -1,5 +1,34 @@
 # @voiceinput/core
 
+## 0.1.0-beta.2
+
+### Minor Changes
+
+- 5523385: Make the built-in AudioWorklet safe under consumer bundling and
+  report blocked browser audio activation separately from microphone permission
+  denial.
+
+  Preserve visible dictation when graceful shutdown times out, expose a
+  configurable finalization deadline and background-recording policy, and
+  improve initial React support detection, field writability subscriptions, and
+  prefilled-field selection.
+
+  Provide a stable user-facing error-message helper, retain upstream diagnostics
+  in error causes, and clarify provider defaults, accessibility, and release
+  channels.
+
+  Preserve visible text when finalization fails as well as when it times out.
+  The new `user-activation-required` error code requires updating exhaustive
+  switches over `VoiceInputErrorCode`.
+
+### Patch Changes
+
+- 1757df1: Keep controlled field value trackers synchronized during dictation so
+  clearing a dictated field remains cleared and subsequent recordings insert
+  their full transcript.
+- Updated dependencies [5523385]
+  - @voiceinput/provider@0.1.0-beta.2
+
 ## 0.1.0-beta.1
 
 ### Patch Changes
