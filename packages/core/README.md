@@ -68,8 +68,10 @@ its own `transformTimeoutMs` budget. If it expires, the session releases
 resources, promotes the last interim text, completes any text transform, returns
 to `idle`, and emits `stop` with reason `finalization-timeout`. The snapshot
 `finalTranscript` includes that preserved fallback; it is not a guarantee that
-the provider finalized every phrase. Other provider failures still report
-errors.
+the provider finalized every phrase. Errors while flushing audio or finalizing
+after Stop preserve text in the same way: the session completes the text engine,
+reports an `error` event, keeps the error in its snapshot, and returns to `idle`
+with the original stop reason. Errors during recording still terminate the run.
 
 `stopWhenHidden` defaults to `true`: switching tabs or apps stops recording. Set
 it to `false` for desktop workflows that need background dictation. Page

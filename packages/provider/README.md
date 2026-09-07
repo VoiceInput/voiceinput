@@ -159,7 +159,6 @@ Main entry point:
 
 - `VoiceInputError`
 - `getVoiceInputErrorMessage`
-- `reportUnhandledError`
 - `VoiceInputErrorCode`, `VoiceInputErrorOptions`
 - `VoiceEndpointingOptions`, `VoiceTranscriptionOptions`
 - `VoiceInputProviderV1`

@@ -302,35 +302,69 @@ describe("browser audio lifecycle", () => {
     expect(SuspendedAudioContext.instance?.closeCallCount).toBe(1);
   });
 
-  it("does not hang when resume waits for a new user activation", async () => {
+  it.each([
+    ["active", { isActive: true }],
+    ["unavailable", undefined],
+  ])(
+    "does not hang when resume waits with user activation %s",
+    async (_label, userActivation) => {
+      class HangingResumeAudioContext extends FakeAudioContext {
+        override async resume(): Promise<void> {
+          this.resumeCallCount += 1;
+          return new Promise(() => {});
+        }
+      }
+      const track = new FakeTrack();
+      const mediaStream = {
+        getAudioTracks: () => [track],
+        getTracks: () => [track],
+      };
+      vi.stubGlobal("isSecureContext", true);
+      vi.stubGlobal("navigator", {
+        mediaDevices: { getUserMedia: async () => mediaStream },
+        ...(userActivation === undefined ? {} : { userActivation }),
+      });
+      vi.stubGlobal("AudioContext", HangingResumeAudioContext);
+      vi.stubGlobal("AudioWorkletNode", FakeAudioWorkletNode);
+
+      await expect(
+        createBrowserAudioSource().prepare({
+          sampleRate: 16_000,
+          abortSignal: new AbortController().signal,
+        }),
+      ).rejects.toMatchObject({
+        code: "user-activation-required",
+        retryable: true,
+      });
+      expect(track.stopCallCount).toBe(1);
+      expect(HangingResumeAudioContext.instance?.closeCallCount).toBe(1);
+    },
+  );
+
+  it("aborts a pending resume without waiting for the activation timeout", async () => {
+    let markResumeStarted: () => void = () => {};
+    const resumeStarted = new Promise<void>((resolve) => {
+      markResumeStarted = resolve;
+    });
     class HangingResumeAudioContext extends FakeAudioContext {
       override async resume(): Promise<void> {
         this.resumeCallCount += 1;
+        markResumeStarted();
         return new Promise(() => {});
       }
     }
     const track = new FakeTrack();
-    const mediaStream = {
-      getAudioTracks: () => [track],
-      getTracks: () => [track],
-    };
-    vi.stubGlobal("isSecureContext", true);
-    vi.stubGlobal("navigator", {
-      mediaDevices: { getUserMedia: async () => mediaStream },
-      userActivation: { isActive: false },
+    stubSupportedBrowser(track, HangingResumeAudioContext);
+    const abortController = new AbortController();
+    const preparation = createBrowserAudioSource().prepare({
+      sampleRate: 16_000,
+      abortSignal: abortController.signal,
     });
-    vi.stubGlobal("AudioContext", HangingResumeAudioContext);
-    vi.stubGlobal("AudioWorkletNode", FakeAudioWorkletNode);
 
-    await expect(
-      createBrowserAudioSource().prepare({
-        sampleRate: 16_000,
-        abortSignal: new AbortController().signal,
-      }),
-    ).rejects.toMatchObject({
-      code: "user-activation-required",
-      retryable: true,
-    });
+    await resumeStarted;
+    abortController.abort();
+
+    await expect(preparation).rejects.toMatchObject({ code: "device-busy" });
     expect(track.stopCallCount).toBe(1);
     expect(HangingResumeAudioContext.instance?.closeCallCount).toBe(1);
   });

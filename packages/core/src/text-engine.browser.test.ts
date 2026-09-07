@@ -150,6 +150,95 @@ describe("text ownership", () => {
     expect(stopReasons).toEqual(["finalization-timeout"]);
   });
 
+  it("keeps visible interim text when the provider fails after finish", async () => {
+    const target = createTextarea();
+    const textEngine = createEngine();
+    textEngine.setTarget(target);
+    const fake = createFakeVoiceInputProvider({ autoCloseOnFinish: false });
+    const session = createVoiceInputSession({
+      provider: fake.provider,
+      audioSource: createFakeAudioSource(),
+      textEngine,
+    });
+    const failure = new VoiceInputError({
+      code: "provider-error",
+      message: "Finalization failed.",
+      provider: "fake",
+      retryable: true,
+    });
+    const events: unknown[] = [];
+    session.subscribe((event) => events.push(event));
+
+    await session.start();
+    fake.controller.emit({
+      type: "interim",
+      text: "keep this phrase",
+      segmentId: "a",
+    });
+    await vi.waitFor(() => expect(target.value).toBe("keep this phrase"));
+
+    const stopping = session.stop();
+    await vi.waitFor(() =>
+      expect(fake.controller.sessions[0]?.finishCallCount).toBe(1),
+    );
+    fake.controller.fail(failure);
+    await stopping;
+
+    expect(target.value).toBe("keep this phrase");
+    expect(textEngine.getSnapshot().spans[0]?.state).toBe("finalized");
+    expect(session.getSnapshot()).toMatchObject({
+      status: "idle",
+      error: failure,
+      transcript: "keep this phrase",
+      finalTranscript: "keep this phrase",
+      interimTranscript: "",
+    });
+    expect(events).toContainEqual({ type: "error", error: failure });
+    expect(events.at(-1)).toEqual({ type: "stop", reason: "user" });
+  });
+
+  it("cancels processing without applying a pending transform", async () => {
+    const target = createTextarea();
+    let resolveTransform: (text: string) => void = () => {};
+    const textEngine = createEngine({
+      transformTranscript: () =>
+        new Promise<string>((resolve) => {
+          resolveTransform = resolve;
+        }),
+    });
+    textEngine.setTarget(target);
+    const fake = createFakeVoiceInputProvider();
+    const session = createVoiceInputSession({
+      provider: fake.provider,
+      audioSource: createFakeAudioSource(),
+      textEngine,
+    });
+    const events: unknown[] = [];
+    session.subscribe((event) => events.push(event));
+
+    await session.start();
+    fake.controller.emit({ type: "final", text: "original", segmentId: "a" });
+    await vi.waitFor(() => expect(target.value).toBe("original"));
+    const stopping = session.stop();
+    await vi.waitFor(() =>
+      expect(session.getSnapshot().status).toBe("processing"),
+    );
+
+    await session.cancel();
+    resolveTransform("late transformed value");
+    await stopping;
+
+    expect(target.value).toBe("original");
+    expect(session.getSnapshot()).toMatchObject({
+      status: "idle",
+      error: null,
+      transcript: "original",
+      finalTranscript: "original",
+    });
+    expect(events).toContainEqual({ type: "cancel" });
+    expect(events).not.toContainEqual({ type: "stop", reason: "user" });
+  });
+
   it("freezes a disabled fieldset and never mutates a replacement with old speech", async () => {
     const target = createTextarea();
     const fieldset = document.createElement("fieldset");

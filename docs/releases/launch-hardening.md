@@ -66,7 +66,7 @@ other editing rules. Existing automated coverage for those paths remains part of
 the release checks. Automated browser fixtures do not replace physical-device,
 real-microphone, or manual screen-reader validation in the release checklist.
 
-## Verification
+## Initial-pass verification
 
 - Workspace build, type checks, lint, and source formatting passed. Formatting
   excludes the local review input; installed agent-skill copies retain upstream
@@ -87,3 +87,29 @@ real-microphone, or manual screen-reader validation in the release checklist.
 Physical microphone, branded Safari, mobile-device, and manual screen-reader
 checks were not performed in this pass. Follow the release checklist for those
 checks and the subsequent npm publication.
+
+## Re-audit follow-up
+
+- Provider failures during graceful Stop now preserve visible interim text just
+  like deadline expiry. This includes error stream parts, rejected finish calls,
+  and audio flush failures. The text engine completes, the session reports the
+  error and returns to idle, and a new recording can start.
+- Every suspended audio-context resume has a one-second bound, including when
+  the browser has no `navigator.userActivation` API.
+- The shared exception reporter is marked internal and removed from the public
+  API list.
+- The demo retains known worker-authored busy and daily-limit messages,
+  including retry timing, while unexpected server diagnostics still get a safe
+  fallback.
+- `pnpm format:check` now explicitly ignores the local `project-audit.md` input;
+  the file itself remains untracked and unchanged.
+- The hardening Changeset is minor to describe the added API and default
+  changes. It notes the added `user-activation-required` error code for
+  exhaustive switches. No compatibility shims or separate beta release were
+  added for this follow-up.
+
+The end-to-end pass also reproduced a demo hydration race: early typing could be
+lost when React initialized the controlled field. The demo now keeps fields
+read-only and JavaScript-dependent controls disabled until hydration completes.
+A deliberately delayed-hydration test covers this boundary, draft switching, and
+clearing a prefilled draft. SDK controlled-value semantics are unchanged.

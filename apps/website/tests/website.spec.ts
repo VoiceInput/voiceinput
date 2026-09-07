@@ -435,6 +435,48 @@ test("writing examples preserve separate drafts and expose secondary actions by 
   expect(errors).toEqual([]);
 });
 
+test("demo stays read-only until hydration and preserves cleared drafts", async ({
+  page,
+}) => {
+  let releaseHydration = () => {};
+  const hydrationReleased = new Promise<void>((resolve) => {
+    releaseHydration = resolve;
+  });
+  await page.route(
+    (url) =>
+      url.pathname.startsWith("/_astro/") && url.pathname.endsWith(".js"),
+    async (route) => {
+      await hydrationReleased;
+      await route.continue();
+    },
+  );
+
+  try {
+    await page.goto("/", { waitUntil: "commit" });
+    const field = page.getByRole("textbox", { name: "Try voice input" });
+    const noteTab = page.getByRole("tab", { name: "Note", exact: true });
+    await expect(field).toHaveAttribute("readonly", "");
+    await expect(noteTab).toBeDisabled();
+
+    releaseHydration();
+    await expect(field).toBeEditable();
+    await expect(noteTab).toBeEnabled();
+
+    await field.fill("A message written after hydration.");
+    await noteTab.click();
+    await expect(field).toHaveValue(
+      "Website review\n\nKeep the first release focused.\nNext steps: ",
+    );
+    await field.fill("");
+    await page.getByRole("tab", { name: "Message", exact: true }).click();
+    await expect(field).toHaveValue("A message written after hydration.");
+    await noteTab.click();
+    await expect(field).toHaveValue("");
+  } finally {
+    releaseHydration();
+  }
+});
+
 test("note recording locks scenario switching and preserves native keyboard undo", async ({
   page,
 }, testInfo) => {

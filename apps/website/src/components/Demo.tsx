@@ -1,7 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getVoiceInputErrorMessage, useVoiceInput } from "@voiceinput/react";
-import type { VoiceInputError } from "@voiceinput/provider";
-import { liveDemo } from "../lib/live-demo";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { useVoiceInput } from "@voiceinput/react";
+import { getDemoErrorMessage, liveDemo } from "../lib/live-demo";
 import { DEMO_SECONDS } from "../lib/demo-config";
 
 const scenarios = [
@@ -21,7 +27,16 @@ const scenarios = [
   },
 ] as const;
 
+const subscribeToHydration = () => () => {};
+const getHydratedSnapshot = () => true;
+const getServerHydratedSnapshot = () => false;
+
 export default function Demo() {
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getHydratedSnapshot,
+    getServerHydratedSnapshot,
+  );
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState(false);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -45,10 +60,10 @@ export default function Demo() {
               aria-selected={active === index}
               aria-controls={`demo-panel-${scenario.id}`}
               tabIndex={active === index ? 0 : -1}
-              disabled={busy}
+              disabled={busy || !hydrated}
               onClick={() => setActive(index)}
               onKeyDown={(event) => {
-                if (busy) return;
+                if (busy || !hydrated) return;
                 const next =
                   event.key === "Home"
                     ? 0
@@ -78,6 +93,7 @@ export default function Demo() {
           key={scenario.id}
           scenario={scenario}
           active={active === index}
+          hydrated={hydrated}
           onBusyChange={setBusy}
         />
       ))}
@@ -88,10 +104,12 @@ export default function Demo() {
 function Composer({
   scenario,
   active,
+  hydrated,
   onBusyChange,
 }: {
   scenario: (typeof scenarios)[number];
   active: boolean;
+  hydrated: boolean;
   onBusyChange: (busy: boolean) => void;
 }) {
   const [value, setValue] = useState<string>(scenario.initial);
@@ -112,7 +130,12 @@ function Composer({
     };
   }, []);
   const { targetRef, getTriggerProps, status, error, undo, stop, isSupported } =
-    useVoiceInput({ provider, value, onValueChange: setValue });
+    useVoiceInput({
+      provider,
+      value,
+      onValueChange: setValue,
+      disabled: !hydrated,
+    });
   const running = status !== "idle" && status !== "error";
   const finishing = status === "processing" || status === "stopping";
   useEffect(() => {
@@ -186,19 +209,21 @@ function Composer({
     setNotice(message);
     noticeTimer.current = setTimeout(() => setNotice(""), 2200);
   };
-  const statusText = !isSupported
-    ? "Voice input needs a supported browser and a secure connection. You can still type."
-    : error
-      ? getDemoErrorMessage(error)
-      : status === "requesting-permission"
-        ? "Allow microphone access in your browser to start dictating."
-        : status === "connecting"
-          ? "Connecting to transcription…"
-          : status === "listening"
-            ? "Speak naturally. You can keep typing as you go."
-            : finishing
-              ? "Finishing your transcript…"
-              : notice || scenario.hint;
+  const statusText = !hydrated
+    ? "Initializing the interactive demo…"
+    : !isSupported
+      ? "Voice input needs a supported browser and a secure connection. You can still type."
+      : error
+        ? getDemoErrorMessage(error)
+        : status === "requesting-permission"
+          ? "Allow microphone access in your browser to start dictating."
+          : status === "connecting"
+            ? "Connecting to transcription…"
+            : status === "listening"
+              ? "Speak naturally. You can keep typing as you go."
+              : finishing
+                ? "Finishing your transcript…"
+                : notice || scenario.hint;
   return (
     <div
       id={`demo-panel-${scenario.id}`}
@@ -215,6 +240,7 @@ function Composer({
           ref={attachField}
           value={value}
           onChange={(event) => setValue(event.currentTarget.value)}
+          readOnly={!hydrated}
           placeholder={scenario.placeholder}
           spellCheck={false}
           aria-describedby={`demo-status-${scenario.id}`}
@@ -229,7 +255,7 @@ function Composer({
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               aria-controls={`writing-options-${scenario.id}`}
-              disabled={running}
+              disabled={running || !hydrated}
               onClick={() => (menuOpen ? closeMenu() : openMenu())}
               onKeyDown={(event) => {
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -343,6 +369,8 @@ function Composer({
                 "Finishing…"
               ) : running ? (
                 "Connecting…"
+              ) : !hydrated ? (
+                "Initializing…"
               ) : (
                 "Type or speak"
               )}
@@ -381,29 +409,6 @@ function Composer({
       </output>
     </div>
   );
-}
-
-function getDemoErrorMessage(error: VoiceInputError): string {
-  const message =
-    error.code === "rate-limited"
-      ? "The demo limit has been reached."
-      : error.code === "network-error"
-        ? "The voice demo is unavailable right now. Please try again later."
-        : getVoiceInputErrorMessage(error);
-  const retryAfterMs = error.retryAfterMs;
-  if (
-    retryAfterMs === undefined ||
-    !Number.isFinite(retryAfterMs) ||
-    retryAfterMs <= 0
-  ) {
-    return message;
-  }
-  const seconds = Math.ceil(retryAfterMs / 1_000);
-  const delay =
-    seconds < 60
-      ? `${seconds} ${seconds === 1 ? "second" : "seconds"}`
-      : `${Math.ceil(seconds / 60)} ${seconds <= 60 ? "minute" : "minutes"}`;
-  return `${message} You can retry in ${delay}.`;
 }
 
 function Icon({

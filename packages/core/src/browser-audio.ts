@@ -470,17 +470,14 @@ async function resumeAudioContext(
     abortSignal.addEventListener("abort", handleAbort, { once: true });
   });
   const attempts: Promise<unknown>[] = [context.resume(), aborted];
-
-  if (navigator.userActivation?.isActive === false) {
-    attempts.push(
-      new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(
-          () => reject(userActivationRequired()),
-          USER_ACTIVATION_RESUME_TIMEOUT_MS,
-        );
-      }),
-    );
-  }
+  attempts.push(
+    new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(
+        () => reject(userActivationRequired()),
+        USER_ACTIVATION_RESUME_TIMEOUT_MS,
+      );
+    }),
+  );
 
   try {
     await Promise.race(attempts);

@@ -1,10 +1,45 @@
 import {
   VoiceInputError,
+  getVoiceInputErrorMessage,
   type VoiceInputProviderV1,
   type VoiceInputProviderV1StreamPart,
 } from "@voiceinput/provider";
 import { sendWithBackpressure } from "@voiceinput/provider/transport";
 import { DEMO_PROTOCOL, DEMO_SAMPLE_RATE } from "./demo-config";
+
+const MAX_DEMO_RETRY_AFTER_MS = 86_400_000;
+const RATE_LIMIT_MESSAGES = new Set([
+  "Please wait a moment before starting another demo.",
+  "Today's demo limit has been reached. Please try again tomorrow.",
+  "You've reached the demo limit. Please try again later.",
+  "The demo is busy. Please try again in a minute.",
+]);
+const TOKEN_MESSAGES = new Set([
+  "Start a new demo session.",
+  "The demo ended before connecting. Please try again.",
+]);
+const NETWORK_MESSAGES = new Set([
+  "Open the demo on the VoiceInput website.",
+  "The voice demo is temporarily unavailable.",
+  "Unable to verify this demo request.",
+  "Transcription took too long. Please try again.",
+  "The transcription connection stopped. Please try again.",
+  "Unable to connect. Please try again.",
+  "This demo session is not ready or has reached its limit.",
+  "Unsupported demo message.",
+  "Invalid audio frame.",
+  "The connection is too slow. Please try again.",
+  "Transcription is unavailable right now. Please try again later.",
+  "The voice demo is unavailable right now. Please try again later.",
+  "The demo received an unexpected response. Please try again.",
+  "The connection closed. Please try again.",
+]);
+
+export function getDemoErrorMessage(error: VoiceInputError): string {
+  const message =
+    curatedDemoMessage(error.code, error.message) ?? fallbackDemoMessage(error);
+  return withRetryDelay(message, validRetryAfterMs(error.retryAfterMs));
+}
 
 export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
   const provider: VoiceInputProviderV1 = {
@@ -33,10 +68,8 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
         signal: abortSignal,
       });
       if (!response.ok) {
-        let message =
-          response.status === 429
-            ? "The demo limit has been reached."
-            : "The voice demo is unavailable right now. Please try again later.";
+        const code = response.status === 429 ? "rate-limited" : "network-error";
+        let serverMessage: unknown;
         try {
           const body: unknown = await response.json();
           if (
@@ -46,16 +79,20 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
             typeof body.error === "string" &&
             body.error.length <= 500
           )
-            message = body.error;
+            serverMessage = body.error;
         } catch {
           /* Proxies may return a non-JSON error page. */
         }
         const seconds = Number(response.headers.get("Retry-After"));
         const retryAfterMs =
-          Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : undefined;
+          Number.isFinite(seconds) && seconds > 0
+            ? validRetryAfterMs(seconds * 1000)
+            : undefined;
         throw new VoiceInputError({
-          code: response.status === 429 ? "rate-limited" : "network-error",
-          message: withRetryDelay(message, retryAfterMs),
+          code,
+          message:
+            curatedDemoMessage(code, serverMessage) ??
+            fallbackDemoMessage(code),
           retryable: true,
           retryAfterMs,
         });
@@ -110,9 +147,11 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
         retryAfterMs?: number,
       ) => {
         if (closed) return;
+        retryAfterMs = validRetryAfterMs(retryAfterMs);
         const error = new VoiceInputError({
           code,
-          message: withRetryDelay(message, retryAfterMs),
+          message:
+            curatedDemoMessage(code, message) ?? fallbackDemoMessage(code),
           retryAfterMs,
           retryable: true,
         });
@@ -156,10 +195,8 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
               part.code === "rate-limited" || part.code === "token-error"
                 ? part.code
                 : "network-error",
-              typeof part.retryAfterMs === "number" &&
-                Number.isFinite(part.retryAfterMs) &&
-                part.retryAfterMs > 0
-                ? part.retryAfterMs
+              typeof part.retryAfterMs === "number"
+                ? validRetryAfterMs(part.retryAfterMs)
                 : undefined,
             );
           } else if (
@@ -236,9 +273,52 @@ export function liveDemo(onServerStop: () => void): VoiceInputProviderV1 {
   };
 }
 
+function curatedDemoMessage(
+  code: VoiceInputError["code"],
+  message: unknown,
+): string | undefined {
+  if (typeof message !== "string") return undefined;
+  const messages =
+    code === "rate-limited"
+      ? RATE_LIMIT_MESSAGES
+      : code === "token-error"
+        ? TOKEN_MESSAGES
+        : code === "network-error"
+          ? NETWORK_MESSAGES
+          : undefined;
+  return messages?.has(message) ? message : undefined;
+}
+
+function fallbackDemoMessage(
+  error: VoiceInputError | VoiceInputError["code"],
+): string {
+  const code = typeof error === "string" ? error : error.code;
+  if (code === "rate-limited") return "The demo limit has been reached.";
+  if (code === "network-error")
+    return "The voice demo is unavailable right now. Please try again later.";
+  if (code === "token-error") return "Unable to start the voice demo.";
+  return typeof error === "string"
+    ? "Voice input failed. Try again."
+    : getVoiceInputErrorMessage(error);
+}
+
+function validRetryAfterMs(value: number | undefined): number | undefined {
+  return value !== undefined &&
+    Number.isFinite(value) &&
+    value > 0 &&
+    value <= MAX_DEMO_RETRY_AFTER_MS
+    ? value
+    : undefined;
+}
+
 function withRetryDelay(message: string, retryAfterMs?: number): string {
   if (!retryAfterMs) return message;
   const seconds = Math.ceil(retryAfterMs / 1000);
+  if (
+    message === "The demo is busy. Please try again in a minute." &&
+    seconds <= 60
+  )
+    return message;
   const delay =
     seconds < 60
       ? `${seconds} ${seconds === 1 ? "second" : "seconds"}`

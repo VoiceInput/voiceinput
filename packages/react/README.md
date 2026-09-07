@@ -120,7 +120,9 @@ after switching tabs. VoiceInput still stops on page exit or browser freeze. The
 `finalizationTimeoutMs` deadline includes the final audio flush; a transcript
 transform runs afterward with its separate `transformTimeoutMs` deadline. On
 expiry, visible interim text is preserved and `onStop` receives
-`finalization-timeout`.
+`finalization-timeout`. Errors while stopping also preserve visible text and
+return to `idle`; `onError` receives the failure and `onStop` keeps the original
+stop reason.
 
 ### `UseVoiceInputResult`
 

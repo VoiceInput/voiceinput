@@ -1,27 +1,64 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { liveDemo } from "../src/lib/live-demo";
+import { VoiceInputError } from "@voiceinput/provider";
+import { getDemoErrorMessage, liveDemo } from "../src/lib/live-demo";
 
 afterEach(() => vi.unstubAllGlobals());
 
-test("session errors preserve the server reason and retry delay", async () => {
+test("session errors preserve an allowlisted daily quota reason and retry delay", async () => {
+  const message =
+    "Today's demo limit has been reached. Please try again tomorrow.";
   vi.stubGlobal(
     "fetch",
     vi
       .fn<typeof fetch>()
       .mockResolvedValue(
         Response.json(
-          { error: "The demo is busy." },
+          { error: message },
+          { status: 429, headers: { "Retry-After": "3600" } },
+        ),
+      ),
+  );
+  const error = await liveDemo(() => {})
+    .doOpen({ abortSignal: new AbortController().signal })
+    .catch((cause: unknown) => cause);
+  expect(error).toMatchObject({
+    code: "rate-limited",
+    retryAfterMs: 3_600_000,
+    message,
+  });
+  if (!VoiceInputError.isInstance(error))
+    throw new TypeError("Expected a VoiceInputError.");
+  expect(getDemoErrorMessage(error)).toBe(
+    `${message} You can retry in 60 minutes.`,
+  );
+});
+
+test("unknown HTTP error text is replaced before it reaches the demo error", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        Response.json(
+          { error: "raw quota database detail: secret-123" },
           { status: 429, headers: { "Retry-After": "60" } },
         ),
       ),
   );
-  await expect(
-    liveDemo(() => {}).doOpen({ abortSignal: new AbortController().signal }),
-  ).rejects.toMatchObject({
+  const error = await liveDemo(() => {})
+    .doOpen({ abortSignal: new AbortController().signal })
+    .catch((cause: unknown) => cause);
+  expect(error).toMatchObject({
     code: "rate-limited",
     retryAfterMs: 60_000,
-    message: "The demo is busy. You can retry in 1 minute.",
+    message: "The demo limit has been reached.",
   });
+  if (!VoiceInputError.isInstance(error))
+    throw new TypeError("Expected a VoiceInputError.");
+  expect(getDemoErrorMessage(error)).toBe(
+    "The demo limit has been reached. You can retry in 1 minute.",
+  );
+  expect(getDemoErrorMessage(error)).not.toContain("secret-123");
 });
 
 test("non-JSON gateway failures retain a useful fallback", async () => {
@@ -63,7 +100,7 @@ test("WebSocket busy messages retain their error code and release the socket", a
             data: JSON.stringify({
               type: "error",
               code: "rate-limited",
-              message: "The demo is busy.",
+              message: "The demo is busy. Please try again in a minute.",
               retryAfterMs: 60_000,
             }),
           }),
@@ -72,9 +109,19 @@ test("WebSocket busy messages retain their error code and release the socket", a
     }
   }
   vi.stubGlobal("WebSocket", Socket);
-  await expect(
-    liveDemo(() => {}).doOpen({ abortSignal: new AbortController().signal }),
-  ).rejects.toMatchObject({ code: "rate-limited", retryAfterMs: 60_000 });
+  const error = await liveDemo(() => {})
+    .doOpen({ abortSignal: new AbortController().signal })
+    .catch((cause: unknown) => cause);
+  expect(error).toMatchObject({
+    code: "rate-limited",
+    retryAfterMs: 60_000,
+    message: "The demo is busy. Please try again in a minute.",
+  });
+  if (!VoiceInputError.isInstance(error))
+    throw new TypeError("Expected a VoiceInputError.");
+  expect(getDemoErrorMessage(error)).toBe(
+    "The demo is busy. Please try again in a minute.",
+  );
   expect(close).toHaveBeenCalledOnce();
 });
 
@@ -144,7 +191,10 @@ test("busy connections do not automatically retry", async () => {
   ]);
   await expect(
     liveDemo(() => {}).doOpen({ abortSignal: new AbortController().signal }),
-  ).rejects.toMatchObject({ code: "rate-limited" });
+  ).rejects.toMatchObject({
+    code: "rate-limited",
+    message: "The demo limit has been reached.",
+  });
   expect(request).toHaveBeenCalledOnce();
 });
 

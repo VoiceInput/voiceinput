@@ -949,6 +949,80 @@ describe("graceful finalization", () => {
     });
   });
 
+  it("preserves interim text and reports provider errors received after finish", async () => {
+    const provider = createFakeVoiceInputProvider({ autoCloseOnFinish: false });
+    const textEngine = createFakeTextEngine();
+    const { session, events, audio } = createSession({ provider, textEngine });
+    await session.start();
+    provider.controller.emit({ type: "interim", text: "keep my phrase" });
+    await waitFor(() =>
+      expect(session.getSnapshot().transcript).toBe("keep my phrase"),
+    );
+    const stop = session.stop();
+    await waitFor(() =>
+      expect(provider.controller.sessions[0]?.finishCallCount).toBe(1),
+    );
+    const error = new VoiceInputError({
+      code: "provider-error",
+      message: "Final transcription failed.",
+      retryable: true,
+    });
+    provider.controller.emit({ type: "error", error });
+    await stop;
+    expect(session.getSnapshot()).toMatchObject({
+      status: "idle",
+      error,
+      transcript: "keep my phrase",
+      finalTranscript: "keep my phrase",
+      interimTranscript: "",
+    });
+    expect(textEngine.complete).toHaveBeenCalledOnce();
+    expect(textEngine.cancel).not.toHaveBeenCalled();
+    expect(events.filter((event) => event.type === "error")).toEqual([
+      { type: "error", error },
+    ]);
+    expect(events).toContainEqual({ type: "stop", reason: "user" });
+    expect(audio.sessions[0]?.closed).toBe(true);
+    await session.start();
+    expect(session.getSnapshot()).toMatchObject({
+      status: "listening",
+      error: null,
+    });
+    await session.cancel();
+  });
+
+  it("preserves interim text when finish rejects", async () => {
+    const fake = createFakeVoiceInputProvider();
+    const error = new VoiceInputError({
+      code: "network-error",
+      message: "Close failed.",
+      retryable: true,
+    });
+    const audio = createFakeAudioSource();
+    const textEngine = createFakeTextEngine();
+    const session = createVoiceInputSession({
+      provider: overrideProviderSession(fake, {
+        finish: () => Promise.reject(error),
+      }),
+      audioSource: audio.audioSource,
+      textEngine,
+    });
+    await session.start();
+    fake.controller.emit({ type: "interim", text: "keep rejected phrase" });
+    await waitFor(() =>
+      expect(session.getSnapshot().transcript).toBe("keep rejected phrase"),
+    );
+    await session.stop();
+    expect(session.getSnapshot()).toMatchObject({
+      status: "idle",
+      error,
+      transcript: "keep rejected phrase",
+      finalTranscript: "keep rejected phrase",
+    });
+    expect(textEngine.complete).toHaveBeenCalledOnce();
+    expect(textEngine.cancel).not.toHaveBeenCalled();
+  });
+
   it("preserves interim text and completes normally when finalization times out", async () => {
     vi.useFakeTimers();
     const provider = createFakeVoiceInputProvider({ autoCloseOnFinish: false });

@@ -148,6 +148,8 @@ interface ActiveRun {
   cleanup: Array<() => void>;
   providerTask?: Promise<void>;
   stopPromise?: Promise<void>;
+  stopping?: boolean;
+  stopError?: VoiceInputError;
   warningTimer?: ReturnType<typeof setTimeout>;
   durationTimer?: ReturnType<typeof setTimeout>;
   connectionTimer?: ReturnType<typeof setTimeout>;
@@ -454,6 +456,7 @@ class VoiceInputSessionController implements VoiceInputSession {
     run: ActiveRun,
     reason: VoiceInputStopReason,
   ): Promise<void> {
+    run.stopping = true;
     this.#clearRunTimers(run);
     this.#transition("stopping");
 
@@ -467,14 +470,9 @@ class VoiceInputSessionController implements VoiceInputSession {
     const providerTask = run.providerTask;
 
     if (providerSession === undefined) {
-      const completed = await this.#completeTextEngine(run);
-      if (!completed) {
-        return;
-      }
-      this.#activeRun = undefined;
+      run.inputClosed = true;
       this.#abortRun(run, reason);
-      this.#transition("idle");
-      this.#emit({ type: "stop", reason });
+      await this.#completeStoppedRun(run, reason, run.stopError);
       return;
     }
 
@@ -500,35 +498,57 @@ class VoiceInputSessionController implements VoiceInputSession {
         return;
       }
 
-      if (!finished) {
-        // Close input before aborting: provider abort callbacks must not undo
-        // the text that graceful completion is about to preserve.
-        run.inputClosed = true;
-        this.#abortRun(run, "finalization-timeout");
-        this.#setSnapshot({
-          finalTranscript: this.#snapshot.transcript,
-          interimTranscript: "",
-        });
-      }
-      const completed = await this.#completeTextEngine(run);
-      if (!completed) {
-        return;
-      }
-
-      this.#activeRun = undefined;
-      this.#clearRunTimers(run);
-      for (const cleanup of run.cleanup.splice(0)) cleanup();
-      run.queue.close(true);
-      this.#transition("idle");
-      this.#emit({
-        type: "stop",
-        reason: finished ? reason : "finalization-timeout",
-      });
+      await this.#completeStoppedRun(
+        run,
+        finished ? reason : "finalization-timeout",
+        run.stopError,
+      );
     } catch (error) {
       if (this.#isActive(run)) {
-        this.#failRun(run, this.#normalizeError(error, "provider-error"));
+        await this.#completeStoppedRun(
+          run,
+          reason,
+          run.stopError ?? this.#normalizeError(error, "provider-error"),
+        );
       }
     }
+  }
+
+  async #completeStoppedRun(
+    run: ActiveRun,
+    reason: VoiceInputStopReason,
+    error?: VoiceInputError,
+  ): Promise<void> {
+    if (!this.#isActive(run)) return;
+    // Stop preserves the text already shown, even when flushing or finalizing
+    // fails. Cancellation and failures while recording keep their own semantics.
+    if (reason === "finalization-timeout" || error !== undefined) {
+      run.inputClosed = true;
+      this.#abortRun(run, error ?? reason);
+      this.#setSnapshot({
+        finalTranscript: this.#snapshot.transcript,
+        interimTranscript: "",
+      });
+    }
+    try {
+      if (!(await this.#completeTextEngine(run))) return;
+    } catch (cause) {
+      if (!this.#isActive(run)) return;
+      error ??= this.#normalizeError(cause, "provider-error");
+      run.inputClosed = true;
+      this.#abortRun(run, error);
+    }
+    if (!this.#isActive(run)) return;
+    this.#activeRun = undefined;
+    this.#clearRunTimers(run);
+    for (const cleanup of run.cleanup.splice(0)) cleanup();
+    run.queue.close(true);
+    if (error !== undefined) {
+      this.#setSnapshot({ error });
+      this.#emit({ type: "error", error });
+    }
+    this.#transition("idle");
+    this.#emit({ type: "stop", reason });
   }
 
   async #consumeProviderStream(
@@ -785,6 +805,14 @@ class VoiceInputSessionController implements VoiceInputSession {
       return;
     }
 
+    if (run.stopping) {
+      if (run.inputClosed) return;
+      // Wake the pending shutdown immediately; only #performStop completes it.
+      run.stopError = error;
+      run.inputClosed = true;
+      this.#abortRun(run, error);
+      return;
+    }
     this.#activeRun = undefined;
     this.#abortRun(run, error);
     this.#textEngine?.cancel();
@@ -905,6 +933,7 @@ class VoiceInputSessionController implements VoiceInputSession {
     }
 
     for (const error of errors) {
+      if (!this.#isActive(run)) return false;
       this.#setSnapshot({ error });
       this.#emit({ type: "error", error });
     }

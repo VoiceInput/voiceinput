@@ -94,7 +94,10 @@ export function getVoiceInputErrorMessage(error: VoiceInputError): string {
   }
 }
 
-/** Reports an exception without silently swallowing it when reportError is absent. */
+/**
+ * Reports an exception without silently swallowing it when reportError is absent.
+ * @internal
+ */
 export function reportUnhandledError(error: unknown): void {
   const reportError = (
     globalThis as typeof globalThis & {
