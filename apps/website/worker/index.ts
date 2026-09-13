@@ -18,6 +18,14 @@ export default {
     ) {
       return jsonError(403, "Open the demo on the VoiceInput website.");
     }
+    const health = url.pathname === "/api/demo/health";
+    if (health && request.method !== "GET")
+      return jsonError(405, "Use GET to check demo readiness.");
+    if (health && !env.OPENAI_API_KEY?.trim())
+      return Response.json(
+        { status: "unavailable", code: "missing-configuration" },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
+      );
     if (!env.OPENAI_API_KEY)
       return jsonError(503, "The voice demo is temporarily unavailable.");
     const ip = request.headers.get("CF-Connecting-IP");
@@ -49,8 +57,16 @@ export class DemoGuard extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const now = Date.now();
     const sql = this.ctx.storage.sql;
+    if (new URL(request.url).pathname === "/api/demo/health") {
+      // Exercise actual storage without issuing tickets or touching demo quotas.
+      sql.exec("SELECT value FROM settings WHERE key = 'salt'").one();
+      return Response.json(
+        { status: "ready" },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    const now = Date.now();
     const salt = sql
       .exec<{ value: string }>("SELECT value FROM settings WHERE key = 'salt'")
       .one().value;

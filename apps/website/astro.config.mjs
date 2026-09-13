@@ -2,6 +2,7 @@ import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";
 import { repositoryDocs } from "./scripts/sync-docs.mjs";
+import { demoProxy } from "./scripts/demo-proxy.mjs";
 import { docs, groups } from "./src/lib/docs.ts";
 export default defineConfig({
   site: "https://voiceinput.dev",
@@ -9,7 +10,8 @@ export default defineConfig({
   devToolbar: { enabled: false },
   vite: {
     server: {
-      proxy: { "/api/demo": { target: "http://127.0.0.1:4322", ws: true } },
+      strictPort: true,
+      proxy: { "/api/demo": demoProxy },
     },
   },
   integrations: [

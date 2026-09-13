@@ -27,10 +27,22 @@ pnpm --filter @voiceinput/website deploy:preview
 pnpm --filter @voiceinput/website run deploy
 ```
 
-The full local preview runs at `http://127.0.0.1:4322/`. Build first, then run
-`preview`; keep it running while using `dev` at port 4321 for hot reload.
-Astro proxies demo requests to the local Worker. `astro preview` alone does not
-run the demo server.
+Set `OPENAI_API_KEY` in the ignored `apps/website/.dev.vars`, then run
+`pnpm --filter @voiceinput/website dev`. This one command builds workspace
+dependencies and website assets, starts the local Worker on port 4322, checks
+configuration and Durable Object storage, then starts Astro with hot reload at
+`http://127.0.0.1:4321/`. The backend has 30 seconds to become ready. The check
+never calls OpenAI or consumes demo quota; a configured key still needs to be
+valid for actual transcription.
+
+Both ports are fixed. Stop any existing `dev` or `preview` process first; the
+launcher will not reuse unknown servers. Ctrl+C stops both services and their
+child processes. If either service exits, the launcher stops the other and
+reports the failure. Correct the error and rerun `dev`.
+
+For a production-build preview, build first and run `preview` on its own at
+`http://127.0.0.1:4322/`. Do not run it alongside `dev`. Running Astro directly
+starts only the frontend and cannot power the demo without the Worker.
 
 The landing page's code tabs read `src/examples/` as raw source. Those files
 are also typechecked by Astro; `app-auth.d.ts` describes the consuming app's
@@ -101,6 +113,13 @@ handles unknown static routes. Ship the npm beta and public repository before
 attaching the production domain so the installation and source links work.
 
 ## Demo reliability checks
+
+`pnpm --filter @voiceinput/website test:dev` exercises the development launcher,
+fixed ports, missing configuration, cleanup, restart, and the real local Worker
+and WebSocket relay. It uses an isolated test-only transcription adapter and
+storage, requires no OpenAI credentials, and must run with ports 4321/4322 free.
+The fixture is selected only by a temporary test Wrangler config; it is never
+included in the production configuration.
 
 Run the real Worker with the local OpenAI secret, then exercise the landing-page
 button and repeat recordings in each browser. Only microphone input is replaced

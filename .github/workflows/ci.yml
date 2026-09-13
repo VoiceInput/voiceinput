@@ -69,6 +69,7 @@ jobs:
       - run: pnpm build
       - run: pnpm validate:packages
       - run: node scripts/scan-secrets.mjs tarballs
+      - run: pnpm --filter @voiceinput/website test:dev
       - run: pnpm test:e2e
       - if: always()
         run: pnpm test:security

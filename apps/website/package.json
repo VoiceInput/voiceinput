@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev --host 127.0.0.1 --port 4321",
+    "dev": "node scripts/dev.mjs",
     "build": "astro build && node scripts/check-links.mjs",
     "preview": "wrangler dev --env=\"\" --ip 127.0.0.1 --port 4322",
     "typecheck": "astro check && tsc --project worker/tsconfig.json",
@@ -13,6 +13,7 @@
     "deploy:preview": "wrangler deploy --env=\"\"",
     "deploy": "wrangler deploy --env production",
     "test:e2e": "playwright test",
+    "test:dev": "node --test tests/dev-startup.test.mjs",
     "test:server": "vitest run --config worker/vitest.config.ts",
     "test": "pnpm run test:server"
   },
