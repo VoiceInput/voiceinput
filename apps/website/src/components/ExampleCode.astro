@@ -5,16 +5,36 @@ interface Props {
   filename: string;
   label: string;
   href: string;
+  description?: string;
   server?: boolean;
 }
-const { code, filename, label, href, server = false } = Astro.props;
+const {
+  code,
+  filename,
+  label,
+  href,
+  description,
+  server = false,
+} = Astro.props;
 ---
 
 <div class="example-code">
   <div class="code-heading">
-    <span>{filename}</span>
+    <span
+      >{filename}{
+        description && (
+          <Fragment>
+            <span class="code-separator" aria-hidden="true">
+              {" · "}
+            </span>
+            {description}
+          </Fragment>
+        )
+      }</span
+    >
     <button
       type="button"
+      class="copy-button"
       data-copy={code.trim()}
       aria-label={`Copy ${label} example`}
       ><span data-copy-label>Copy</span></button
@@ -29,19 +49,15 @@ const { code, filename, label, href, server = false } = Astro.props;
   />
   <p class="code-footnote">
     {
-      server ? (
+      server && (
         <span>
           <code>app-auth</code> contains your authentication and quota
           helpers.{" "}
         </span>
-      ) : (
-        <span>
-          {label === "Hook"
-            ? "Your field, with a voice button. "
-            : "A field and voice button, already connected. "}
-        </span>
       )
     }
-    <a href={href}>{server ? "Complete server setup" : "See the full setup"}</a>
+    <a class="text-link" href={href}
+      >{server ? "Complete server setup" : "See the full setup"}</a
+    >
   </p>
 </div>

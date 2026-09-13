@@ -34,6 +34,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
+    <div class="header-sentinel"></div>
     <header class="header wrap">
       <a href="/" class="wordmark" aria-label="VoiceInput beta home"
         ><svg viewBox="0 0 30 30" width="27" height="27" aria-hidden="true"
@@ -70,15 +71,22 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
             >Read the quickstart</a
           >
           <p class="footer-support">
-            React 18.2+ and React 19. <a href="/docs/support-policy/"
-              >Desktop beta support</a
+            React 18.2+ and React 19. <a
+              class="inline-link"
+              href="/docs/support-policy/">Desktop beta support</a
             >
           </p>
         </div>
         <VoiceMark />
       </div>
       <div class="footer-bottom">
-        <a class="wordmark" href="/">VoiceInput</a>
+        <a class="wordmark" href="/"
+          ><svg viewBox="0 0 30 30" width="32" height="32" aria-hidden="true"
+            ><g stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+              ><path d="M4 12v6M11 7v16M18 3v24M25 10v10"></path></g
+            ></svg
+          >VoiceInput</a
+        >
         <span class="footer-note">Open source. Built to fit.</span>
         <nav aria-label="Footer navigation">
           <a href="/docs/overview/">Documentation</a>
@@ -93,10 +101,26 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <div class="sr-only" id="copy-status" role="status" aria-live="polite">
     </div>
     <script>
+      // Reveals the header hairline once the page leaves the very top, without
+      // a scroll listener: a 1px sentinel at the document origin does the work.
+      const header = document.querySelector<HTMLElement>(".header");
+      const sentinel = document.querySelector(".header-sentinel");
+      if (header && sentinel) {
+        new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) header.removeAttribute("data-scrolled");
+            else header.setAttribute("data-scrolled", "true");
+          }
+        }).observe(sentinel);
+      }
+    </script>
+    <script>
       const copyTimers = new WeakMap<
         HTMLButtonElement,
         ReturnType<typeof setTimeout>
       >();
+      const checkIcon =
+        '<path d="m5 12 4 4L19 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />';
       document.addEventListener("click", async (event) => {
         const button = (event.target as Element).closest<HTMLButtonElement>(
           "[data-copy]",
@@ -106,18 +130,36 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
           button.dataset.copy ||
           button.parentElement?.querySelector("code")?.textContent ||
           "";
-        const label = button.querySelector("[data-copy-label]") ?? button;
+        const icon = button.querySelector<SVGSVGElement>("[data-copy-icon]");
+        const label =
+          button.querySelector<HTMLElement>("[data-copy-label]") ??
+          (icon ? null : button);
         const original =
-          button.dataset.copyOriginal ?? label.textContent ?? "Copy";
+          button.dataset.copyOriginal ?? label?.textContent ?? "Copy";
         button.dataset.copyOriginal = original;
+        if (icon && !icon.dataset.copyIcon) {
+          icon.dataset.copyIcon = icon.innerHTML;
+          icon.dataset.copyIconViewbox = icon.getAttribute("viewBox") ?? "";
+        }
+        const showCheck = () => {
+          if (!icon) return;
+          icon.setAttribute("viewBox", "0 0 24 24");
+          icon.innerHTML = checkIcon;
+        };
+        const restoreIcon = () => {
+          if (!icon) return;
+          icon.setAttribute("viewBox", icon.dataset.copyIconViewbox ?? "");
+          icon.innerHTML = icon.dataset.copyIcon ?? "";
+        };
         clearTimeout(copyTimers.get(button));
         try {
           await navigator.clipboard.writeText(text);
-          label.textContent = "Copied";
+          if (label) label.textContent = "Copied";
+          showCheck();
           const status = document.getElementById("copy-status");
           if (status) status.textContent = "Copied to clipboard.";
         } catch {
-          label.textContent = "Select and copy";
+          if (label) label.textContent = "Select and copy";
           const status = document.getElementById("copy-status");
           if (status)
             status.textContent =
@@ -126,7 +168,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         copyTimers.set(
           button,
           setTimeout(() => {
-            label.textContent = original;
+            if (label) label.textContent = original;
+            restoreIcon();
             const status = document.getElementById("copy-status");
             if (status) status.textContent = "";
           }, 1800),

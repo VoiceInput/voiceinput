@@ -3,6 +3,23 @@ import AxeBuilder from "@axe-core/playwright";
 import { mockDemo } from "./demo-fixture";
 import { readFileSync } from "node:fs";
 
+// The hero fades in on load. Colour-contrast auditing has to wait for that to
+// finish, or it samples a half-transparent paragraph and reports the blend.
+async function settleEntrance(page: Page) {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => "animationName" in animation)
+        .filter(
+          (animation) =>
+            (animation as CSSAnimation).animationName === "hero-in",
+        )
+        .map((animation) => animation.finished),
+    ),
+  );
+}
+
 async function writingOption(page: Page, name: string) {
   await page
     .getByRole("button", { name: "Writing options", exact: true })
@@ -164,6 +181,7 @@ test("accessible homepage and quickstart with real code", async ({ page }) => {
   await page
     .getByRole("textbox", { name: "Try voice input" })
     .scrollIntoViewIfNeeded();
+  await settleEntrance(page);
   const home = await new AxeBuilder({ page }).analyze();
   expect(home.violations).toEqual([]);
   await page.getByRole("link", { name: "Read the quickstart" }).first().click();
@@ -373,7 +391,7 @@ test("documentation search finds a troubleshooting answer", async ({
   await expect(page).toHaveURL(/troubleshooting/);
 });
 
-test("writing examples preserve separate drafts and expose secondary actions by keyboard", async ({
+test("text display modes preserve separate drafts and expose secondary actions by keyboard", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -390,15 +408,14 @@ test("writing examples preserve separate drafts and expose secondary actions by 
   await page.goto("/");
   const field = page.getByRole("textbox", { name: "Try voice input" });
   await field.fill("The designs are ready to review.");
-  await page.getByRole("tab", { name: "Note", exact: true }).click();
-  await expect(field).toHaveValue(
-    "Website review\n\nKeep the first release focused.\nNext steps: ",
-  );
+  const finalTab = page.getByRole("tab", { name: "Final text", exact: true });
+  await finalTab.click();
+  await expect(field).toHaveValue("");
   await field.fill("Review the new composer on Friday.");
-  await page.getByRole("tab", { name: "Note", exact: true }).focus();
+  await finalTab.focus();
   await page.keyboard.press("ArrowLeft");
   await expect(
-    page.getByRole("tab", { name: "Message", exact: true }),
+    page.getByRole("tab", { name: "Live text", exact: true }),
   ).toBeFocused();
   await expect(field).toHaveValue("The designs are ready to review.");
   const options = page.getByRole("button", {
@@ -424,13 +441,11 @@ test("writing examples preserve separate drafts and expose secondary actions by 
   await page.keyboard.press("Escape");
   await expect(options).toBeFocused();
   await expect(options).toHaveAttribute("aria-expanded", "false");
-  await page.getByRole("tab", { name: "Note", exact: true }).click();
+  await finalTab.click();
   await expect(field).toHaveValue("Review the new composer on Friday.");
   await writingOption(page, "Start over");
-  await expect(field).toHaveValue(
-    "Website review\n\nKeep the first release focused.\nNext steps: ",
-  );
-  await page.getByRole("tab", { name: "Message", exact: true }).click();
+  await expect(field).toHaveValue("");
+  await page.getByRole("tab", { name: "Live text", exact: true }).click();
   await expect(field).toHaveValue("The designs are ready to review.");
   expect(errors).toEqual([]);
 });
@@ -454,44 +469,42 @@ test("demo stays read-only until hydration and preserves cleared drafts", async 
   try {
     await page.goto("/", { waitUntil: "commit" });
     const field = page.getByRole("textbox", { name: "Try voice input" });
-    const noteTab = page.getByRole("tab", { name: "Note", exact: true });
+    const finalTab = page.getByRole("tab", { name: "Final text", exact: true });
     await expect(field).toHaveAttribute("readonly", "");
-    await expect(noteTab).toBeDisabled();
+    await expect(finalTab).toBeDisabled();
 
     releaseHydration();
     await expect(field).toBeEditable();
-    await expect(noteTab).toBeEnabled();
+    await expect(finalTab).toBeEnabled();
 
     await field.fill("A message written after hydration.");
-    await noteTab.click();
-    await expect(field).toHaveValue(
-      "Website review\n\nKeep the first release focused.\nNext steps: ",
-    );
+    await finalTab.click();
+    await expect(field).toHaveValue("");
     await field.fill("");
-    await page.getByRole("tab", { name: "Message", exact: true }).click();
+    await page.getByRole("tab", { name: "Live text", exact: true }).click();
     await expect(field).toHaveValue("A message written after hydration.");
-    await noteTab.click();
+    await finalTab.click();
     await expect(field).toHaveValue("");
   } finally {
     releaseHydration();
   }
 });
 
-test("note recording locks scenario switching and preserves native keyboard undo", async ({
+test("live text recording locks mode switching and preserves native keyboard undo", async ({
   page,
 }, testInfo) => {
   await mockDemo(page);
   await page.goto("/");
-  await page.getByRole("tab", { name: "Note", exact: true }).click();
+  await page.getByRole("tab", { name: "Live text", exact: true }).click();
   const field = page.getByRole("textbox", { name: "Try voice input" });
   await page.getByRole("button", { name: "Start recording" }).click();
   await expect(
-    page.getByRole("tab", { name: "Message", exact: true }),
+    page.getByRole("tab", { name: "Final text", exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByRole("button", { name: "Writing options", exact: true }),
   ).toBeDisabled();
-  await expect(field).toHaveValue(/Next steps: The meeting/);
+  await expect(field).toHaveValue(/The meeting/);
   if (testInfo.project.name === "chromium") {
     await page
       .locator(".hero-demo")
@@ -503,16 +516,37 @@ test("note recording locks scenario switching and preserves native keyboard undo
   await expect(field).toHaveValue(/Please bring your notes\.$/);
   await field.focus();
   await page.keyboard.press("ControlOrMeta+z");
-  await expect(field).toHaveValue(
-    "Website review\n\nKeep the first release focused.\nNext steps: The meeting starts at ten.",
-  );
+  await expect(field).toHaveValue("The meeting starts at ten.");
   await expect(
-    page.getByRole("tab", { name: "Message", exact: true }),
+    page.getByRole("tab", { name: "Final text", exact: true }),
   ).toBeEnabled();
   await expect(page.locator("html")).toHaveAttribute(
     "data-microphone-stopped",
     "true",
   );
+});
+
+test("final text waits for a finalized phrase while recording", async ({
+  page,
+}) => {
+  const stats = await mockDemo(page);
+  await page.goto("/");
+  const finalTab = page.getByRole("tab", { name: "Final text", exact: true });
+  await finalTab.click();
+  const field = page.getByRole("textbox", { name: "Try voice input" });
+  await page.getByRole("button", { name: "Start recording" }).click();
+  await expect(page.locator(".demo-status:visible")).toContainText(
+    "Text appears as each phrase is finalized.",
+  );
+  await expect.poll(() => stats.interimEvents).toBeGreaterThan(0);
+  await expect(field).toHaveValue("");
+  await expect.poll(() => stats.finalEvents).toBeGreaterThan(0);
+  await expect(field).toHaveValue("The meeting starts at ten.");
+  await expect(
+    page.getByRole("button", { name: "Stop recording" }),
+  ).toBeVisible();
+  await expect(finalTab).toBeDisabled();
+  await page.getByRole("button", { name: "Stop recording" }).click();
 });
 
 test("implementation tabs copy their checked source and keep a stable height", async ({
@@ -531,13 +565,9 @@ test("implementation tabs copy their checked source and keep a stable height", a
   const panel = page.locator(".code-panel");
   const height = (await panel.boundingBox())!.height;
   for (const [label, file] of [
+    ["Component", "textarea.tsx"],
     ["Hook", "hook.tsx"],
-    ["VoiceTextarea", "textarea.tsx"],
-    ["Next.js", "nextjs.ts"],
-    ["Hono", "hono.ts"],
   ]) {
-    if (label === "Next.js")
-      await page.getByRole("tab", { name: "Server", exact: true }).click();
     await page.getByRole("tab", { name: label, exact: true }).click();
     await expect(panel.locator("pre:visible")).toHaveCount(1);
     await page
@@ -554,14 +584,38 @@ test("implementation tabs copy their checked source and keep a stable height", a
       2,
     );
   }
-  await page.getByRole("tab", { name: "Server", exact: true }).focus();
+  const serverSetup = page.getByText("Server setup (required for both)", {
+    exact: true,
+  });
+  await expect(serverSetup).toBeVisible();
+  await serverSetup.focus();
+  await page.keyboard.press("Enter");
+  await expect(serverSetup.locator("..")).toHaveAttribute("open", "");
+  for (const [label, file] of [
+    ["Next.js", "nextjs.ts"],
+    ["Hono", "hono.ts"],
+  ]) {
+    await page.getByRole("tab", { name: label, exact: true }).click();
+    await expect(page.locator(".server-examples pre:visible")).toHaveCount(1);
+    await page
+      .getByRole("button", { name: "Copy " + label + " example", exact: true })
+      .click();
+    await expect(page.locator("html")).toHaveAttribute(
+      "data-copied",
+      readFileSync(
+        new URL("../src/examples/" + file, import.meta.url),
+        "utf8",
+      ).trim(),
+    );
+  }
+  await page.getByRole("tab", { name: "Component", exact: true }).focus();
   await page.keyboard.press("Home");
   await expect(
-    page.getByRole("tab", { name: "Hook", exact: true }),
+    page.getByRole("tab", { name: "Component", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("ArrowRight");
   await expect(
-    page.getByRole("tab", { name: "VoiceTextarea", exact: true }),
+    page.getByRole("tab", { name: "Hook", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
 });
 
@@ -569,6 +623,7 @@ test("focused composer and expanded examples are accessible", async ({
   page,
 }, testInfo) => {
   await page.goto("/");
+  await settleEntrance(page);
   await expect(
     page.getByRole("button", { name: "Start recording" }),
   ).toBeEnabled();
@@ -589,7 +644,19 @@ test("focused composer and expanded examples are accessible", async ({
     .click();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.keyboard.press("Escape");
-  await page.getByRole("tab", { name: "Server", exact: true }).click();
+  const serverSetup = page.getByText("Server setup (required for both)", {
+    exact: true,
+  });
+  await serverSetup.focus();
+  await page.keyboard.press("Enter");
+  await expect(serverSetup.locator("..")).toHaveAttribute("open", "");
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  if (testInfo.project.name === "chromium")
+    await page
+      .locator(".examples")
+      .screenshot({ path: "../../output/playwright/website-expanded.png" });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
@@ -603,7 +670,7 @@ test("recording feedback preserves layout and locks drafts through finalization"
   });
   await page.goto("/");
   const field = page.getByRole("textbox", { name: "Try voice input" });
-  const note = page.getByRole("tab", { name: "Note", exact: true });
+  const mode = page.getByRole("tab", { name: "Live text", exact: true });
   const status = page.locator(".demo-status:visible");
   const composer = page.locator(".demo-composer");
   await field.fill("Review the old design.");
@@ -613,14 +680,16 @@ test("recording feedback preserves layout and locks drafts through finalization"
   const initialHeight = (await composer.boundingBox())!.height;
   await page.getByRole("button", { name: "Start recording" }).click();
   await expect(status).toContainText("Allow microphone access");
-  await expect(note).toBeDisabled();
+  await expect(mode).toBeDisabled();
   await expect(status).toContainText("Connecting to transcription");
-  await expect(note).toBeDisabled();
-  await expect(status).toContainText("Speak naturally");
+  await expect(mode).toBeDisabled();
+  await expect(status).toContainText(
+    "Speak naturally. Text appears as you speak.",
+  );
   await expect(field).toHaveValue(/Review the The meeting.* design\./);
   await page.getByRole("button", { name: "Stop recording" }).click();
   await expect(status).toContainText("Finishing your transcript");
-  await expect(note).toBeDisabled();
+  await expect(mode).toBeDisabled();
   await expect(page.locator("html")).toHaveAttribute(
     "data-microphone-stopped",
     "true",
@@ -631,7 +700,7 @@ test("recording feedback preserves layout and locks drafts through finalization"
   await expect(
     page.getByRole("button", { name: "Start recording" }),
   ).toBeVisible();
-  await expect(note).toBeEnabled();
+  await expect(mode).toBeEnabled();
   await expect(field).not.toHaveValue(/old/);
 });
 
@@ -663,7 +732,7 @@ test("delayed finalization keeps the microphone off and preserves the complete l
     page.getByRole("button", { name: "Start recording" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("tab", { name: "Note", exact: true }),
+    page.getByRole("tab", { name: "Final text", exact: true }),
   ).toBeEnabled();
   await expect(page.locator(".demo-status:visible")).not.toHaveAttribute(
     "role",

@@ -10,7 +10,7 @@ export async function mockDemo(
     finishText = "",
   } = {},
 ) {
-  const stats = { audioBytes: 0 };
+  const stats = { audioBytes: 0, interimEvents: 0, finalEvents: 0 };
   await page.addInitScript(
     ({ permissionDelayMs }) => {
       const cleanup = new Map<string, () => void>();
@@ -107,6 +107,8 @@ export async function mockDemo(
                     segmentId: `phrase-${phrase}`,
                   };
                   const type = index === words.length - 1 ? "final" : "interim";
+                  if (type === "final") stats.finalEvents++;
+                  else stats.interimEvents++;
                   socket.send(JSON.stringify({ type, ...latest }));
                   if (type === "final") latest = undefined;
                 },

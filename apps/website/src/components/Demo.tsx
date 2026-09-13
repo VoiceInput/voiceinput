@@ -15,20 +15,26 @@ import {
 
 const scenarios = [
   {
-    id: "message",
-    label: "Message",
+    id: "live",
+    label: "Live text",
     initial: "",
-    placeholder: "Write a quick update to your team…",
-    hint: "Try saying: “I’ve reviewed the designs. Let’s catch up tomorrow.”",
+    placeholder: "Speak or type…",
+    hint: "Text appears as you speak. Try saying a sentence to see it update.",
+    listening: "Speak naturally. Text appears as you speak.",
+    interimBehavior: "inline",
   },
   {
-    id: "note",
-    label: "Note",
-    initial: "Website review\n\nKeep the first release focused.\nNext steps: ",
-    placeholder: "Capture a thought before it slips away…",
-    hint: "Add your next steps, or click anywhere to fill in a detail.",
+    id: "final",
+    label: "Final text",
+    initial: "",
+    placeholder: "Speak or type…",
+    hint: "Text appears as each phrase is finalized. Try saying a sentence.",
+    listening: "Speak naturally. Text appears as each phrase is finalized.",
+    interimBehavior: "expose",
   },
 ] as const;
+
+type Health = "ready" | "error" | "unsupported";
 
 const subscribeToHydration = () => () => {};
 const getHydratedSnapshot = () => true;
@@ -42,14 +48,22 @@ export default function Demo() {
   );
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [health, setHealth] = useState<Health>("unsupported");
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
+  const dotState = !hydrated
+    ? ""
+    : health === "error"
+      ? " failed"
+      : health === "ready"
+        ? " ready"
+        : "";
   return (
     <div className="demo-composer">
       <div className="composer-heading">
         <div
           className="demo-tabs"
           role="tablist"
-          aria-label="Try a writing example"
+          aria-label="Text display mode"
         >
           {scenarios.map((scenario, index) => (
             <button
@@ -87,7 +101,7 @@ export default function Demo() {
           ))}
         </div>
         <span className="live-label">
-          <span className="composer-dot" />
+          <span className={`composer-dot${dotState}`} />
           Live demo
         </span>
       </div>
@@ -98,6 +112,7 @@ export default function Demo() {
           active={active === index}
           hydrated={hydrated}
           onBusyChange={setBusy}
+          onHealthChange={setHealth}
         />
       ))}
     </div>
@@ -109,11 +124,13 @@ function Composer({
   active,
   hydrated,
   onBusyChange,
+  onHealthChange,
 }: {
   scenario: (typeof scenarios)[number];
   active: boolean;
   hydrated: boolean;
   onBusyChange: (busy: boolean) => void;
+  onHealthChange: (health: Health) => void;
 }) {
   const [value, setValue] = useState<string>(scenario.initial);
   const [seconds, setSeconds] = useState(DEMO_SECONDS);
@@ -138,6 +155,7 @@ function Composer({
       value,
       onValueChange: setValue,
       disabled: !hydrated,
+      interimBehavior: scenario.interimBehavior,
       finalizationTimeoutMs: DEMO_CLIENT_FINALIZATION_TIMEOUT_MS,
     });
   const running = status !== "idle" && status !== "error";
@@ -145,6 +163,10 @@ function Composer({
   useEffect(() => {
     if (active) onBusyChange(running);
   }, [active, running, onBusyChange]);
+  useEffect(() => {
+    if (!active) return;
+    onHealthChange(error ? "error" : isSupported ? "ready" : "unsupported");
+  }, [active, error, isSupported, onHealthChange]);
   useEffect(() => {
     const onStop = () => {
       void stop();
@@ -224,7 +246,7 @@ function Composer({
           : status === "connecting"
             ? "Connecting to transcription…"
             : status === "listening"
-              ? "Speak naturally. You can keep typing as you go."
+              ? scenario.listening
               : finishing
                 ? "Finishing your transcript…"
                 : notice || scenario.hint;
@@ -375,12 +397,12 @@ function Composer({
                 "Connecting…"
               ) : !hydrated ? (
                 "Initializing…"
-              ) : (
-                "Type or speak"
-              )}
+              ) : null}
             </span>
             <button
-              className={`speak-button ${running ? "speaking" : ""}`}
+              className={`speak-button ${running ? "speaking" : ""}${
+                status === "listening" ? " listening" : ""
+              }`}
               {...getTriggerProps({
                 onClick: () => {
                   if (!running) {
@@ -419,7 +441,7 @@ function Icon({
   name,
 }: {
   name:
-    "message" | "note" | "more" | "copy" | "undo" | "restart" | "mic" | "stop";
+    "live" | "final" | "more" | "copy" | "undo" | "restart" | "mic" | "stop";
 }) {
   return (
     <svg
@@ -433,12 +455,11 @@ function Icon({
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {name === "message" ? (
-        <path d="M20 11.5a8 8 0 0 1-8 8H4l1.5-4A8 8 0 1 1 20 11.5Z" />
-      ) : name === "note" ? (
+      {name === "live" ? (
+        <path d="M3 12h3l2-6 4 12 2-6h3l1 3h3" />
+      ) : name === "final" ? (
         <>
-          <path d="M14 3H5v18h14V8Z" />
-          <path d="M14 3v5h5M8 12h8M8 16h6" />
+          <path d="m5 12 4 4L19 6" />
         </>
       ) : name === "more" ? (
         <>

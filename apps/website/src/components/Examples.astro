@@ -12,47 +12,59 @@ const nextjs = sources["../examples/nextjs.ts"]!;
 const hono = sources["../examples/hono.ts"]!;
 ---
 
-<div class="code-panel">
-  <Tabs>
-    <TabItem label="Hook"
-      ><ExampleCode
-        code={hook}
-        filename="composer.tsx"
-        label="Hook"
-        href="/docs/quickstart/"
-      /></TabItem
-    >
-    <TabItem label="VoiceTextarea"
-      ><ExampleCode
-        code={textarea}
-        filename="composer.tsx"
-        label="VoiceTextarea"
-        href="/docs/react/#voiceinput-and-voicetextarea"
-      /></TabItem
-    >
-    <TabItem label="Server">
-      <div class="server-examples">
-        <Tabs>
-          <TabItem label="Next.js"
-            ><ExampleCode
-              code={nextjs}
-              filename="app/api/voice-token/route.ts"
-              label="Next.js"
-              href="/docs/quickstart/#3-create-the-token-route"
-              server
-            /></TabItem
-          >
-          <TabItem label="Hono"
-            ><ExampleCode
-              code={hono}
-              filename="server.ts"
-              label="Hono"
-              href="/docs/vite-hono/"
-              server
-            /></TabItem
-          >
-        </Tabs>
-      </div>
-    </TabItem>
-  </Tabs>
-</div>
+<section class="examples" aria-labelledby="examples-title">
+  <h2 id="examples-title">Choose your React integration</h2>
+  <div class="code-panel">
+    <div class="client-examples">
+      <Tabs>
+        <TabItem label="Component"
+          ><div class="example-choice">
+            <ExampleCode
+              code={textarea}
+              filename="composer.tsx"
+              label="Component"
+              description="Ready-made voice field"
+              href="/docs/react/#voiceinput-and-voicetextarea"
+            />
+          </div></TabItem
+        >
+        <TabItem label="Hook"
+          ><div class="example-choice">
+            <ExampleCode
+              code={hook}
+              filename="composer.tsx"
+              label="Hook"
+              description="Add voice to your own field"
+              href="/docs/quickstart/"
+            />
+          </div></TabItem
+        >
+      </Tabs>
+    </div>
+  </div>
+  <details class="server-setup">
+    <summary>Server setup (required for both)</summary>
+    <div class="server-examples">
+      <Tabs>
+        <TabItem label="Next.js"
+          ><ExampleCode
+            code={nextjs}
+            filename="app/api/voice-token/route.ts"
+            label="Next.js"
+            href="/docs/quickstart/#3-create-the-token-route"
+            server
+          /></TabItem
+        >
+        <TabItem label="Hono"
+          ><ExampleCode
+            code={hono}
+            filename="server.ts"
+            label="Hono"
+            href="/docs/vite-hono/"
+            server
+          /></TabItem
+        >
+      </Tabs>
+    </div>
+  </details>
+</section>
