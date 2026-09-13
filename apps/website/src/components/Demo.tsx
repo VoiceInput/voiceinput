@@ -13,28 +13,14 @@ import {
   DEMO_CLIENT_FINALIZATION_TIMEOUT_MS,
 } from "../lib/demo-config";
 
-const scenarios = [
-  {
-    id: "live",
-    label: "Live text",
-    initial: "",
-    placeholder: "Speak or type…",
-    hint: "Text appears as you speak. Try saying a sentence to see it update.",
-    listening: "Speak naturally. Text appears as you speak.",
-    interimBehavior: "inline",
-  },
-  {
-    id: "final",
-    label: "Final text",
-    initial: "",
-    placeholder: "Speak or type…",
-    hint: "Text appears as each phrase is finalized. Try saying a sentence.",
-    listening: "Speak naturally. Text appears as each phrase is finalized.",
-    interimBehavior: "expose",
-  },
-] as const;
-
+type InterimBehavior = "inline" | "expose";
 type Health = "ready" | "error" | "unsupported";
+
+const listeningText: Record<InterimBehavior, string> = {
+  inline: "Speak naturally. Text appears as you speak.",
+  expose: "Speak naturally. Text appears as each phrase is finalized.",
+};
+const idleText = "20 seconds. Audio is relayed to OpenAI and not stored.";
 
 const subscribeToHydration = () => () => {};
 const getHydratedSnapshot = () => true;
@@ -46,10 +32,9 @@ export default function Demo() {
     getHydratedSnapshot,
     getServerHydratedSnapshot,
   );
-  const [active, setActive] = useState(0);
-  const [busy, setBusy] = useState(false);
+  const [interimBehavior, setInterimBehavior] =
+    useState<InterimBehavior>("inline");
   const [health, setHealth] = useState<Health>("unsupported");
-  const tabs = useRef<Array<HTMLButtonElement | null>>([]);
   const dotState = !hydrated
     ? ""
     : health === "error"
@@ -59,80 +44,31 @@ export default function Demo() {
         : "";
   return (
     <div className="demo-composer">
-      <div className="composer-heading">
-        <div
-          className="demo-tabs"
-          role="tablist"
-          aria-label="Text display mode"
-        >
-          {scenarios.map((scenario, index) => (
-            <button
-              key={scenario.id}
-              ref={(node) => {
-                tabs.current[index] = node;
-              }}
-              id={`demo-tab-${scenario.id}`}
-              type="button"
-              role="tab"
-              aria-selected={active === index}
-              aria-controls={`demo-panel-${scenario.id}`}
-              tabIndex={active === index ? 0 : -1}
-              disabled={busy || !hydrated}
-              onClick={() => setActive(index)}
-              onKeyDown={(event) => {
-                if (busy || !hydrated) return;
-                const next =
-                  event.key === "Home"
-                    ? 0
-                    : event.key === "End"
-                      ? 1
-                      : event.key === "ArrowRight" || event.key === "ArrowLeft"
-                        ? 1 - index
-                        : null;
-                if (next === null) return;
-                event.preventDefault();
-                setActive(next);
-                tabs.current[next]?.focus();
-              }}
-            >
-              <Icon name={scenario.id} />
-              {scenario.label}
-            </button>
-          ))}
-        </div>
-        <span className="live-label">
-          <span className={`composer-dot${dotState}`} />
-          Live demo
-        </span>
-      </div>
-      {scenarios.map((scenario, index) => (
-        <Composer
-          key={scenario.id}
-          scenario={scenario}
-          active={active === index}
-          hydrated={hydrated}
-          onBusyChange={setBusy}
-          onHealthChange={setHealth}
-        />
-      ))}
+      <Composer
+        hydrated={hydrated}
+        interimBehavior={interimBehavior}
+        onInterimBehaviorChange={setInterimBehavior}
+        dotState={dotState}
+        onHealthChange={setHealth}
+      />
     </div>
   );
 }
 
 function Composer({
-  scenario,
-  active,
   hydrated,
-  onBusyChange,
+  interimBehavior,
+  onInterimBehaviorChange,
+  dotState,
   onHealthChange,
 }: {
-  scenario: (typeof scenarios)[number];
-  active: boolean;
   hydrated: boolean;
-  onBusyChange: (busy: boolean) => void;
+  interimBehavior: InterimBehavior;
+  onInterimBehaviorChange: (behavior: InterimBehavior) => void;
+  dotState: string;
   onHealthChange: (health: Health) => void;
 }) {
-  const [value, setValue] = useState<string>(scenario.initial);
+  const [value, setValue] = useState("");
   const [seconds, setSeconds] = useState(DEMO_SECONDS);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState("");
@@ -155,18 +91,14 @@ function Composer({
       value,
       onValueChange: setValue,
       disabled: !hydrated,
-      interimBehavior: scenario.interimBehavior,
+      interimBehavior,
       finalizationTimeoutMs: DEMO_CLIENT_FINALIZATION_TIMEOUT_MS,
     });
   const running = status !== "idle" && status !== "error";
   const finishing = status === "processing" || status === "stopping";
   useEffect(() => {
-    if (active) onBusyChange(running);
-  }, [active, running, onBusyChange]);
-  useEffect(() => {
-    if (!active) return;
     onHealthChange(error ? "error" : isSupported ? "ready" : "unsupported");
-  }, [active, error, isSupported, onHealthChange]);
+  }, [error, isSupported, onHealthChange]);
   useEffect(() => {
     const onStop = () => {
       void stop();
@@ -225,7 +157,7 @@ function Composer({
     setMenuOpen(true);
     requestAnimationFrame(() => {
       const items = menu.current?.querySelectorAll<HTMLButtonElement>(
-        '[role="menuitem"]:not(:disabled)',
+        '[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)',
       );
       if (items?.length) items[last ? items.length - 1 : 0]?.focus();
     });
@@ -246,30 +178,25 @@ function Composer({
           : status === "connecting"
             ? "Connecting to transcription…"
             : status === "listening"
-              ? scenario.listening
+              ? listeningText[interimBehavior]
               : finishing
                 ? "Finishing your transcript…"
-                : notice || scenario.hint;
+                : notice || idleText;
   return (
-    <div
-      id={`demo-panel-${scenario.id}`}
-      role="tabpanel"
-      aria-labelledby={`demo-tab-${scenario.id}`}
-      hidden={!active}
-    >
+    <>
       <div className="composer-editor" data-recording={status === "listening"}>
-        <label className="sr-only" htmlFor={`voice-demo-${scenario.id}`}>
+        <label className="sr-only" htmlFor="voice-demo">
           Try voice input
         </label>
         <textarea
-          id={`voice-demo-${scenario.id}`}
+          id="voice-demo"
           ref={attachField}
           value={value}
           onChange={(event) => setValue(event.currentTarget.value)}
           readOnly={!hydrated}
-          placeholder={scenario.placeholder}
+          placeholder="Speak or type…"
           spellCheck={false}
-          aria-describedby={`demo-status-${scenario.id}`}
+          aria-describedby="demo-status"
         />
         <div className="composer-bottom">
           <div className="composer-menu" ref={menu}>
@@ -280,7 +207,7 @@ function Composer({
               aria-label="Writing options"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              aria-controls={`writing-options-${scenario.id}`}
+              aria-controls="writing-options"
               disabled={running || !hydrated}
               onClick={() => (menuOpen ? closeMenu() : openMenu())}
               onKeyDown={(event) => {
@@ -293,7 +220,7 @@ function Composer({
               <Icon name="more" />
             </button>
             <div
-              id={`writing-options-${scenario.id}`}
+              id="writing-options"
               className="writing-options"
               role="menu"
               tabIndex={-1}
@@ -306,7 +233,7 @@ function Composer({
                 }
                 const items = Array.from(
                   event.currentTarget.querySelectorAll<HTMLButtonElement>(
-                    '[role="menuitem"]:not(:disabled)',
+                    '[role="menuitem"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)',
                   ),
                 );
                 const index = items.indexOf(
@@ -328,6 +255,21 @@ function Composer({
                 }
               }}
             >
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                tabIndex={-1}
+                aria-checked={interimBehavior === "expose"}
+                onClick={() => {
+                  onInterimBehaviorChange(
+                    interimBehavior === "expose" ? "inline" : "expose",
+                  );
+                  closeMenu();
+                }}
+              >
+                <Icon name="final" />
+                Show final text only
+              </button>
               <button
                 type="button"
                 role="menuitem"
@@ -365,15 +307,12 @@ function Composer({
                 role="menuitem"
                 tabIndex={-1}
                 onClick={() => {
-                  setValue(scenario.initial);
+                  setValue("");
                   closeMenu();
                   setNotice("");
                   requestAnimationFrame(() => {
                     field.current?.focus();
-                    field.current?.setSelectionRange(
-                      scenario.initial.length,
-                      scenario.initial.length,
-                    );
+                    field.current?.setSelectionRange(0, 0);
                   });
                 }}
               >
@@ -426,22 +365,24 @@ function Composer({
         </div>
       </div>
       <output
-        id={`demo-status-${scenario.id}`}
+        id="demo-status"
         className="demo-status"
         role={error ? "alert" : "status"}
         aria-live={error ? "assertive" : "polite"}
       >
-        {statusText}
+        <span className={`composer-dot${dotState}`} aria-hidden="true" />
+        <span className="demo-live-label">Live demo</span>
+        <span aria-hidden="true">·</span>
+        <span>{statusText}</span>
       </output>
-    </div>
+    </>
   );
 }
 
 function Icon({
   name,
 }: {
-  name:
-    "live" | "final" | "more" | "copy" | "undo" | "restart" | "mic" | "stop";
+  name: "final" | "more" | "copy" | "undo" | "restart" | "mic" | "stop";
 }) {
   return (
     <svg
@@ -455,12 +396,8 @@ function Icon({
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {name === "live" ? (
-        <path d="M3 12h3l2-6 4 12 2-6h3l1 3h3" />
-      ) : name === "final" ? (
-        <>
-          <path d="m5 12 4 4L19 6" />
-        </>
+      {name === "final" ? (
+        <path d="m5 12 4 4L19 6" />
       ) : name === "more" ? (
         <>
           <circle cx="5" cy="12" r="1" />

@@ -12,8 +12,7 @@ const nextjs = sources["../examples/nextjs.ts"]!;
 const hono = sources["../examples/hono.ts"]!;
 ---
 
-<section class="examples" aria-labelledby="examples-title">
-  <h2 id="examples-title">Choose your React integration</h2>
+<section class="examples" aria-label="React integration examples">
   <div class="code-panel">
     <div class="client-examples">
       <Tabs>
@@ -23,7 +22,6 @@ const hono = sources["../examples/hono.ts"]!;
               code={textarea}
               filename="composer.tsx"
               label="Component"
-              description="Ready-made voice field"
               href="/docs/react/#voiceinput-and-voicetextarea"
             />
           </div></TabItem
@@ -34,7 +32,6 @@ const hono = sources["../examples/hono.ts"]!;
               code={hook}
               filename="composer.tsx"
               label="Hook"
-              description="Add voice to your own field"
               href="/docs/quickstart/"
             />
           </div></TabItem
@@ -43,7 +40,7 @@ const hono = sources["../examples/hono.ts"]!;
     </div>
   </div>
   <details class="server-setup">
-    <summary>Server setup (required for both)</summary>
+    <summary>Server route (required)</summary>
     <div class="server-examples">
       <Tabs>
         <TabItem label="Next.js"

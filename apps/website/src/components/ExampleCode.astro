@@ -5,40 +5,30 @@ interface Props {
   filename: string;
   label: string;
   href: string;
-  description?: string;
   server?: boolean;
 }
-const {
-  code,
-  filename,
-  label,
-  href,
-  description,
-  server = false,
-} = Astro.props;
+const { code, filename, label, href, server = false } = Astro.props;
 ---
 
 <div class="example-code">
   <div class="code-heading">
-    <span
-      >{filename}{
-        description && (
-          <Fragment>
-            <span class="code-separator" aria-hidden="true">
-              {" · "}
-            </span>
-            {description}
-          </Fragment>
+    <span>{filename}</span>
+    <div class="code-heading-actions">
+      {
+        !server && (
+          <a class="text-link code-heading-link" href={href}>
+            See the full setup
+          </a>
         )
-      }</span
-    >
-    <button
-      type="button"
-      class="copy-button"
-      data-copy={code.trim()}
-      aria-label={`Copy ${label} example`}
-      ><span data-copy-label>Copy</span></button
-    >
+      }
+      <button
+        type="button"
+        class="copy-button"
+        data-copy={code.trim()}
+        aria-label={`Copy ${label} example`}
+        ><span data-copy-label>Copy</span></button
+      >
+    </div>
   </div>
   <Code
     code={code.trim()}
@@ -47,17 +37,17 @@ const {
     tabindex="0"
     aria-label={`${label} code`}
   />
-  <p class="code-footnote">
-    {
-      server && (
+  {
+    server && (
+      <p class="code-footnote">
         <span>
           <code>app-auth</code> contains your authentication and quota
           helpers.{" "}
         </span>
-      )
-    }
-    <a class="text-link" href={href}
-      >{server ? "Complete server setup" : "See the full setup"}</a
-    >
-  </p>
+        <a class="text-link" href={href}>
+          Complete server setup
+        </a>
+      </p>
+    )
+  }
 </div>

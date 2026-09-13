@@ -24,7 +24,10 @@ async function writingOption(page: Page, name: string) {
   await page
     .getByRole("button", { name: "Writing options", exact: true })
     .click();
-  await page.getByRole("menuitem", { name, exact: true }).click();
+  await page
+    .getByRole("menuitem", { name, exact: true })
+    .or(page.getByRole("menuitemcheckbox", { name, exact: true }))
+    .click();
 }
 
 test("denied microphone permission leaves the field editable and does not request a session", async ({
@@ -391,7 +394,7 @@ test("documentation search finds a troubleshooting answer", async ({
   await expect(page).toHaveURL(/troubleshooting/);
 });
 
-test("text display modes preserve separate drafts and expose secondary actions by keyboard", async ({
+test("the text display mode toggles from the menu, keeps the draft, and exposes secondary actions by keyboard", async ({
   page,
 }) => {
   await page.addInitScript(() => {
@@ -406,24 +409,36 @@ test("text display modes preserve separate drafts and expose secondary actions b
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
+  const status = page.locator(".demo-status:visible");
+  await expect(status).toContainText("Live demo");
+  await expect(status).toContainText(
+    "20 seconds. Audio is relayed to OpenAI and not stored.",
+  );
   const field = page.getByRole("textbox", { name: "Try voice input" });
   await field.fill("The designs are ready to review.");
-  const finalTab = page.getByRole("tab", { name: "Final text", exact: true });
-  await finalTab.click();
-  await expect(field).toHaveValue("");
-  await field.fill("Review the new composer on Friday.");
-  await finalTab.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect(
-    page.getByRole("tab", { name: "Live text", exact: true }),
-  ).toBeFocused();
-  await expect(field).toHaveValue("The designs are ready to review.");
   const options = page.getByRole("button", {
     name: "Writing options",
     exact: true,
   });
+  const finalOnly = page.getByRole("menuitemcheckbox", {
+    name: "Show final text only",
+    exact: true,
+  });
+  await options.click();
+  await expect(finalOnly).toHaveAttribute("aria-checked", "false");
+  await finalOnly.click();
+  await expect(options).toBeFocused();
+  await expect(field).toHaveValue("The designs are ready to review.");
+  await options.click();
+  await expect(finalOnly).toHaveAttribute("aria-checked", "true");
+  await finalOnly.click();
+  await options.click();
+  await expect(finalOnly).toHaveAttribute("aria-checked", "false");
+  await page.keyboard.press("Escape");
   await options.focus();
   await page.keyboard.press("Enter");
+  await expect(finalOnly).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   await expect(
     page.getByRole("menuitem", { name: "Copy text", exact: true }),
   ).toBeFocused();
@@ -431,7 +446,17 @@ test("text display modes preserve separate drafts and expose secondary actions b
   await expect(
     page.getByRole("menuitem", { name: "Undo last edit", exact: true }),
   ).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(
+    page.getByRole("menuitem", { name: "Start over", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(
+    page.getByRole("menuitem", { name: "Undo last edit", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("Home");
+  await expect(finalOnly).toBeFocused();
+  await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await expect(page.locator("html")).toHaveAttribute(
     "data-copied",
@@ -441,16 +466,12 @@ test("text display modes preserve separate drafts and expose secondary actions b
   await page.keyboard.press("Escape");
   await expect(options).toBeFocused();
   await expect(options).toHaveAttribute("aria-expanded", "false");
-  await finalTab.click();
-  await expect(field).toHaveValue("Review the new composer on Friday.");
   await writingOption(page, "Start over");
   await expect(field).toHaveValue("");
-  await page.getByRole("tab", { name: "Live text", exact: true }).click();
-  await expect(field).toHaveValue("The designs are ready to review.");
   expect(errors).toEqual([]);
 });
 
-test("demo stays read-only until hydration and preserves cleared drafts", async ({
+test("demo stays read-only until hydration and keeps the draft across mode changes", async ({
   page,
 }) => {
   let releaseHydration = () => {};
@@ -469,22 +490,29 @@ test("demo stays read-only until hydration and preserves cleared drafts", async 
   try {
     await page.goto("/", { waitUntil: "commit" });
     const field = page.getByRole("textbox", { name: "Try voice input" });
-    const finalTab = page.getByRole("tab", { name: "Final text", exact: true });
+    const options = page.getByRole("button", {
+      name: "Writing options",
+      exact: true,
+    });
+    const finalOnly = page.getByRole("menuitemcheckbox", {
+      name: "Show final text only",
+      exact: true,
+    });
     await expect(field).toHaveAttribute("readonly", "");
-    await expect(finalTab).toBeDisabled();
+    await expect(options).toBeDisabled();
 
     releaseHydration();
     await expect(field).toBeEditable();
-    await expect(finalTab).toBeEnabled();
+    await expect(options).toBeEnabled();
 
     await field.fill("A message written after hydration.");
-    await finalTab.click();
-    await expect(field).toHaveValue("");
-    await field.fill("");
-    await page.getByRole("tab", { name: "Live text", exact: true }).click();
+    await options.click();
+    await finalOnly.click();
     await expect(field).toHaveValue("A message written after hydration.");
-    await finalTab.click();
-    await expect(field).toHaveValue("");
+    await options.click();
+    await expect(finalOnly).toHaveAttribute("aria-checked", "true");
+    await finalOnly.click();
+    await expect(field).toHaveValue("A message written after hydration.");
   } finally {
     releaseHydration();
   }
@@ -495,15 +523,16 @@ test("live text recording locks mode switching and preserves native keyboard und
 }, testInfo) => {
   await mockDemo(page);
   await page.goto("/");
-  await page.getByRole("tab", { name: "Live text", exact: true }).click();
   const field = page.getByRole("textbox", { name: "Try voice input" });
+  const options = page.getByRole("button", {
+    name: "Writing options",
+    exact: true,
+  });
   await page.getByRole("button", { name: "Start recording" }).click();
-  await expect(
-    page.getByRole("tab", { name: "Final text", exact: true }),
-  ).toBeDisabled();
-  await expect(
-    page.getByRole("button", { name: "Writing options", exact: true }),
-  ).toBeDisabled();
+  await expect(page.locator(".demo-status:visible")).toContainText(
+    "Speak naturally. Text appears as you speak.",
+  );
+  await expect(options).toBeDisabled();
   await expect(field).toHaveValue(/The meeting/);
   if (testInfo.project.name === "chromium") {
     await page
@@ -517,9 +546,7 @@ test("live text recording locks mode switching and preserves native keyboard und
   await field.focus();
   await page.keyboard.press("ControlOrMeta+z");
   await expect(field).toHaveValue("The meeting starts at ten.");
-  await expect(
-    page.getByRole("tab", { name: "Final text", exact: true }),
-  ).toBeEnabled();
+  await expect(options).toBeEnabled();
   await expect(page.locator("html")).toHaveAttribute(
     "data-microphone-stopped",
     "true",
@@ -531,8 +558,11 @@ test("final text waits for a finalized phrase while recording", async ({
 }) => {
   const stats = await mockDemo(page);
   await page.goto("/");
-  const finalTab = page.getByRole("tab", { name: "Final text", exact: true });
-  await finalTab.click();
+  const options = page.getByRole("button", {
+    name: "Writing options",
+    exact: true,
+  });
+  await writingOption(page, "Show final text only");
   const field = page.getByRole("textbox", { name: "Try voice input" });
   await page.getByRole("button", { name: "Start recording" }).click();
   await expect(page.locator(".demo-status:visible")).toContainText(
@@ -545,7 +575,7 @@ test("final text waits for a finalized phrase while recording", async ({
   await expect(
     page.getByRole("button", { name: "Stop recording" }),
   ).toBeVisible();
-  await expect(finalTab).toBeDisabled();
+  await expect(options).toBeDisabled();
   await page.getByRole("button", { name: "Stop recording" }).click();
 });
 
@@ -584,7 +614,7 @@ test("implementation tabs copy their checked source and keep a stable height", a
       2,
     );
   }
-  const serverSetup = page.getByText("Server setup (required for both)", {
+  const serverSetup = page.getByText("Server route (required)", {
     exact: true,
   });
   await expect(serverSetup).toBeVisible();
@@ -644,7 +674,7 @@ test("focused composer and expanded examples are accessible", async ({
     .click();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.keyboard.press("Escape");
-  const serverSetup = page.getByText("Server setup (required for both)", {
+  const serverSetup = page.getByText("Server route (required)", {
     exact: true,
   });
   await serverSetup.focus();
@@ -670,7 +700,10 @@ test("recording feedback preserves layout and locks drafts through finalization"
   });
   await page.goto("/");
   const field = page.getByRole("textbox", { name: "Try voice input" });
-  const mode = page.getByRole("tab", { name: "Live text", exact: true });
+  const mode = page.getByRole("button", {
+    name: "Writing options",
+    exact: true,
+  });
   const status = page.locator(".demo-status:visible");
   const composer = page.locator(".demo-composer");
   await field.fill("Review the old design.");
@@ -732,7 +765,7 @@ test("delayed finalization keeps the microphone off and preserves the complete l
     page.getByRole("button", { name: "Start recording" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("tab", { name: "Final text", exact: true }),
+    page.getByRole("button", { name: "Writing options", exact: true }),
   ).toBeEnabled();
   await expect(page.locator(".demo-status:visible")).not.toHaveAttribute(
     "role",

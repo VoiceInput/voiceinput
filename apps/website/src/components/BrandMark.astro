@@ -1,4 +1,6 @@
 ---
+import layers from "../../public/brand/layers/layers.json";
+
 interface Props {
   variant?: "compact" | "render";
   class?: string;
@@ -6,25 +8,61 @@ interface Props {
 }
 
 const { variant = "compact", class: className, size = 30 } = Astro.props;
+
+// The 3D mark ships as a plate plus six cut-out bars so the waveform can
+// breathe independently of the glass. Geometry comes from the generator's
+// manifest (percentages of the square canvas) rather than hardcoded numbers.
+const base = "/brand/layers/";
+const sizes = "(max-width: 520px) 135px, (max-width: 800px) 230px, 300px";
+const bars = layers.bars.map((bar, index) => ({
+  index,
+  src: `${base}${bar.file}`,
+  width: bar.px.width,
+  height: bar.px.height,
+  style: `left:${bar.x}%;top:${bar.y}%;width:${bar.width}%;height:${bar.height}%`,
+}));
 ---
 
 {
   variant === "render" ? (
-    <picture class:list={["brand-mark-render", className]} aria-hidden="true">
-      <source
-        type="image/webp"
-        srcset="/brand/voiceinput-3d-512.webp 512w, /brand/voiceinput-3d-1024.webp 1024w"
-        sizes="(max-width: 520px) 135px, (max-width: 800px) 230px, 300px"
-      />
-      <img
-        src="/brand/voiceinput-3d.png"
-        width="1024"
-        height="1024"
-        alt=""
-        loading="lazy"
-        decoding="async"
-      />
-    </picture>
+    <div class:list={["brand-mark-render", className]} aria-hidden="true">
+      <div class="logo-tilt">
+        <div class="logo-float">
+          <div class="logo-stack">
+            <picture>
+              <source
+                type="image/webp"
+                srcset={`${base}${layers.plate.file512} 512w, ${base}${layers.plate.file} 1024w`}
+                sizes={sizes}
+              />
+              <img
+                class="logo-plate"
+                src={`${base}${layers.plate.file}`}
+                width="1024"
+                height="1024"
+                alt=""
+                loading="lazy"
+                decoding="async"
+              />
+            </picture>
+            {bars.map((bar) => (
+              <img
+                class="logo-bar"
+                data-bar={bar.index}
+                src={bar.src}
+                style={bar.style}
+                width={bar.width}
+                height={bar.height}
+                alt=""
+                loading="lazy"
+                decoding="async"
+              />
+            ))}
+          </div>
+        </div>
+        <div class="logo-shadow" />
+      </div>
+    </div>
   ) : (
     <img
       class:list={["brand-mark", className]}
@@ -37,3 +75,197 @@ const { variant = "compact", class: className, size = 30 } = Astro.props;
     />
   )
 }
+
+<style>
+  /* The mark is a stack of flat cut-outs, so everything here is transform-only
+     motion: nothing reflows and nothing can shift the footer layout. The
+     resting pose is identical to the original flat render. */
+  .brand-mark-render {
+    perspective: 900px;
+  }
+
+  /* Reveal. The resting state is visible, so no-JS and reduced-motion readers
+     see the mark immediately; the script arms the hidden start only when it
+     can also un-hide it. */
+  @keyframes logo-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  .brand-mark-render.is-armed:not(.is-visible) {
+    opacity: 0;
+  }
+  .brand-mark-render.is-visible {
+    animation: logo-in 500ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  .logo-tilt {
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 500ms cubic-bezier(0.2, 0, 0, 1);
+    will-change: transform;
+  }
+
+  @keyframes logo-float {
+    50% {
+      transform: translateY(-5px);
+    }
+  }
+  .logo-float {
+    animation: logo-float 7s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .logo-stack {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+  }
+  .logo-stack picture {
+    display: block;
+  }
+  .logo-plate {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .logo-bar {
+    position: absolute;
+    pointer-events: none;
+    transform-origin: 50% 50%;
+    will-change: transform;
+  }
+
+  /* Bars 1-5 breathe; bar 0 is the static dark caret. Prime durations keep the
+     waveform from ever resolving into a single beat. */
+  @keyframes logo-bar-pulse {
+    from {
+      transform: scaleY(0.94);
+    }
+    to {
+      transform: scaleY(1.06);
+    }
+  }
+  .logo-bar[data-bar="1"],
+  .logo-bar[data-bar="2"],
+  .logo-bar[data-bar="3"],
+  .logo-bar[data-bar="4"],
+  .logo-bar[data-bar="5"] {
+    animation: logo-bar-pulse ease-in-out infinite alternate;
+  }
+  .logo-bar[data-bar="1"] {
+    animation-duration: 2s;
+    animation-delay: -0.4s;
+  }
+  .logo-bar[data-bar="2"] {
+    animation-duration: 2.7s;
+    animation-delay: -1.1s;
+  }
+  .logo-bar[data-bar="3"] {
+    animation-duration: 2.3s;
+    animation-delay: -0.7s;
+  }
+  .logo-bar[data-bar="4"] {
+    animation-duration: 2.9s;
+    animation-delay: -1.6s;
+  }
+  .logo-bar[data-bar="5"] {
+    animation-duration: 2.4s;
+    animation-delay: -0.2s;
+  }
+
+  /* Contact shadow: shrinks and fades on the same cycle as the float, which is
+     what sells the lift. */
+  @keyframes logo-shadow-float {
+    50% {
+      transform: translateX(-50%) scale(0.94);
+      opacity: 0.12;
+    }
+  }
+  .logo-shadow {
+    position: absolute;
+    left: 50%;
+    top: 86%;
+    width: 58%;
+    height: 7%;
+    transform: translateX(-50%) scale(1);
+    border-radius: 50%;
+    background: radial-gradient(
+      closest-side,
+      var(--ink, #202226) 0%,
+      rgba(32, 34, 38, 0) 100%
+    );
+    opacity: 0.18;
+    filter: blur(10px);
+    pointer-events: none;
+    animation: logo-shadow-float 7s ease-in-out infinite;
+  }
+
+  /* Off-screen the mark costs nothing. */
+  .brand-mark-render.is-idle .logo-float,
+  .brand-mark-render.is-idle .logo-bar,
+  .brand-mark-render.is-idle .logo-shadow {
+    animation-play-state: paused;
+  }
+</style>
+
+<script>
+  // Pointer tilt + visibility. Skipped wholesale for reduced motion and for
+  // coarse pointers, where a hover tilt has no meaning and the observer's only
+  // job would be to hide the mark.
+  const MAX_TILT = 6;
+
+  for (const node of document.querySelectorAll<HTMLElement>(
+    ".brand-mark-render",
+  )) {
+    const tilt = node.querySelector<HTMLElement>(".logo-tilt");
+    if (!tilt) continue;
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const coarse = window.matchMedia("(pointer: coarse)");
+
+    if (!reduced.matches && "IntersectionObserver" in window) {
+      node.classList.add("is-armed", "is-idle");
+      const observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          node.classList.toggle("is-idle", !entry.isIntersecting);
+          if (entry.isIntersecting) node.classList.add("is-visible");
+        }
+      });
+      observer.observe(node);
+    }
+
+    if (reduced.matches || coarse.matches) continue;
+
+    const surface =
+      node.closest<HTMLElement>(".footer-invitation") ??
+      (node.parentElement as HTMLElement | null) ??
+      node;
+
+    const rest = () => {
+      tilt.style.transform = "rotateX(0deg) rotateY(0deg)";
+    };
+
+    surface.addEventListener("pointermove", (event) => {
+      if (event.pointerType === "touch") return;
+      const box = node.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      // -1..1 relative to the mark's own centre, clamped so a pointer far to
+      // the side of the wide footer does not over-rotate.
+      const dx = Math.max(
+        -1,
+        Math.min(1, (event.clientX - (box.left + box.width / 2)) / box.width),
+      );
+      const dy = Math.max(
+        -1,
+        Math.min(1, (event.clientY - (box.top + box.height / 2)) / box.height),
+      );
+      // Y inverted: the mark leans toward the pointer rather than away.
+      tilt.style.transform = `rotateX(${(-dy * MAX_TILT).toFixed(2)}deg) rotateY(${(dx * MAX_TILT).toFixed(2)}deg)`;
+    });
+    surface.addEventListener("pointerleave", rest);
+    surface.addEventListener("pointercancel", rest);
+  }
+</script>

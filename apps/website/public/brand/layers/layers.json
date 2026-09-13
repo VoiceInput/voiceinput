@@ -1,0 +1,109 @@
+{
+  "canvas": 1024,
+  "source": "brand/voiceinput-3d.png",
+  "generator": "apps/website/scripts/brand-layers.py",
+  "plate": {
+    "file": "plate-1024.webp",
+    "file512": "plate-512.webp",
+    "width": 100.0,
+    "height": 100.0
+  },
+  "bars": [
+    {
+      "file": "bar-0.webp",
+      "format": "webp",
+      "kind": "dark",
+      "x": 21.582,
+      "y": 26.172,
+      "width": 13.184,
+      "height": 46.777,
+      "px": {
+        "x": 221,
+        "y": 268,
+        "width": 135,
+        "height": 479
+      },
+      "bytes": 43226
+    },
+    {
+      "file": "bar-1.webp",
+      "format": "webp",
+      "kind": "blue",
+      "x": 30.859,
+      "y": 42.09,
+      "width": 13.672,
+      "height": 17.578,
+      "px": {
+        "x": 316,
+        "y": 431,
+        "width": 140,
+        "height": 180
+      },
+      "bytes": 19840
+    },
+    {
+      "file": "bar-2.webp",
+      "format": "webp",
+      "kind": "blue",
+      "x": 39.648,
+      "y": 35.352,
+      "width": 14.16,
+      "height": 30.762,
+      "px": {
+        "x": 406,
+        "y": 362,
+        "width": 145,
+        "height": 315
+      },
+      "bytes": 32784
+    },
+    {
+      "file": "bar-3.webp",
+      "format": "webp",
+      "kind": "blue",
+      "x": 49.609,
+      "y": 28.418,
+      "width": 14.551,
+      "height": 44.043,
+      "px": {
+        "x": 508,
+        "y": 291,
+        "width": 149,
+        "height": 451
+      },
+      "bytes": 44150
+    },
+    {
+      "file": "bar-4.webp",
+      "format": "webp",
+      "kind": "blue",
+      "x": 59.863,
+      "y": 35.449,
+      "width": 14.453,
+      "height": 30.859,
+      "px": {
+        "x": 613,
+        "y": 363,
+        "width": 148,
+        "height": 316
+      },
+      "bytes": 32474
+    },
+    {
+      "file": "bar-5.webp",
+      "format": "webp",
+      "kind": "blue",
+      "x": 69.824,
+      "y": 42.09,
+      "width": 12.402,
+      "height": 18.066,
+      "px": {
+        "x": 715,
+        "y": 431,
+        "width": 127,
+        "height": 185
+      },
+      "bytes": 18748
+    }
+  ]
+}

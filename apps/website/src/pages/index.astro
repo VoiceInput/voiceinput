@@ -37,12 +37,6 @@ import Examples from "../components/Examples.astro";
             >
           </a>
         </div>
-        <p class="hero-meta">
-          Open source <span aria-hidden="true">/</span>
-          <a class="inline-link" href="/docs/support-policy/"
-            >Desktop browsers during beta</a
-          >
-        </p>
       </div>
       <div class="hero-demo" id="demo">
         <Demo client:load />
@@ -51,114 +45,56 @@ import Examples from "../components/Examples.astro";
             Enable JavaScript to try the interactive demo.
           </p></noscript
         >
-        <p class="demo-disclosure">
-          20-second demo. Audio goes through our server to OpenAI and is not
-          stored.
-        </p>
       </div>
-    </section>
-    <section
-      class="providers wrap"
-      aria-label="Supported transcription providers"
-    >
-      <p>One interface. Your choice of provider.</p>
-      <div class="provider-logos">
-        <a href="/docs/providers/openai/"
-          ><img
-            src="/providers/openai.svg"
-            width="108"
-            height="29"
-            alt="OpenAI"
-          /></a
-        >
-        <a href="/docs/providers/elevenlabs/"
-          ><img
-            src="/providers/elevenlabs.svg"
-            width="132"
-            height="24"
-            alt="ElevenLabs"
-          /></a
-        >
-        <a href="/docs/providers/deepgram/"
-          ><img
-            src="/providers/deepgram.svg"
-            width="126"
-            height="28"
-            alt="Deepgram"
-          /></a
-        >
-      </div>
-      <a class="provider-guide text-link" href="/docs/providers/"
-        >Compare setup options<svg
-          viewBox="0 0 16 16"
-          width="14"
-          height="14"
-          fill="none"
-          aria-hidden="true"
-          ><path
-            d="M4 8h8m-3-3 3 3-3 3"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"></path></svg
-        ></a
-      >
     </section>
     <section class="integration wrap" aria-labelledby="integration-title">
       <div class="integration-copy">
-        <h2 id="integration-title">
-          A small addition.<br />A natural interaction.
-        </h2>
+        <h2 id="integration-title">Drop it into the field you already have.</h2>
         <p>
-          Add a hook to your existing field, or start with <code
+          Install two packages, then add a hook to your textarea or use <code
             >VoiceTextarea</code
           >. Your styling and form logic stay yours.
         </p>
         <Install />
-        <a class="text-link" href="/docs/quickstart/"
-          >Set up your first voice field<svg
-            viewBox="0 0 16 16"
-            width="14"
-            height="14"
-            fill="none"
-            aria-hidden="true"
-            ><path
-              d="M4 8h8m-3-3 3 3-3 3"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"></path></svg
-          ></a
-        >
       </div>
       <Examples />
     </section>
     <section class="details wrap" aria-label="How VoiceInput fits your app">
       <article>
-        <div class="editing-illustration" aria-hidden="true">
-          <span>Let’s meet</span><span class="inserted-text"
-            >&nbsp;<span class="inserted-word">tomorrow</span><span
-              class="text-caret"></span></span
-          ><span>&nbsp;at ten.</span>
-          <svg
-            class="editing-mic"
-            viewBox="0 0 24 24"
-            width="18"
-            height="18"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-            ><rect x="9" y="3" width="6" height="12" rx="3"></rect><path
-              d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3M9 21h6"></path></svg
-          >
+        <div class="vignette-stage">
+          <div class="editing-illustration is-settled" aria-hidden="true">
+            <span class="editing-sentence"
+              ><span>Let’s meet</span><span class="inserted-text"
+                >&nbsp;<span class="inserted-word">tomorrow</span><span
+                  class="text-caret"></span></span
+              ><span>&nbsp;at&nbsp;</span><span class="replace-slot"
+                ><span class="replace-target"
+                  ><span class="replace-word">noon</span><span
+                    class="text-caret"></span></span
+                >.</span
+              ></span
+            >
+            <span class="editing-mic">
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                ><rect x="9" y="3" width="6" height="12" rx="3"></rect><path
+                  d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3M9 21h6"></path></svg
+              >
+            </span>
+          </div>
         </div>
         <h2>Keep the flow of writing.</h2>
         <p>
-          Speak where the cursor is. Select a phrase to replace it, type a
-          correction, or undo as usual.
+          Speak where the cursor is. Select a phrase to replace it. Undo as
+          usual.
         </p>
         <a class="text-link" href="/docs/editing-contract/"
           >Explore editing behavior<svg
@@ -177,74 +113,80 @@ import Examples from "../components/Examples.astro";
         >
       </article>
       <article>
-        <div
-          class="connection-illustration"
-          role="img"
-          aria-label="Your server sends a temporary credential to your app. Your app then streams audio directly to your provider."
-        >
-          <span class="server-node" aria-hidden="true"
-            ><svg
-              viewBox="0 0 16 16"
-              width="14"
-              height="14"
-              fill="none"
-              aria-hidden="true"
-              ><rect
-                x="4"
-                y="7"
-                width="8"
-                height="7"
-                rx="1.5"
-                stroke="currentColor"></rect><path
-                d="M5.5 7V4a2.5 2.5 0 0 1 5 0v3"
-                stroke="currentColor"></path></svg
-            ><span>Your server</span></span
+        <div class="vignette-stage">
+          <div
+            class="connection-illustration"
+            role="img"
+            aria-label="Your server sends a temporary credential to your app. Your app then streams audio directly to your provider: OpenAI, ElevenLabs, or Deepgram."
           >
-          <span class="credential-connection" aria-hidden="true">
-            <span class="credential-label">Temporary credential</span>
-          </span>
-          <span class="connection-node app-node" aria-hidden="true"
-            >Your app</span
-          >
-          <span class="connection-audio" aria-hidden="true">
-            <svg
-              class="audio-wave"
-              viewBox="0 0 119 32"
-              preserveAspectRatio="xMaxYMid meet"
-              fill="none"
-              aria-hidden="true"
+            <span class="server-node" aria-hidden="true"
+              ><svg
+                viewBox="0 0 16 16"
+                width="14"
+                height="14"
+                fill="none"
+                aria-hidden="true"
+                ><rect
+                  x="4"
+                  y="7"
+                  width="8"
+                  height="7"
+                  rx="1.5"
+                  stroke="currentColor"></rect><path
+                  d="M5.5 7V4a2.5 2.5 0 0 1 5 0v3"
+                  stroke="currentColor"></path></svg
+              ><span>Your server</span></span
             >
-              <path
-                class="wave-line"
-                d="M0 16L6 8l7 16 7-13 7 8 7-5 8 3 8-8 8 14 8-7H119"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"></path>
-              <path
-                class="wave-flow"
-                d="M0 16L6 8l7 16 7-13 7 8 7-5 8 3 8-8 8 14 8-7H119"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"></path>
-              <path
-                d="m107 10 12 6-12 6"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"></path>
-            </svg>
-            <span>audio</span>
-          </span>
-          <span class="connection-node provider-node" aria-hidden="true"
-            >Provider</span
-          >
+            <span class="credential-connection" aria-hidden="true">
+              <span class="credential-label">Temporary credential</span>
+            </span>
+            <span class="connection-node app-node" aria-hidden="true"
+              >Your app</span
+            >
+            <span class="connection-audio" aria-hidden="true">
+              <svg
+                class="audio-wave"
+                viewBox="0 0 119 32"
+                preserveAspectRatio="xMaxYMid meet"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  class="wave-line"
+                  d="M0 16L6 8l7 16 7-13 7 8 7-5 8 3 8-8 8 14 8-7H119"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"></path>
+                <path
+                  class="wave-flow"
+                  d="M0 16L6 8l7 16 7-13 7 8 7-5 8 3 8-8 8 14 8-7H119"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"></path>
+                <path
+                  d="m107 10 12 6-12 6"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"></path>
+              </svg>
+              <span>audio</span>
+            </span>
+            <span class="connection-node provider-node" aria-hidden="true">
+              <span class="provider-label">Provider</span>
+              <span class="provider-logo" data-provider="0"></span>
+              <span class="provider-logo" data-provider="1"></span>
+              <span class="provider-logo" data-provider="2"></span>
+            </span>
+          </div>
         </div>
         <h2>Your keys. Your provider.</h2>
         <p>
-          Your server issues a temporary credential. In your app, audio streams
-          directly to the provider you choose.
+          Your server issues a temporary credential. Audio streams from your app
+          straight to OpenAI, ElevenLabs, or Deepgram. Switch providers without
+          touching your field.
         </p>
         <a class="text-link" href="/docs/overview/#how-it-works"
           >See how it works<svg
@@ -267,17 +209,31 @@ import Examples from "../components/Examples.astro";
 </Base>
 
 <script>
-  // Replays the dictated-word insertion in the editing vignette. The markup
-  // already holds the finished sentence, so reduced motion and no-JS readers
-  // keep exactly the static state this loop returns to.
+  // Replays two dictation beats in the editing vignette: inserting a word at
+  // the caret, then selecting a phrase and replacing it. The markup holds the
+  // finished sentence already settled — no highlight, no caret, no selection —
+  // so reduced motion and no-JS readers keep exactly the state this loop
+  // returns to between passes.
   const vignette = document.querySelector<HTMLElement>(".editing-illustration");
   const highlight = vignette?.querySelector<HTMLElement>(".inserted-text");
   const word = vignette?.querySelector<HTMLElement>(".inserted-word");
+  const slot = vignette?.querySelector<HTMLElement>(".replace-slot");
+  const replaced = vignette?.querySelector<HTMLElement>(".replace-word");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-  if (vignette && highlight && word && !reduced.matches) {
-    const full = word.textContent ?? "";
-    // Reserve the finished word's width so typing never reflows the sentence.
-    highlight.style.minWidth = `${highlight.getBoundingClientRect().width}px`;
+  if (vignette && highlight && word && slot && replaced && !reduced.matches) {
+    const insertedWord = word.textContent ?? "";
+    const finalWord = replaced.textContent ?? "";
+    const draftWord = "ten";
+    // Reserve both finished words' widths so neither typing beat reflows the
+    // sentence. Measured after the webfonts land, or the reservation is short.
+    const measured = document.fonts.ready.then(() => {
+      highlight.style.minWidth = `${highlight.getBoundingClientRect().width}px`;
+      const finalWidth = slot.getBoundingClientRect().width;
+      replaced.textContent = draftWord;
+      const draftWidth = slot.getBoundingClientRect().width;
+      replaced.textContent = finalWord;
+      slot.style.minWidth = `${Math.max(finalWidth, draftWidth)}px`;
+    });
     let timer: ReturnType<typeof setTimeout> | undefined;
     let generation = 0;
     const wait = (ms: number) =>
@@ -287,25 +243,46 @@ import Examples from "../components/Examples.astro";
     const stop = () => {
       generation += 1;
       clearTimeout(timer);
-      vignette.classList.remove("is-settled");
-      word.textContent = full;
+      vignette.classList.remove("is-selected", "is-replacing");
+      vignette.classList.add("is-settled");
+      word.textContent = insertedWord;
+      replaced.textContent = finalWord;
+    };
+    const type = async (into: HTMLElement, text: string, run: number) => {
+      into.textContent = "";
+      for (const character of text) {
+        if (run !== generation) return false;
+        into.textContent += character;
+        await wait(55);
+      }
+      return run === generation;
     };
     const play = async () => {
       const run = (generation += 1);
+      await measured;
       while (run === generation) {
-        vignette.classList.remove("is-settled");
+        vignette.classList.remove("is-settled", "is-selected", "is-replacing");
         word.textContent = "";
+        replaced.textContent = draftWord;
         await wait(700);
-        for (const character of full) {
-          if (run !== generation) return;
-          word.textContent += character;
-          await wait(55);
-        }
-        if (run !== generation) return;
+        // Beat one: the dictated word appears at the caret and settles in.
+        if (!(await type(word, insertedWord, run))) return;
         await wait(1200);
         if (run !== generation) return;
         vignette.classList.add("is-settled");
-        await wait(3600);
+        await wait(900);
+        // Beat two: a phrase is selected, then spoken over.
+        if (run !== generation) return;
+        vignette.classList.add("is-selected");
+        await wait(700);
+        if (run !== generation) return;
+        vignette.classList.remove("is-selected");
+        vignette.classList.add("is-replacing");
+        if (!(await type(replaced, finalWord, run))) return;
+        await wait(1200);
+        if (run !== generation) return;
+        vignette.classList.remove("is-replacing");
+        await wait(3200);
       }
     };
     new IntersectionObserver(
@@ -318,6 +295,47 @@ import Examples from "../components/Examples.astro";
       { threshold: 0.25 },
     ).observe(vignette);
     reduced.addEventListener("change", (event) => {
+      if (event.matches) stop();
+    });
+  }
+</script>
+
+<script>
+  // Cycles the provider marks inside the connection diagram. Dropping the
+  // attribute restores the "Provider" label, which is also the no-JS and
+  // reduced-motion state.
+  const diagram = document.querySelector<HTMLElement>(
+    ".connection-illustration",
+  );
+  const node = diagram?.querySelector<HTMLElement>(".provider-node");
+  const logos = node?.querySelectorAll(".provider-logo").length ?? 0;
+  const reducedProviders = matchMedia("(prefers-reduced-motion: reduce)");
+  if (diagram && node && logos > 0) {
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const stop = () => {
+      clearInterval(timer);
+      timer = undefined;
+      delete node.dataset.logo;
+    };
+    const play = () => {
+      if (reducedProviders.matches || timer) return;
+      let index = 0;
+      node.dataset.logo = String(index);
+      timer = setInterval(() => {
+        index = (index + 1) % logos;
+        node.dataset.logo = String(index);
+      }, 2600);
+    };
+    new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) play();
+          else stop();
+        }
+      },
+      { threshold: 0.25 },
+    ).observe(diagram);
+    reducedProviders.addEventListener("change", (event) => {
       if (event.matches) stop();
     });
   }
