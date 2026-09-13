@@ -30,7 +30,7 @@ export default defineConfig({
     starlight({
       title: "VoiceInput",
       disable404Route: true,
-      favicon: "/favicon.svg",
+      favicon: "/favicon.png",
       social: [
         {
           icon: "github",

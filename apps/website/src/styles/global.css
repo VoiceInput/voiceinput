@@ -134,7 +134,8 @@ code {
   font-weight: var(--weight-display);
   letter-spacing: -0.8px;
 }
-.wordmark svg {
+.wordmark .brand-mark {
+  display: block;
   flex-shrink: 0;
 }
 .beta {
@@ -1199,10 +1200,16 @@ code {
   font-size: var(--text-xs);
 }
 .voice-sculpture {
+  display: block;
   flex-shrink: 0;
   width: 300px;
   height: auto;
   overflow: visible;
+}
+.voice-sculpture img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 .footer-bottom {
   display: flex;
@@ -1342,8 +1349,9 @@ code {
   .header .wordmark {
     gap: 6px;
   }
-  .header .wordmark svg {
-    width: 23px;
+  .header .wordmark .brand-mark {
+    width: 28px;
+    height: 28px;
   }
   .header nav {
     gap: 16px;

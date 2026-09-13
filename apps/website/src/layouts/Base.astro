@@ -2,7 +2,7 @@
 import "@fontsource-variable/bricolage-grotesque";
 import "@fontsource-variable/wix-madefor-text";
 import "@fontsource/ibm-plex-mono/latin-400.css";
-import VoiceMark from "../components/VoiceMark.astro";
+import BrandMark from "../components/BrandMark.astro";
 import "../styles/global.css";
 interface Props {
   title?: string;
@@ -24,7 +24,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -37,11 +37,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <div class="header-sentinel"></div>
     <header class="header wrap">
       <a href="/" class="wordmark" aria-label="VoiceInput beta home"
-        ><svg viewBox="0 0 30 30" width="27" height="27" aria-hidden="true"
-          ><g stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
-            ><path d="M4 12v6M11 7v16M18 3v24M25 10v10"></path></g
-          ></svg
-        >VoiceInput<span class="beta">beta</span></a
+        ><BrandMark size={32} />VoiceInput<span class="beta">beta</span></a
       >
       <nav aria-label="Main navigation">
         <a href="/docs/overview/">Docs</a><a href="/#demo">Demo</a><a
@@ -77,16 +73,10 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
             >
           </p>
         </div>
-        <VoiceMark />
+        <BrandMark variant="render" class="voice-sculpture" />
       </div>
       <div class="footer-bottom">
-        <a class="wordmark" href="/"
-          ><svg viewBox="0 0 30 30" width="32" height="32" aria-hidden="true"
-            ><g stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
-              ><path d="M4 12v6M11 7v16M18 3v24M25 10v10"></path></g
-            ></svg
-          >VoiceInput</a
-        >
+        <a class="wordmark" href="/"><BrandMark size={36} />VoiceInput</a>
         <span class="footer-note">Open source. Built to fit.</span>
         <nav aria-label="Footer navigation">
           <a href="/docs/overview/">Documentation</a>
