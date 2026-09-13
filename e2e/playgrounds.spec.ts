@@ -17,18 +17,7 @@ for (const playground of playgrounds) {
       page,
     }) => {
       const pageErrors = capturePageErrors(page);
-      await page.goto(playground.url);
-
-      await expect(
-        page.getByRole("heading", { name: "Voice Lab" }),
-      ).toBeVisible();
-      await expect(
-        page.getByText(playground.name, { exact: true }),
-      ).toBeVisible();
-
-      await expect(
-        page.getByText("auth: login", { exact: true }),
-      ).toBeVisible();
+      await openPlayground(page, playground);
 
       const field = page.getByRole("textbox", {
         name: "Controlled textarea",
@@ -62,7 +51,7 @@ for (const playground of playgrounds) {
       page,
     }) => {
       const pageErrors = capturePageErrors(page);
-      await page.goto(playground.url);
+      await openPlayground(page, playground);
 
       await page.getByRole("button", { name: "Token error" }).click();
       await expect(
@@ -104,7 +93,7 @@ for (const playground of playgrounds) {
       page,
     }) => {
       const pageErrors = capturePageErrors(page);
-      await page.goto(playground.url);
+      await openPlayground(page, playground);
 
       for (const field of [
         {
@@ -172,6 +161,16 @@ for (const playground of playgrounds) {
       expect(pageErrors).toEqual([]);
     });
   });
+}
+
+async function openPlayground(
+  page: Page,
+  playground: (typeof playgrounds)[number],
+) {
+  await page.goto(playground.url, { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Voice Lab" })).toBeVisible();
+  await expect(page.getByText(playground.name, { exact: true })).toBeVisible();
+  await expect(page.getByText("auth: login", { exact: true })).toBeVisible();
 }
 
 function activeFieldStatus(page: Page, status: "idle" | "listening") {

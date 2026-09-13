@@ -5,8 +5,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 const website = fileURLToPath(new URL("../", import.meta.url));
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const origin = "http://127.0.0.1:4321";
-const backend = "http://127.0.0.1:4322";
+const defaultFrontendPort = 4321;
+const defaultBackendPort = 4322;
 
 export async function assertPortAvailable(port) {
   const server = createServer();
@@ -23,13 +23,20 @@ export async function assertPortAvailable(port) {
   await new Promise((resolve) => server.close(resolve));
 }
 
-export async function waitForBackend(signal, timeoutMs = 30_000) {
+export async function waitForBackend(
+  signal,
+  timeoutMs = 30_000,
+  {
+    frontendOrigin = `http://127.0.0.1:${defaultFrontendPort}`,
+    backendOrigin = `http://127.0.0.1:${defaultBackendPort}`,
+  } = {},
+) {
   const deadline = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
   let failure = "The local demo backend did not become ready";
   while (!deadline.aborted) {
     try {
-      const response = await fetch(`${backend}/api/demo/health`, {
-        headers: { Origin: origin },
+      const response = await fetch(`${backendOrigin}/api/demo/health`, {
+        headers: { Origin: frontendOrigin },
         signal: AbortSignal.any([deadline, AbortSignal.timeout(1000)]),
       });
       const body = await response.json();
@@ -65,6 +72,8 @@ class MissingConfigurationError extends Error {
 // Commands can be supplied by integration tests; the CLI always uses the real services.
 export async function runDev({
   signal,
+  frontendPort = defaultFrontendPort,
+  backendPort = defaultBackendPort,
   workerArgs = [],
   buildCommand = [
     "pnpm",
@@ -75,7 +84,19 @@ export async function runDev({
     "--filter=@voiceinput/website",
     "--output-logs=errors-only",
   ],
-  workerCommand = [
+  workerCommand,
+  astroCommand,
+  readinessTimeoutMs = 30_000,
+  stdio = "inherit",
+} = {}) {
+  assertValidDevPort(frontendPort, "frontendPort");
+  assertValidDevPort(backendPort, "backendPort");
+  if (frontendPort === backendPort) {
+    throw new TypeError("frontendPort and backendPort must be different.");
+  }
+  const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
+  const backendOrigin = `http://127.0.0.1:${backendPort}`;
+  workerCommand ??= [
     "pnpm",
     "exec",
     "wrangler",
@@ -85,17 +106,18 @@ export async function runDev({
     "--ip",
     "127.0.0.1",
     "--port",
-    "4322",
+    String(backendPort),
     "--inspector-port",
     "0",
     "--show-interactive-dev-session=false",
     "--types=false",
     ...workerArgs,
-  ],
-  astroCommand = [process.execPath, "scripts/dev-astro.mjs"],
-  readinessTimeoutMs = 30_000,
-  stdio = "inherit",
-} = {}) {
+  ];
+  astroCommand ??= [
+    process.execPath,
+    "scripts/dev-astro.mjs",
+    String(frontendPort),
+  ];
   const abort = new AbortController();
   const children = [];
   const stopped = new Promise((resolve) => {
@@ -114,7 +136,11 @@ export async function runDev({
       cwd,
       stdio,
       detached: process.platform !== "win32",
-      env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
+      env: {
+        ...process.env,
+        WRANGLER_SEND_METRICS: "false",
+        VOICEINPUT_DEMO_BACKEND_ORIGIN: backendOrigin,
+      },
     });
     const exited = new Promise((resolve) => {
       child.once("error", () => {
@@ -142,21 +168,24 @@ export async function runDev({
 
   try {
     abort.signal.throwIfAborted();
-    await assertPortAvailable(4321);
-    await assertPortAvailable(4322);
+    await assertPortAvailable(frontendPort);
+    await assertPortAvailable(backendPort);
     console.log(
       "[website dev] Building workspace dependencies and website assets…",
     );
     await Promise.race([launch("Build", buildCommand, root, false), stopped]);
     abort.signal.throwIfAborted();
     // Recheck after building: another process may have claimed a port meanwhile.
-    await assertPortAvailable(4321);
-    await assertPortAvailable(4322);
+    await assertPortAvailable(frontendPort);
+    await assertPortAvailable(backendPort);
     void launch("Wrangler backend", workerCommand, website, true);
-    await waitForBackend(abort.signal, readinessTimeoutMs);
+    await waitForBackend(abort.signal, readinessTimeoutMs, {
+      frontendOrigin,
+      backendOrigin,
+    });
     void launch("Astro frontend", astroCommand, website, true);
     console.log(
-      `[website dev] Demo backend ready. Astro is starting at ${origin}.`,
+      `[website dev] Demo backend ready. Astro is starting at ${frontendOrigin}.`,
     );
     await stopped;
     abort.signal.throwIfAborted();
@@ -171,6 +200,12 @@ export async function runDev({
       process.removeListener("SIGTERM", onSignal);
       signal?.removeEventListener("abort", onExternalAbort);
     }
+  }
+}
+
+function assertValidDevPort(port, name) {
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+    throw new TypeError(`${name} must be a valid TCP port.`);
   }
 }
 

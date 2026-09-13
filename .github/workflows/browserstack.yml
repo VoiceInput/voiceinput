@@ -2,8 +2,6 @@ name: Browser compatibility
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "35 8 * * 1"
 
 permissions:
   contents: read
@@ -29,12 +27,11 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Verify BrowserStack credentials
-        run: |
-          test -n "$BROWSERSTACK_USERNAME"
-          test -n "$BROWSERSTACK_ACCESS_KEY"
+      - name: Validate BrowserStack configuration
+        run: pnpm test:browserstack-config
       - run: pnpm build
       - name: Run Chromium and real-device matrix
+        id: sdk_matrix
         run: pnpm exec browserstack-node-sdk playwright test
       - name: Upload Chromium and real-device evidence
         if: always()
@@ -47,7 +44,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Run branded Safari and Firefox matrix
-        if: ${{ !cancelled() }}
+        if: steps.sdk_matrix.outcome == 'success'
         run: pnpm exec playwright test --config playwright.safari.config.ts
       - name: Upload branded desktop evidence
         if: always()

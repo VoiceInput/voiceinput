@@ -213,6 +213,21 @@ describe("openai", () => {
     });
     session.sendAudio(new Int16Array([3, 4]));
     session.finish();
+    const audioAndCommit = socket.sent.filter((event) =>
+      ["input_audio_buffer.append", "input_audio_buffer.commit"].includes(
+        String(event["type"]),
+      ),
+    );
+    expect(audioAndCommit.map((event) => event["type"])).toEqual([
+      "input_audio_buffer.append",
+      "input_audio_buffer.append",
+      "input_audio_buffer.commit",
+    ]);
+    expect(
+      audioAndCommit
+        .filter((event) => event["type"] === "input_audio_buffer.append")
+        .map((event) => decodeAudio(event["audio"])),
+    ).toEqual([new Int16Array([1, 2]), new Int16Array([3, 4])]);
     expect(socket.sent.at(-1)).toMatchObject({
       type: "input_audio_buffer.commit",
       event_id: "voiceinput-finish",

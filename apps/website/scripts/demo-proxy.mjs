@@ -1,6 +1,7 @@
 // Vite only uses this proxy in development; no instructions enter the public bundle.
 export const demoProxy = {
-  target: "http://127.0.0.1:4322",
+  target:
+    process.env["VOICEINPUT_DEMO_BACKEND_ORIGIN"] ?? "http://127.0.0.1:4322",
   ws: true,
   configure(proxy) {
     proxy.on("error", (_error, _request, response) => {

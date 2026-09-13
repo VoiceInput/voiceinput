@@ -7,7 +7,9 @@ export default defineConfig({
     host: "127.0.0.1",
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8787",
+        target:
+          process.env["VOICEINPUT_PLAYGROUND_API_ORIGIN"] ??
+          "http://127.0.0.1:8787",
       },
     },
   },

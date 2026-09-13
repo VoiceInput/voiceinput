@@ -14,9 +14,39 @@ import {
 import { demoProxy } from "../scripts/demo-proxy.mjs";
 
 const website = fileURLToPath(new URL("../", import.meta.url));
-const frontend = "http://127.0.0.1:4321";
-const backend = "http://127.0.0.1:4322";
+const { frontendPort, backendPort } = await allocateTestPorts();
+const testPorts = { frontendPort, backendPort };
+const frontend = `http://127.0.0.1:${frontendPort}`;
+const backend = `http://127.0.0.1:${backendPort}`;
 const noBuild = [process.execPath, "-e", ""];
+
+async function allocateTestPorts() {
+  const servers = [createServer(), createServer()];
+  try {
+    await Promise.all(
+      servers.map(
+        (server) =>
+          new Promise((resolve, reject) => {
+            server.once("error", reject);
+            server.listen(0, "127.0.0.1", resolve);
+          }),
+      ),
+    );
+    const [frontendAddress, backendAddress] = servers.map((server) =>
+      server.address(),
+    );
+    assert.notEqual(typeof frontendAddress, "string");
+    assert.notEqual(typeof backendAddress, "string");
+    return {
+      frontendPort: frontendAddress.port,
+      backendPort: backendAddress.port,
+    };
+  } finally {
+    await Promise.all(
+      servers.map((server) => new Promise((resolve) => server.close(resolve))),
+    );
+  }
+}
 
 async function serve(port, handler) {
   const server = createServer(handler);
@@ -46,13 +76,12 @@ async function waitForPage(signal) {
   throw new Error("Astro did not become ready");
 }
 
-// Run serially: the production development ports are deliberately fixed.
 void test("occupied ports fail without touching the existing server", async () => {
-  for (const port of [4321, 4322]) {
+  for (const port of [frontendPort, backendPort]) {
     const close = await serve(port, (_req, res) => res.end("existing"));
     try {
       await assert.rejects(
-        runDev({ buildCommand: noBuild }),
+        runDev({ ...testPorts, buildCommand: noBuild }),
         new RegExp(`Port ${port} is occupied`),
       );
       assert.equal(
@@ -65,21 +94,38 @@ void test("occupied ports fail without touching the existing server", async () =
   }
 });
 
+void test("custom development ports are validated before startup", async () => {
+  await assert.rejects(
+    runDev({ frontendPort: 0, backendPort }),
+    /frontendPort must be a valid TCP port/,
+  );
+  await assert.rejects(
+    runDev({ frontendPort, backendPort: frontendPort }),
+    /frontendPort and backendPort must be different/,
+  );
+});
+
 void test("missing configuration is actionable and readiness has a deadline", async () => {
-  const close = await serve(4322, (_req, res) => {
+  const close = await serve(backendPort, (_req, res) => {
     res.writeHead(503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ code: "missing-configuration" }));
   });
   try {
     await assert.rejects(
-      waitForBackend(new AbortController().signal),
+      waitForBackend(new AbortController().signal, 30_000, {
+        frontendOrigin: frontend,
+        backendOrigin: backend,
+      }),
       /OPENAI_API_KEY.*apps\/website\/\.dev.vars/,
     );
   } finally {
     await close();
   }
   await assert.rejects(
-    waitForBackend(new AbortController().signal, 100),
+    waitForBackend(new AbortController().signal, 100, {
+      frontendOrigin: frontend,
+      backendOrigin: backend,
+    }),
     /within 0.1 seconds/,
   );
 });
@@ -91,7 +137,7 @@ void test("proxy failures return a sanitized development diagnostic", async () =
       onError = listener;
     },
   });
-  const close = await serve(4321, (req, res) =>
+  const close = await serve(frontendPort, (req, res) =>
     onError(new Error("private detail"), req, res),
   );
   try {
@@ -109,13 +155,16 @@ void test("proxy failures return a sanitized development diagnostic", async () =
 
 void test("failed build and backend startup stop the launcher", async () => {
   const failure = [process.execPath, "-e", "process.exit(7)"];
-  await assert.rejects(runDev({ buildCommand: failure }), /Build exited \(7\)/);
   await assert.rejects(
-    runDev({ buildCommand: noBuild, workerCommand: failure }),
+    runDev({ ...testPorts, buildCommand: failure }),
+    /Build exited \(7\)/,
+  );
+  await assert.rejects(
+    runDev({ ...testPorts, buildCommand: noBuild, workerCommand: failure }),
     /Wrangler backend exited \(7\)/,
   );
-  await assertPortAvailable(4321);
-  await assertPortAvailable(4322);
+  await assertPortAvailable(frontendPort);
+  await assertPortAvailable(backendPort);
 });
 
 void test(
@@ -130,10 +179,11 @@ void test(
         String(port),
       ];
       const running = runDev({
+        ...testPorts,
         signal: abort.signal,
         buildCommand: noBuild,
-        workerCommand: command(4322),
-        astroCommand: command(4321),
+        workerCommand: command(backendPort),
+        astroCommand: command(frontendPort),
       });
       void running.catch(() => {});
       try {
@@ -155,8 +205,8 @@ void test(
             ),
           );
         }
-        await assertPortAvailable(4321);
-        await assertPortAvailable(4322);
+        await assertPortAvailable(frontendPort);
+        await assertPortAvailable(backendPort);
         for (const entry of processes) {
           for (const pid of [entry.pid, entry.descendant]) {
             // SIGKILL delivery and reaping of orphaned grandchildren are asynchronous.
@@ -183,14 +233,15 @@ void test(
 void test("cancellation during a hanging build returns promptly", async () => {
   const abort = new AbortController();
   const running = runDev({
+    ...testPorts,
     signal: abort.signal,
     buildCommand: [process.execPath, "-e", "setInterval(() => {}, 1000)"],
   });
   await delay(100);
   abort.abort();
   await running;
-  await assertPortAvailable(4321);
-  await assertPortAvailable(4322);
+  await assertPortAvailable(frontendPort);
+  await assertPortAvailable(backendPort);
 });
 
 void test(
@@ -213,6 +264,7 @@ void test(
     config.main = `${website}worker/index.ts`;
     config.assets.directory = `${website}dist`;
     config.vars.OPENAI_API_KEY = "test-fixture-only";
+    config.vars.DEMO_ORIGINS = frontend;
     config.alias = {
       "@voiceinput/openai/server": `${website}node_modules/@voiceinput/openai/dist/server.js`,
       "@voiceinput/openai": `${website}tests/dev-provider.ts`,
@@ -224,6 +276,7 @@ void test(
       for (let run = 0; run < 2; run++) {
         const abort = new AbortController();
         const running = runDev({
+          ...testPorts,
           signal: abort.signal,
           workerArgs: [
             "--config",
@@ -244,7 +297,12 @@ void test(
         try {
           await waitForPage(abort.signal);
           page = await browser.newPage();
-          await page.goto(frontend);
+          await page.goto(frontend, { waitUntil: "networkidle" });
+          const proxyReadiness = await fetch(`${frontend}/api/demo/health`, {
+            headers: { Origin: frontend },
+          });
+          assert.equal(proxyReadiness.status, 200);
+          assert.deepEqual(await proxyReadiness.json(), { status: "ready" });
           const result = await page.evaluate(async () => {
             const response = await fetch("/api/demo/session", {
               method: "POST",
@@ -303,14 +361,15 @@ void test(
           abort.abort();
           await completed;
         }
-        await assertPortAvailable(4321);
-        await assertPortAvailable(4322);
+        await assertPortAvailable(frontendPort);
+        await assertPortAvailable(backendPort);
       }
       // The same real Worker must reject missing configuration before Astro starts.
       delete config.vars.OPENAI_API_KEY;
       await writeFile(configPath, JSON.stringify(config));
       await assert.rejects(
         runDev({
+          ...testPorts,
           buildCommand: noBuild,
           workerArgs: [
             "--config",
@@ -321,8 +380,8 @@ void test(
         }),
         /OPENAI_API_KEY/,
       );
-      await assertPortAvailable(4321);
-      await assertPortAvailable(4322);
+      await assertPortAvailable(frontendPort);
+      await assertPortAvailable(backendPort);
     } finally {
       await browser?.close();
       await rm(directory, { recursive: true, force: true });

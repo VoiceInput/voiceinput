@@ -1,4 +1,9 @@
 import { spawn } from "node:child_process";
+
+const port = Number(process.env["VOICEINPUT_WEBSITE_TEST_PORT"] ?? 14322);
+if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+  throw new TypeError("VOICEINPUT_WEBSITE_TEST_PORT must be a valid TCP port.");
+}
 const worker = spawn(
   "pnpm",
   [
@@ -9,7 +14,7 @@ const worker = spawn(
     "--ip",
     "127.0.0.1",
     "--port",
-    "4322",
+    String(port),
     "--show-interactive-dev-session=false",
   ],
   { stdio: "inherit" },

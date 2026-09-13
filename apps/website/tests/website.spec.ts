@@ -112,12 +112,13 @@ test("an unavailable server shows an error and releases the microphone", async (
 
 test("live demo records audio, edits at the cursor, and supports undo", async ({
   page,
+  baseURL,
 }) => {
   const stats = await mockDemo(page);
   const external: string[] = [];
   page.on("request", (request) => {
     if (
-      !request.url().startsWith("http://127.0.0.1:4322") &&
+      !request.url().startsWith(baseURL!) &&
       !request.url().startsWith("data:") &&
       !request.url().startsWith("blob:")
     )
@@ -272,10 +273,11 @@ test("desktop composition and tablet fit", async ({ page }, testInfo) => {
 
 test("content and docs remain useful without JavaScript", async ({
   browser,
+  baseURL,
 }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
-  await page.goto("http://127.0.0.1:4322/");
+  await page.goto(baseURL!);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "Add voice input to your React app.",
   );

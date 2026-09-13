@@ -63,6 +63,7 @@ interface FieldHandle {
   moveCaret(): void;
   appendManualEdit(): void;
   externalUpdate(): void;
+  clear(): void;
 }
 
 export interface VoiceInputLabProps {
@@ -489,6 +490,9 @@ function LabWorkspace({
           />
 
           <div className="voice-lab__scenario-strip" aria-label="Field actions">
+            <button type="button" onClick={() => getActiveHandle()?.clear()}>
+              Clear active text
+            </button>
             <button
               type="button"
               onClick={() => getActiveHandle()?.selectPhrase()}
@@ -810,6 +814,15 @@ function LabField({
             message: "This action applies to the controlled field.",
           });
         }
+      },
+      clear() {
+        if (controlled) {
+          setValue("");
+          setObservedValue("");
+        } else {
+          dispatchInput("");
+        }
+        log(id, "text-cleared");
       },
     }),
     [

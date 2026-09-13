@@ -25,12 +25,12 @@ export default defineConfig({
     {
       name: "firefox",
       use: { browserName: "firefox" },
-      testMatch: "simulated.spec.ts",
+      testMatch: ["simulated.spec.ts", "playgrounds.spec.ts"],
     },
     {
       name: "webkit",
       use: { browserName: "webkit" },
-      testMatch: "simulated.spec.ts",
+      testMatch: ["simulated.spec.ts", "playgrounds.spec.ts"],
     },
   ],
   webServer: [
