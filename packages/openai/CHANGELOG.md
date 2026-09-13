@@ -1,5 +1,15 @@
 # @voiceinput/openai
 
+## 0.1.0-beta.3
+
+### Patch Changes
+
+- 5fdce9e: Always flush trailing audio when stopping, even while a voice
+  activity detection commit is pending. Keep those acknowledgements separate so
+  the earlier turn cannot close the stream before the remaining speech is
+  transcribed.
+- @voiceinput/provider@0.1.0-beta.3
+
 ## 0.1.0-beta.2
 
 ### Minor Changes

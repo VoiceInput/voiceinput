@@ -1,6 +1,6 @@
 {
   "name": "@voiceinput/elevenlabs",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "description": "ElevenLabs Realtime Scribe adapter and secure token handler for VoiceInput.",
   "keywords": [
     "voice-input",

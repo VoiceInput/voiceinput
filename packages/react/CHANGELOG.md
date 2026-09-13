@@ -1,5 +1,12 @@
 # @voiceinput/react
 
+## 0.1.0-beta.3
+
+### Patch Changes
+
+- @voiceinput/core@0.1.0-beta.3
+  - @voiceinput/provider@0.1.0-beta.3
+
 ## 0.1.0-beta.2
 
 ### Minor Changes
