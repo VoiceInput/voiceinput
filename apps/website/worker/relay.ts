@@ -2,7 +2,7 @@ import type {
   VoiceInputProviderV1,
   VoiceInputProviderV1Session,
 } from "@voiceinput/provider";
-import { DEMO_SECONDS } from "../src/lib/demo-config";
+import { DEMO_SECONDS, DEMO_SAMPLE_RATE } from "../src/lib/demo-config";
 import {
   CONNECT_TIMEOUT_MS,
   FINALIZE_TIMEOUT_MS,
@@ -25,6 +25,10 @@ export async function relaySession(
   let audioBytes = 0;
   let messages = 0;
   let queuedBytes = 0;
+  let forwardedBytes = 0;
+  let finalSegments = 0;
+  let interimEvents = 0;
+  let lastTranscriptAt: number | undefined;
   let queue = Promise.resolve();
   let recordingTimer: ReturnType<typeof setTimeout> | null = null;
   let finalizingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -57,6 +61,18 @@ export async function relaySession(
         phase: !session ? "connecting" : finishing ? "finishing" : "streaming",
         elapsedMs: Date.now() - startedAt,
         message,
+        receivedAudioMs: Math.round(
+          (audioBytes / (DEMO_SAMPLE_RATE * 2)) * 1000,
+        ),
+        forwardedAudioMs: Math.round(
+          (forwardedBytes / (DEMO_SAMPLE_RATE * 2)) * 1000,
+        ),
+        queuedBytes,
+        finalSegments,
+        interimEvents,
+        ...(lastTranscriptAt === undefined
+          ? {}
+          : { transcriptIdleMs: Date.now() - lastTranscriptAt }),
       }),
     );
     send({ type: "error", message });
@@ -122,7 +138,10 @@ export async function relaySession(
     queue = queue
       .then(async () => {
         try {
-          if (!closed) await session?.sendAudio(chunk);
+          if (!closed) {
+            await session?.sendAudio(chunk);
+            forwardedBytes += size;
+          }
         } finally {
           queuedBytes -= size;
         }
@@ -152,6 +171,10 @@ export async function relaySession(
             );
             return;
           }
+          if (part.type === "final") finalSegments++;
+          if (part.type === "interim") interimEvents++;
+          if (part.type === "final" || part.type === "interim")
+            lastTranscriptAt = Date.now();
           send(part);
         }
         if (!closed) {

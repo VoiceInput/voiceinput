@@ -122,6 +122,13 @@ describe("openai", () => {
       item_id: "item-2",
       transcript: "world",
     });
+    socket.message({
+      type: "error",
+      error: {
+        code: "input_audio_buffer_commit_empty",
+        event_id: "voiceinput-finish",
+      },
+    });
 
     expect(await partsPromise).toEqual([
       { type: "speech-start" },
@@ -138,7 +145,7 @@ describe("openai", () => {
       socket.sent.filter(
         (event) => event["type"] === "input_audio_buffer.commit",
       ),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
     expect(socket.closeReason).toBe("finished");
   });
 
@@ -187,6 +194,115 @@ describe("openai", () => {
       value: { type: "final", text: "second", segmentId: expect.any(String) },
     });
     session.abort();
+  });
+
+  it("commits trailing audio when Stop races a pending VAD commit", async () => {
+    const transport = createTransport();
+    const provider = createProvider(transport);
+    const opening = provider.doOpen({
+      abortSignal: new AbortController().signal,
+    });
+    const socket = await transport.waitForSocket();
+    socket.open();
+    const session = await opening;
+    const parts = readStream(session.stream);
+    session.sendAudio(new Int16Array([1, 2]));
+    socket.message({
+      type: "input_audio_buffer.speech_stopped",
+      item_id: "first",
+    });
+    session.sendAudio(new Int16Array([3, 4]));
+    session.finish();
+    expect(socket.sent.at(-1)).toMatchObject({
+      type: "input_audio_buffer.commit",
+      event_id: "voiceinput-finish",
+    });
+    socket.message({ type: "input_audio_buffer.committed", item_id: "first" });
+    socket.message({
+      type: "conversation.item.input_audio_transcription.completed",
+      item_id: "first",
+      transcript: "First words.",
+    });
+    expect(socket.closeReason).toBeUndefined();
+    socket.message({ type: "input_audio_buffer.committed", item_id: "tail" });
+    socket.message({
+      type: "conversation.item.input_audio_transcription.completed",
+      item_id: "tail",
+      transcript: "The rest of my speech.",
+    });
+    expect(
+      (await parts)
+        .filter((part) => part.type === "final")
+        .map((part) => part.text),
+    ).toEqual(["First words.", "The rest of my speech."]);
+    expect(socket.closeReason).toBe("finished");
+  });
+
+  it("does not wait again for an already acknowledged speech boundary", async () => {
+    const transport = createTransport();
+    const opening = createProvider(transport).doOpen({
+      abortSignal: new AbortController().signal,
+    });
+    const socket = await transport.waitForSocket();
+    socket.open();
+    const session = await opening;
+    const parts = readStream(session.stream);
+    session.sendAudio(new Int16Array([1, 2]));
+    socket.message({ type: "input_audio_buffer.committed", item_id: "speech" });
+    socket.message({
+      type: "conversation.item.input_audio_transcription.completed",
+      item_id: "speech",
+      transcript: "Complete speech.",
+    });
+    socket.message({
+      type: "input_audio_buffer.speech_stopped",
+      item_id: "speech",
+    });
+    session.finish();
+    socket.message({
+      type: "error",
+      error: {
+        code: "input_audio_buffer_commit_empty",
+        event_id: "voiceinput-finish",
+      },
+    });
+    expect((await parts).some((part) => part.type === "final")).toBe(true);
+    expect(socket.closeReason).toBe("finished");
+  });
+
+  it("an empty Stop commit still waits for a pending VAD transcript", async () => {
+    const transport = createTransport();
+    const opening = createProvider(transport).doOpen({
+      abortSignal: new AbortController().signal,
+    });
+    const socket = await transport.waitForSocket();
+    socket.open();
+    const session = await opening;
+    const parts = readStream(session.stream);
+    session.sendAudio(new Int16Array([1, 2]));
+    socket.message({
+      type: "input_audio_buffer.speech_stopped",
+      item_id: "speech",
+    });
+    session.finish();
+    socket.message({
+      type: "error",
+      error: {
+        code: "input_audio_buffer_commit_empty",
+        event_id: "voiceinput-finish",
+      },
+    });
+    expect(socket.closeReason).toBeUndefined();
+    socket.message({ type: "input_audio_buffer.committed", item_id: "speech" });
+    socket.message({
+      type: "conversation.item.input_audio_transcription.completed",
+      item_id: "speech",
+      transcript: "Complete speech.",
+    });
+    expect((await parts).filter((part) => part.type === "final")).toHaveLength(
+      1,
+    );
+    expect(socket.closeReason).toBe("finished");
   });
 
   it("tolerates the empty final commit after an already completed VAD turn", async () => {
@@ -666,8 +782,8 @@ function decodeAudio(value: unknown): Int16Array {
   return new Int16Array(bytes.buffer);
 }
 
-async function readStream(stream: ReadableStream<unknown>): Promise<unknown[]> {
-  const values: unknown[] = [];
+async function readStream<T>(stream: ReadableStream<T>): Promise<T[]> {
+  const values: T[] = [];
   for await (const value of stream) {
     values.push(value);
   }

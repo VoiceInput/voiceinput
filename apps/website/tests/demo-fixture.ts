@@ -3,7 +3,12 @@ import type { Page } from "@playwright/test";
 /** Synthetic microphone + mocked relay. Production always uses live OpenAI. */
 export async function mockDemo(
   page: Page,
-  { permissionDelayMs = 0, connectionDelayMs = 0, finishDelayMs = 0 } = {},
+  {
+    permissionDelayMs = 0,
+    connectionDelayMs = 0,
+    finishDelayMs = 0,
+    finishText = "",
+  } = {},
 ) {
   const stats = { audioBytes: 0 };
   await page.addInitScript(
@@ -67,13 +72,21 @@ export async function mockDemo(
         if (message === '{"type":"finish"}' && !stopped) {
           stopped = true;
           clear();
-          if (latest) socket.send(JSON.stringify({ type: "final", ...latest }));
+          if (latest && !finishText)
+            socket.send(JSON.stringify({ type: "final", ...latest }));
           if (finishDelayMs)
             timers.push(
-              setTimeout(
-                () => socket.send(JSON.stringify({ type: "finished" })),
-                finishDelayMs,
-              ),
+              setTimeout(() => {
+                if (finishText)
+                  socket.send(
+                    JSON.stringify({
+                      type: "final",
+                      text: finishText,
+                      segmentId: latest?.segmentId ?? "late-speech",
+                    }),
+                  );
+                socket.send(JSON.stringify({ type: "finished" }));
+              }, finishDelayMs),
             );
           else socket.send(JSON.stringify({ type: "finished" }));
         }

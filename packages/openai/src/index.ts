@@ -315,7 +315,9 @@ async function createSession(
   let failed = false;
   let finishing = false;
   let manualCommitPending = false;
-  let vadCommitPending = false;
+  const pendingVadCommits = new Set<string>();
+  const committedItems = new Set<string>();
+  const unknownVadItem = "voiceinput-unknown-vad";
   const manualCommitEventId = "voiceinput-finish";
 
   const closeStream = (): void => {
@@ -352,7 +354,7 @@ async function createSession(
     if (
       finishing &&
       !manualCommitPending &&
-      !vadCommitPending &&
+      pendingVadCommits.size === 0 &&
       transcripts.size === 0
     ) {
       finishCleanly();
@@ -417,15 +419,29 @@ async function createSession(
         return;
       }
       if (type === "input_audio_buffer.speech_stopped") {
-        vadCommitPending = true;
+        const itemId =
+          typeof value["item_id"] === "string"
+            ? value["item_id"]
+            : unknownVadItem;
+        // A late or repeated boundary must not resurrect an acknowledged commit.
+        if (!committedItems.has(itemId) && !closedItems.has(itemId))
+          pendingVadCommits.add(itemId);
         streamController?.enqueue({ type: "speech-end" });
         return;
       }
       if (type === "input_audio_buffer.committed") {
         const itemId = readString(value, "item_id");
-        if (closedItems.has(itemId)) return;
-        manualCommitPending = false;
-        vadCommitPending = false;
+        const vadCommit =
+          pendingVadCommits.delete(itemId) ||
+          pendingVadCommits.delete(unknownVadItem);
+        // A VAD acknowledgement cannot acknowledge the later explicit Stop commit.
+        if (!vadCommit && !committedItems.has(itemId))
+          manualCommitPending = false;
+        committedItems.add(itemId);
+        if (closedItems.has(itemId)) {
+          maybeFinish();
+          return;
+        }
         ensureTranscript(itemId);
         flushFinals();
         return;
@@ -548,13 +564,13 @@ async function createSession(
         finishCleanly();
         return;
       }
-      if (!vadCommitPending) {
-        manualCommitPending = true;
-        sendEvent(socket, {
-          type: "input_audio_buffer.commit",
-          event_id: manualCommitEventId,
-        });
-      }
+      // Audio may have arrived after the last VAD boundary. Always flush it;
+      // the correlated empty-buffer error is already handled as a clean finish.
+      manualCommitPending = true;
+      sendEvent(socket, {
+        type: "input_audio_buffer.commit",
+        event_id: manualCommitEventId,
+      });
       maybeFinish();
     },
     abort,

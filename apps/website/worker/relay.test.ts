@@ -4,7 +4,11 @@ import type {
   VoiceInputProviderV1StreamPart,
 } from "@voiceinput/provider";
 import { relaySession } from "./relay";
-import { MAX_AUDIO_BYTES, MAX_FRAME_BYTES } from "./limits";
+import {
+  MAX_AUDIO_BYTES,
+  MAX_FRAME_BYTES,
+  FINALIZE_TIMEOUT_MS,
+} from "./limits";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -55,7 +59,7 @@ async function setup(hangOnFinish = false) {
   const onRecordingStarted = vi.fn<() => void>();
   const done = relaySession(socket as WebSocket, provider, onRecordingStarted);
   await Promise.resolve();
-  return { socket, session, done, controller, onRecordingStarted };
+  return { socket, session, done, controller, onRecordingStarted, end };
 }
 
 test("a client cannot extend the recording beyond 20 seconds", async () => {
@@ -106,7 +110,7 @@ test.each([
 test("a stalled finalization cannot keep the provider connected indefinitely", async () => {
   const { socket, session, done } = await setup(true);
   socket.message('{"type":"finish"}');
-  await vi.advanceTimersByTimeAsync(10_000);
+  await vi.advanceTimersByTimeAsync(FINALIZE_TIMEOUT_MS);
   await done;
   expect(session.abort).toHaveBeenCalled();
   expect(socket.sent.at(-1)?.type).toBe("error");
@@ -146,4 +150,30 @@ test("empty connections are free and the first audio frame charges exactly once"
   socket.message('{"type":"finish"}');
   await done;
   expect(onRecordingStarted).toHaveBeenCalledOnce();
+});
+
+test("stopping after ten seconds preserves a final transcript that arrives twelve seconds later", async () => {
+  const { socket, session, done, controller, end } = await setup(true);
+  socket.message(new ArrayBuffer(480));
+  controller.enqueue({
+    type: "interim",
+    text: "First words",
+    segmentId: "speech",
+  });
+  await vi.advanceTimersByTimeAsync(10_000);
+  socket.message('{"type":"finish"}');
+  await vi.advanceTimersByTimeAsync(12_000);
+  expect(session.abort).not.toHaveBeenCalled();
+  controller.enqueue({
+    type: "final",
+    text: "First words and the rest of my speech.",
+    segmentId: "speech",
+  });
+  end();
+  await done;
+  expect(socket.sent.at(-2)).toMatchObject({
+    type: "final",
+    text: "First words and the rest of my speech.",
+  });
+  expect(socket.sent.at(-1)?.type).toBe("finished");
 });

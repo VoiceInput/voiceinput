@@ -634,3 +634,39 @@ test("recording feedback preserves layout and locks drafts through finalization"
   await expect(note).toBeEnabled();
   await expect(field).not.toHaveValue(/old/);
 });
+
+test("delayed finalization keeps the microphone off and preserves the complete late transcript", async ({
+  page,
+}) => {
+  await mockDemo(page, {
+    finishDelayMs: 16_000,
+    finishText:
+      "The complete recording is preserved, including its final words.",
+  });
+  await page.goto("/");
+  const field = page.getByRole("textbox", { name: "Try voice input" });
+  await page.getByRole("button", { name: "Start recording" }).click();
+  await expect(field).toHaveValue(/^The/);
+  await page.getByRole("button", { name: "Stop recording" }).click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-microphone-stopped",
+    "true",
+  );
+  await expect(page.locator(".demo-status:visible")).toContainText(
+    "Finishing your transcript",
+  );
+  await expect(field).toHaveValue(
+    "The complete recording is preserved, including its final words.",
+    { timeout: 20_000 },
+  );
+  await expect(
+    page.getByRole("button", { name: "Start recording" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Note", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".demo-status:visible")).not.toHaveAttribute(
+    "role",
+    "alert",
+  );
+});

@@ -1,7 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, test } from "vitest";
+import { DEMO_SECONDS } from "../src/lib/demo-config";
 import { DemoQuota } from "./quota";
 import {
+  CONNECT_TIMEOUT_MS,
+  FINALIZE_TIMEOUT_MS,
   DAILY_SESSIONS,
   DAILY_SESSIONS_PER_IP,
   HOURLY_SESSIONS_PER_IP,
@@ -131,7 +134,14 @@ test("unused tickets and interrupted startups are refunded after expiry and rest
   const restarted = new DemoQuota(sql);
   const id = await ticket(restarted, "client", now + 60_000);
   expect(restarted.consume(id, "client", now + 60_000)).toBeUndefined();
-  restarted.clean(now + 120_000);
+  restarted.clean(
+    now +
+      60_000 +
+      CONNECT_TIMEOUT_MS +
+      DEMO_SECONDS * 1000 +
+      FINALIZE_TIMEOUT_MS +
+      5_000,
+  );
   expect(
     sql
       .exec<{ count: number }>(

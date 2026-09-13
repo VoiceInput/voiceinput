@@ -67,8 +67,10 @@ tickets, 60-second expiry, and atomic single-use consumption remain enforced. Th
 server uses the official OpenAI adapter; a small browser adapter transports
 PCM16 and transcript events through the relay.
 
-The relay permits 20 seconds / 960,000 bytes of audio, with separate 10-second
-connection and finalization deadlines. SQLite-backed Durable Object storage
+The relay permits 20 seconds / 960,000 bytes of audio, with a separate 10-second
+connection deadline and a 30-second finalization deadline. Microphone capture
+stops immediately on Stop; the browser allows five additional seconds for the
+server result to arrive. The 20-second recording allowance is unchanged. SQLite-backed Durable Object storage
 limits recordings to 30 per IP per hour, 100 per IP per UTC day, and 1,000 across the demo
 per UTC day. It permits at most 4 concurrent sessions, one per IP. Grants reserve allowance atomically; the first audio frame commits it.
 Empty sessions, failed startups, and busy handshakes return their reservation, and unused tickets
@@ -78,8 +80,8 @@ these budgets. Startup can retry once before sending audio; quota responses
 are not automatically retried. Limits live in `worker/limits.ts` and `src/lib/demo-config.ts`.
 
 Audio and transcripts are streamed in memory and are never logged or stored.
-Fixed relay error messages, connection phase, and elapsed time are logged for
-diagnostics; provider payloads and credentials are excluded.
+Fixed relay error messages, connection phase, elapsed time, received/forwarded audio duration, and transcript
+event counts are logged for diagnostics; provider payloads and credentials are excluded.
 Quota records use a salted daily hash of the Cloudflare-provided IP address;
 expired records are pruned on subsequent requests. The SDK's normal direct
 browser-to-provider connection is unchanged. The site uses no analytics.
@@ -129,6 +131,7 @@ transcription, and microphone cleanup all run normally.
 ```sh
 node apps/website/scripts/check-demo.mjs --origin http://127.0.0.1:4323 --browser all --runs 3
 node apps/website/scripts/check-demo-admission.mjs http://127.0.0.1:4323
+node apps/website/scripts/check-demo.mjs --origin http://127.0.0.1:4321 --browser all --runs 3 --record-seconds 10
 node apps/website/scripts/check-demo.mjs --origin https://voiceinput.dev --runs 5 --connections 20
 ```
 

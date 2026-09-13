@@ -8,7 +8,10 @@ import {
 } from "react";
 import { useVoiceInput } from "@voiceinput/react";
 import { getDemoErrorMessage, liveDemo } from "../lib/live-demo";
-import { DEMO_SECONDS } from "../lib/demo-config";
+import {
+  DEMO_SECONDS,
+  DEMO_CLIENT_FINALIZATION_TIMEOUT_MS,
+} from "../lib/demo-config";
 
 const scenarios = [
   {
@@ -135,6 +138,7 @@ function Composer({
       value,
       onValueChange: setValue,
       disabled: !hydrated,
+      finalizationTimeoutMs: DEMO_CLIENT_FINALIZATION_TIMEOUT_MS,
     });
   const running = status !== "idle" && status !== "error";
   const finishing = status === "processing" || status === "stopping";

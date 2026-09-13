@@ -1,5 +1,6 @@
 // Exercises the actual landing page and relay. Only microphone input is synthetic.
 // Example: node scripts/check-demo.mjs --origin https://voiceinput.dev --runs 5 --connections 20
+import { DEMO_CLIENT_FINALIZATION_TIMEOUT_MS } from "../src/lib/demo-config.ts";
 import assert from "node:assert/strict";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
@@ -11,11 +12,17 @@ const { values } = parseArgs({
     runs: { type: "string", default: "3" },
     connections: { type: "string", default: "0" },
     browser: { type: "string", default: "chromium" },
+    "record-seconds": { type: "string" },
   },
 });
 const origin = new URL(values.origin).origin;
 const runs = Number(values.runs);
 const connections = Number(values.connections);
+const recordSeconds =
+  values["record-seconds"] === undefined ? 0 : Number(values["record-seconds"]);
+assert(
+  Number.isFinite(recordSeconds) && recordSeconds >= 0 && recordSeconds <= 19,
+);
 assert(Number.isInteger(runs) && runs >= 0 && runs <= 30);
 assert(Number.isInteger(connections) && connections >= 0 && connections <= 100);
 const engines =
@@ -37,7 +44,7 @@ for (const [name, engine] of Object.entries(engines)) {
   try {
     const page = await browser.newPage();
     await page.addInitScript(
-      ({ fixture }) => {
+      ({ fixture, recordSeconds }) => {
         let startAudio = () => {};
         window.demoTestEvents = {
           ready: 0,
@@ -77,6 +84,7 @@ for (const [name, engine] of Object.entries(engines)) {
             );
             const source = context.createBufferSource();
             source.buffer = await context.decodeAudioData(bytes.buffer);
+            source.loop = recordSeconds > 0;
             const destination = context.createMediaStreamDestination();
             source.connect(destination);
             let started = false;
@@ -103,7 +111,7 @@ for (const [name, engine] of Object.entries(engines)) {
           },
         });
       },
-      { fixture },
+      { fixture, recordSeconds },
     );
     await page.goto(origin);
     for (let i = 0; i < runs; i++) {
@@ -126,28 +134,46 @@ for (const [name, engine] of Object.entries(engines)) {
           baseline,
           { timeout: 2000 },
         );
-        await page.waitForFunction(
-          (baseline) =>
-            window.demoTestEvents.ready > baseline.ready &&
-            window.demoTestEvents.final > baseline.final &&
-            /Harry Quilter/i.test(
-              document.querySelector("textarea")?.value ?? "",
-            ),
-          baseline,
-          { timeout: 15000 },
-        );
+        if (recordSeconds > 0) {
+          await page.waitForFunction(
+            (baseline) => window.demoTestEvents.ready > baseline.ready,
+            baseline,
+            { timeout: 15000 },
+          );
+          await page.waitForTimeout(recordSeconds * 1000);
+        } else {
+          await page.waitForFunction(
+            (baseline) =>
+              window.demoTestEvents.ready > baseline.ready &&
+              window.demoTestEvents.final > baseline.final &&
+              /Harry Quilter/i.test(
+                document.querySelector("textarea")?.value ?? "",
+              ),
+            baseline,
+            { timeout: 15000 },
+          );
+        }
         await page
           .getByRole("button", { name: "Stop recording", exact: true })
           .click();
         await page
           .getByRole("button", { name: "Start recording", exact: true })
-          .waitFor({ timeout: 12000 });
+          .waitFor({ timeout: DEMO_CLIENT_FINALIZATION_TIMEOUT_MS + 2000 });
         await page.waitForFunction(
           (baseline) => window.demoTestEvents.finished > baseline.finished,
           baseline,
-          { timeout: 12000 },
+          { timeout: DEMO_CLIENT_FINALIZATION_TIMEOUT_MS + 2000 },
         );
-        assert.match(await field.inputValue(), /Harry Quilter/i);
+        const text = await field.inputValue();
+        assert.match(text, /Harry Quilter/i);
+        if (recordSeconds > 0) {
+          // Each complete 2.245-second loop must make it into the transcript.
+          assert(
+            (text.match(/Harry Quilter/gi) ?? []).length >=
+              Math.floor(recordSeconds / 2.245),
+            "The final transcript is missing completed speech loops",
+          );
+        }
         assert.equal(
           await page.locator("html").getAttribute("data-test-mic-stopped"),
           "true",
@@ -235,7 +261,7 @@ for (const [name, engine] of Object.entries(engines)) {
   }
 }
 const output = new URL(
-  `../../../output/playwright/demo-reliability-${new URL(origin).hostname}-${values.browser}.json`,
+  `../../../output/playwright/demo-reliability-${new URL(origin).hostname}-${values.browser}${recordSeconds ? `-${recordSeconds}s` : ""}.json`,
   import.meta.url,
 );
 await mkdir(new URL(".", output), { recursive: true });
