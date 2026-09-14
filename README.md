@@ -1,3 +1,5 @@
+![VoiceInput](.github/assets/readme-banner.png)
+
 # VoiceInput
 
 Add dictation to your existing React inputs and textareas. VoiceInput captures
