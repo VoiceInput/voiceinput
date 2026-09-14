@@ -1,7 +1,7 @@
 # VoiceInput release record
 
 - Version:
-- npm dist-tag: `next`
+- npm dist-tag: `latest`
 - Approved candidate SHA:
 - CI run and immutable package artifact:
 - Desktop engine versions and automated runs:
@@ -9,9 +9,8 @@
 - Provider credential smoke run:
 - Live Chromium/Vite-Hono run (`pnpm test:voice-live`; one result per provider):
 - Automated accessibility evidence:
-- Beta-exit macOS VoiceOver/current Safari evidence (pending for desktop beta):
-- Beta-exit physical browser evidence (pending for desktop beta: desktop Chrome,
-  current iPhone Safari and Chrome, current Android Chrome):
+- Manual macOS VoiceOver/current Safari results (unrun unless recorded):
+- Physical browser results (record device, browser, and provider):
 - Optional device/browser/interruption evidence:
 - Full-history/tree/tarball/workflow-log secret scan:
 - Reviewer and approval date:
@@ -20,7 +19,7 @@
 
 Copy the six `sha512` entries from `.release-manifest.json` without editing
 them. Attach that manifest and the exact CI package artifact to the GitHub
-prerelease.
+release.
 
 ## Changes
 
@@ -35,8 +34,8 @@ providers in one result.
 | ------------- | ---- | ------ | ------ | --- | --------------- | -------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | -------------- |
 |               |      |        |        |     |                 |          | full flow / basic provider / VoiceOver / optional | permissions / permission-recovery / activation / lifecycle / interim-edits / app-switch / background-final / lock-recovery / rotation / basic-provider / VoiceOver |        |                |
 
-For each required physical browser, copy one row per applicable full-flow
-scenario for the selected provider. For each phone/browser combination, add one
+For each tested physical browser, copy one row per applicable full-flow scenario
+for the selected provider. For each phone/browser combination, add one
 `basic-provider` row for each of the other two providers. The desktop Chrome
 baseline does not require those two additional-provider rows. Record failures
 and timeouts as results; a blank row is unverified, and an aggregate `full flow`
@@ -50,9 +49,8 @@ pass without its scenario rows is incomplete.
 
 ## Exceptions
 
-The beta branding and prerelease status remain in force. Every gate required for
-the release being claimed must pass for the exact candidate. Physical-browser
-and macOS VoiceOver rows may remain unverified for the current desktop beta, but
-must pass before beta exit. Optional rows may remain unverified. Record every
-observed failure explicitly. Candidate approval does not publish packages;
-publication has its own later approval and rerun.
+Every gate required for the release being claimed must pass for the exact
+candidate. Manual device and screen-reader checks remain unrun unless individual
+results are recorded. Record observed failures explicitly and describe any
+approved exceptions. Candidate approval does not publish packages; publication
+is a separate owner action through the protected workflow.

@@ -4,7 +4,8 @@ import { createElevenLabsTokenHandler } from "./server.js";
 
 describe("createElevenLabsTokenHandler", () => {
   it("authorizes, rate limits, mints, and audits without leaking credentials", async () => {
-    const upstream = vi.fn<typeof fetch>(async (_input, init) => {
+    const upstream = vi.fn<typeof fetch>(async (input, init) => {
+      expect(input).toBe("https://provider.example.test/token");
       expect(new Headers(init?.headers).get("xi-api-key")).toBe("sk-server");
       expect(init?.body).toBeUndefined();
       return Response.json({ token: "sutkn_secret", ignored: "private" });
@@ -18,6 +19,7 @@ describe("createElevenLabsTokenHandler", () => {
       }),
       onTokenIssued: audit,
       fetch: upstream,
+      providerTokenUrl: "https://provider.example.test/token",
     });
 
     const response = await handler(tokenRequest({}));

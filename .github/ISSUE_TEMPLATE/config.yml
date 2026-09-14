@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: VoiceInput documentation
+    url: https://voiceinput.dev/docs/overview/
+    about: Read the guides and API documentation before opening an issue.
+  - name: Report a security vulnerability
+    url: https://github.com/VoiceInput/voiceinput/security/advisories/new
+    about: Report vulnerabilities privately instead of opening a public issue.

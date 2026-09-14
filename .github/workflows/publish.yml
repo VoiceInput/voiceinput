@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       dist_tag:
-        description: Explicit npm dist-tag (for example, next)
+        description: Explicit npm dist-tag (for example, latest)
         required: true
         type: string
 
@@ -81,7 +81,7 @@ jobs:
       - uses: pnpm/action-setup@f520eceda224fe1a4aed5a2a27a194379a409996 # v6
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22.22.2
+          node-version: 22.22.0
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - name: Verify the approved CI run

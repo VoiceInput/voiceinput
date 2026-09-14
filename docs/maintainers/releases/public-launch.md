@@ -24,7 +24,7 @@ desktop performance 96, accessibility 100, and zero layout shift. These are lab
 measurements, not a guarantee for every device or connection. Mobile uses a
 static silver waveform; desktop loads the interactive Three.js sculpture.
 
-The [desktop beta support limits](../support-policy.md) continue to apply.
+The [desktop beta support limits](../../support-policy.md) continue to apply.
 
 Final public verification succeeded after npm's publish-time scan completed: the
 exact website installation command installed from the public registry in an

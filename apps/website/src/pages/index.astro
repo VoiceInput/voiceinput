@@ -40,6 +40,11 @@ import Examples from "../components/Examples.astro";
       </div>
       <div class="hero-demo" id="demo">
         <Demo client:load />
+        <p class="demo-disclosure">
+          The demo relays audio through voiceinput.dev to enforce its limits,
+          then sends it to OpenAI. It stores neither audio nor transcripts; SDK
+          integrations connect directly to providers.
+        </p>
         <noscript
           ><p class="demo-disclosure">
             Enable JavaScript to try the interactive demo.

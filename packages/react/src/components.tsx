@@ -259,7 +259,7 @@ const VoiceButtonElement = /* @__PURE__ */ forwardRef<
   const describedBy = [props["aria-describedby"], announce && announcementId]
     .filter(Boolean)
     .join(" ");
-  const trigger = voice.triggerProps;
+  const trigger = voice.getTriggerProps();
 
   return (
     <>
@@ -301,7 +301,6 @@ const VoiceButtonElement = /* @__PURE__ */ forwardRef<
         <span
           id={announcementId}
           aria-live={voice.error === null ? "polite" : "assertive"}
-          className="voiceinput-sr-only"
           role={voice.error === null ? "status" : "alert"}
           style={visuallyHiddenStyle}
         >
@@ -401,7 +400,9 @@ function voiceDataAttributes(
 ): Record<string, string> {
   return {
     "data-voiceinput-active": String(isActive(voice)),
-    "data-voiceinput-error": voice.error?.code ?? "",
+    ...(voice.error === null
+      ? {}
+      : { "data-voiceinput-error": voice.error.code }),
     "data-voiceinput-status": voice.status,
     "data-voiceinput-supported": String(voice.isSupported),
   };

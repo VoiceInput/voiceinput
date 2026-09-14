@@ -1,41 +1,33 @@
 # Authentication and rate limits
 
-Your token route must check who is asking for a credential. The required
-`authorize` callback validates the signed-in user and returns their stable user
-ID as `subject`. Returning `null` rejects the request without issuing a token.
+Every token route must identify the caller before issuing a temporary provider
+credential.
 
-These recipes assume your chosen sign-in library is already configured. The
-`@/auth`, `@/lib/auth`, and Supabase server-client imports refer to your app’s
-existing auth setup; they are not VoiceInput exports. For a complete example,
-start with the [quickstart](quickstart.md) or
-[example projects](golden-paths.md).
+## Any session library
 
-## Where the callbacks go
-
-Choose one auth recipe below and add its `authorize` callback to your provider
-handler. Add a `rateLimit` callback if you want to limit credential requests.
-This is the surrounding route structure; the auth helper is supplied by your
-app:
+Start by adapting your existing session check:
 
 ```ts
 import { createOpenAITokenHandler } from "@voiceinput/openai/server";
-import { authorize } from "./voice-auth";
+import { getCurrentUser } from "@/lib/auth"; // your existing session check
 
 export const POST = createOpenAITokenHandler({
   apiKey: process.env.OPENAI_API_KEY!,
-  authorize,
+  authorize: async (request) => {
+    if (!trustedBrowserRequest(request)) return null;
+    const user = await getCurrentUser(request);
+    return user ? { subject: user.id } : null;
+  },
 });
 ```
 
-For that structure, export the chosen callback as `authorize` from
-`voice-auth.ts`. Alternatively, paste it directly into the handler options. The
-snippets below show the callback form.
+Returning `null` rejects the request with `401`. Use a stable internal user ID
+as `subject` so authorization, quotas, and diagnostics share one identity.
 
 ## Check the browser origin
 
-For cookie sessions, also compare `Origin` to a configured value and reject
-`Sec-Fetch-Site: cross-site`. Do not derive the trusted origin from request host
-or forwarding headers.
+For cookie sessions, compare `Origin` with a configured value and reject
+cross-site fetches. Do not derive the trusted origin from request headers.
 
 ```ts
 const appOrigin = new URL(process.env.APP_ORIGIN!).origin;
@@ -48,12 +40,8 @@ function trustedBrowserRequest(request: Request) {
 }
 ```
 
-Include `trustedBrowserRequest` in the module containing your auth callback. Set
-`APP_ORIGIN` to your configured app URL, including its local development port.
-It must come from your server environment.
-
-Use one of these callbacks with `createOpenAITokenHandler`,
-`createElevenLabsTokenHandler`, or `createDeepgramTokenHandler`.
+Set `APP_ORIGIN` to the exact application URL, including its development port.
+The same callbacks work with the OpenAI, ElevenLabs, and Deepgram handlers.
 
 ## Clerk in Next.js App Router
 
@@ -67,7 +55,7 @@ authorize: async (request) => {
 },
 ```
 
-Install Clerk's middleware as described in its
+Install Clerk middleware as described in its
 [Route Handler guide](https://clerk.com/docs/reference/nextjs/app-router/route-handlers).
 
 ## Auth.js in Next.js App Router
@@ -82,8 +70,8 @@ authorize: async (request) => {
 },
 ```
 
-Configure the Auth.js session callback to expose your database user ID; do not
-use an email address or access token as the quota key.
+Expose a database user ID from the Auth.js session callback. Avoid an email
+address or access token as the quota key.
 
 ## Supabase in Next.js App Router
 
@@ -98,9 +86,8 @@ authorize: async (request) => {
 },
 ```
 
-Use Supabase's server client and cookie-refresh setup; `getUser()` validates the
-session with the Auth server. See the official
-[SSR client guide](https://supabase.com/docs/guides/auth/server-side/creating-a-client?framework=nextjs&package-manager=npm).
+Use the server client and cookie-refresh setup from Supabase's
+[SSR guide](https://supabase.com/docs/guides/auth/server-side/creating-a-client?framework=nextjs&package-manager=npm).
 
 ## Better Auth
 
@@ -114,15 +101,12 @@ authorize: async (request) => {
 },
 ```
 
-This follows Better Auth's server-side
-[`getSession` API](https://better-auth.com/docs/basic-usage). Pass the incoming
-headers so the library can validate its session cookie or bearer token.
+Pass incoming headers to Better Auth's
+[`getSession` API](https://better-auth.com/docs/basic-usage).
 
 ## Durable Upstash quota
 
-A shared store keeps limits consistent across server processes. Create an
-Upstash Redis database and add its `UPSTASH_REDIS_REST_URL` and
-`UPSTASH_REDIS_REST_TOKEN` values to your server environment. Install:
+Install a shared limiter so every server instance sees the same quota:
 
 **npm**
 
@@ -136,9 +120,8 @@ npm install @upstash/ratelimit @upstash/redis
 pnpm add @upstash/ratelimit @upstash/redis
 ```
 
-Create the limiter once, outside the request callback, so warm serverless
-instances can reuse it. The subject namespace prevents collisions with other
-application quotas.
+Add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to the server
+environment, then create the limiter once outside the request callback:
 
 ```ts
 import { Ratelimit } from "@upstash/ratelimit";
@@ -164,7 +147,6 @@ rateLimit: async ({ subject }) => {
 },
 ```
 
-The handler turns the denied result into `429` and a `Retry-After` header.
-Choose limits that fit your app’s expected usage. If the quota store is
-unavailable, reject the request rather than issuing unlimited credentials. This
-example propagates the store error so the handler rejects the request.
+The handler turns a denied result into `429` with `Retry-After`. If the quota
+store fails, propagate the error so the handler does not issue an unmetered
+credential.

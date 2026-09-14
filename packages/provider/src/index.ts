@@ -114,6 +114,28 @@ export function reportUnhandledError(error: unknown): void {
   }
 }
 
+export interface VoiceTokenAuthorization {
+  readonly subject: string;
+}
+
+export type VoiceTokenRateLimitResult =
+  | { readonly allowed: true }
+  | { readonly allowed: false; readonly retryAfterSeconds?: number };
+
+export interface VoiceTokenHandlerContext {
+  readonly request: Request;
+  readonly subject: string;
+  readonly model: string;
+}
+
+export interface VoiceTokenIssuedMetadata {
+  readonly provider: string;
+  readonly subject: string;
+  readonly model: string;
+  /** Token expiration as Unix epoch time in milliseconds. */
+  readonly expiresAt?: number;
+}
+
 export interface VoiceEndpointingOptions {
   silenceMs: number;
 }

@@ -896,7 +896,7 @@ function LabField({
         <button
           className="voice-lab__voice-button"
           aria-label={`${configuration.activationMode === "hold" ? "Hold to dictate into" : "Toggle dictation for"} ${label}`}
-          {...voice.triggerProps}
+          {...voice.getTriggerProps()}
         >
           <span aria-hidden="true" />
           {configuration.activationMode === "hold" ? "Hold to speak" : "Speak"}
@@ -932,11 +932,11 @@ function BareField({
     onEvent: (event) =>
       log("unstyled", event.type, normalizeSessionEventDetail(event)),
   });
-  const { status, targetRef, triggerProps } = voice;
+  const { getTriggerProps, status, targetRef } = voice;
   return (
     <div className="voice-lab__bare">
       <input ref={targetRef} aria-label="Unstyled voice input" />
-      <button {...triggerProps}>Speak</button>
+      <button {...getTriggerProps()}>Speak</button>
       <output>{status}</output>
     </div>
   );

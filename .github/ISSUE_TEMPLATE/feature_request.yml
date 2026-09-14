@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest an improvement to VoiceInput
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description:
+        What are you trying to accomplish, and what makes it difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the API or behavior you would like to use.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any workarounds or other approaches you tried.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description:
+        Add code samples, screenshots, or related links if they help explain the
+        request.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label:
+            I searched for an existing issue or discussion that covers this
+            request.
+          required: true

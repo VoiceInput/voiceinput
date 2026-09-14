@@ -84,8 +84,8 @@ interim feedback. See [provider certification](../provider-certification.md).
 
 ## Migration and remaining external verification
 
-Read the [editing contract](../editing-contract.md) and
-[form recipes](../form-integration.md). Custom adapters should emit stable
+Read the [editing contract](../../editing-contract.md) and
+[form recipes](../../form-integration.md). Custom adapters should emit stable
 `segmentId` values on every interim/final, including empty finals. Sequential
 legacy adapters receive generated session IDs, but cannot reliably deduplicate
 late finals without supplying IDs themselves. Wrappers need only `value` and

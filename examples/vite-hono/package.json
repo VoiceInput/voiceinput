@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build",
-    "dev:api": "tsx --env-file=.env.local watch server.ts",
+    "dev:api": "node --env-file=.env.local server.ts",
     "dev:web": "vite"
   },
   "dependencies": {
@@ -24,7 +24,6 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.1.1",
-    "tsx": "4.20.6",
     "typescript": "7.0.2",
     "vite": "8.2.2"
   }

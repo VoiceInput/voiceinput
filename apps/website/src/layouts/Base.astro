@@ -30,14 +30,18 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content="https://voiceinput.dev/social.png" />
+    <meta
+      property="og:image:alt"
+      content="VoiceInput dictation for React inputs and textareas"
+    />
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <div class="header-sentinel"></div>
     <header class="header wrap">
-      <a href="/" class="wordmark" aria-label="VoiceInput beta home"
-        ><BrandMark size={32} />VoiceInput<span class="beta">beta</span></a
+      <a href="/" class="wordmark" aria-label="VoiceInput home"
+        ><BrandMark size={32} />VoiceInput</a
       >
       <nav aria-label="Main navigation">
         <a href="/docs/overview/">Docs</a><a
@@ -66,9 +70,9 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
             >Read the quickstart</a
           >
           <p class="footer-support">
-            React 18.2+ and React 19. <a
+            React 18.2+ or 19. <a
               class="inline-link"
-              href="/docs/support-policy/">Desktop beta support</a
+              href="/docs/support-policy/">Browser support</a
             >
           </p>
         </div>
@@ -79,6 +83,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         <nav aria-label="Footer navigation">
           <a href="/docs/overview/">Documentation</a>
           <a href="https://github.com/VoiceInput/voiceinput">GitHub</a>
+          <a href="https://www.npmjs.com/package/@voiceinput/react">npm</a>
           <a href="https://github.com/VoiceInput/voiceinput/blob/main/LICENSE"
             >MIT license</a
           >

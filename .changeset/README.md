@@ -1,9 +1,9 @@
 # Changesets
 
 Run `pnpm changeset` for a user-visible package change. All six public packages
-are a fixed group until the first stable release, so a bump to one package bumps
-the complete suite to the same version.
+are a fixed group, so a bump to one package bumps the complete suite to the same
+version.
 
-Keep releases on the `0.x` line while the product-readiness criteria remain
-open. The protected publish workflow is intentionally manual; do not invoke it
-until the release checklist is complete and npm trusted publishers are set up.
+Publish stable 0.x releases on `latest`. The protected publish workflow is
+manual; follow the [release checklist](../docs/maintainers/release-checklist.md)
+after the version PR merges and npm trusted publishers are configured.

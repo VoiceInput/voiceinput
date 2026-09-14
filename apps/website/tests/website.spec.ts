@@ -191,7 +191,8 @@ test("accessible homepage and quickstart with real code", async ({ page }) => {
   await page.getByRole("link", { name: "Read the quickstart" }).first().click();
   await expect(page).toHaveURL(/\/docs\/quickstart\/?$/);
   await expect(page.locator("main")).toContainText("createOpenAITokenHandler");
-  await expect(page.locator("main")).toContainText("@voiceinput/react@next");
+  await expect(page.locator("main")).toContainText("@voiceinput/react");
+  await expect(page.locator("main")).not.toContainText("@next");
   const docs = await new AxeBuilder({ page }).analyze();
   expect(docs.violations).toEqual([]);
   await page
@@ -303,31 +304,32 @@ test("demo can stop early and restart", async ({ page }) => {
   await expect(field).toHaveValue(/^The meeting/);
 });
 
-test("package tabs sync across groups and persist from homepage to docs", async ({
+test("package tabs persist across pages and support keyboard selection", async ({
   page,
 }) => {
   await page.goto("/");
   await page.getByRole("tab", { name: "pnpm", exact: true }).click();
   await expect(
     page.getByRole("tabpanel", { name: "pnpm", exact: true }),
-  ).toContainText("pnpm add @voiceinput/react@next");
+  ).toContainText("pnpm add @voiceinput/react @voiceinput/openai");
   await page
     .getByRole("link", { name: "Read the quickstart", exact: true })
     .first()
     .click();
   await expect(
-    page.getByRole("tab", { name: "pnpm", exact: true }).first(),
+    page.getByRole("tab", { name: "pnpm", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await expect(
-    page.getByRole("tab", { name: "pnpm", exact: true }).last(),
-  ).toHaveAttribute("aria-selected", "true");
-  await expect(
-    page.getByRole("tabpanel", { name: "pnpm", exact: true }).last(),
-  ).toContainText("pnpm run dev");
-  await page.getByRole("tab", { name: "pnpm", exact: true }).first().focus();
+    page.getByRole("tabpanel", { name: "pnpm", exact: true }),
+  ).toContainText("pnpm add @voiceinput/react @voiceinput/openai");
+  await page.getByRole("tab", { name: "pnpm", exact: true }).focus();
   await page.keyboard.press("ArrowLeft");
   await expect(
-    page.getByRole("tab", { name: "npm", exact: true }).last(),
+    page.getByRole("tab", { name: "npm", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.goto("/docs/nextjs/");
+  await expect(
+    page.getByRole("tab", { name: "npm", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
 });
 
@@ -346,7 +348,7 @@ test("copy copies the selected command without labels", async ({ page }) => {
   await page.getByRole("button", { name: "Copy pnpm install command" }).click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-copied",
-    "pnpm add @voiceinput/react@next @voiceinput/openai@next",
+    "pnpm add @voiceinput/react @voiceinput/openai",
   );
   await page.goto("/docs/quickstart/");
   await page
@@ -356,7 +358,7 @@ test("copy copies the selected command without labels", async ({ page }) => {
     .click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-copied",
-    "pnpm add @voiceinput/react@next @voiceinput/openai@next",
+    "pnpm add @voiceinput/react @voiceinput/openai",
   );
 });
 
@@ -413,8 +415,11 @@ test("the text display mode toggles from the menu, keeps the draft, and exposes 
   await page.goto("/");
   const status = page.locator(".demo-status:visible");
   await expect(status).toContainText("Live demo");
-  await expect(status).toContainText(
-    "20 seconds. Audio is relayed to OpenAI and not stored.",
+  await expect(status).toContainText("Record up to 20 seconds.");
+  const disclosure = page.locator(".hero-demo > .demo-disclosure");
+  await expect(disclosure).toContainText("The demo relays audio");
+  await expect(disclosure).toContainText(
+    "It stores neither audio nor transcripts",
   );
   const field = page.getByRole("textbox", { name: "Try voice input" });
   await field.fill("The designs are ready to review.");

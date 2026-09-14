@@ -68,7 +68,7 @@ describe("React controls", () => {
         }}
       >
         {(voice) => {
-          start = voice.start;
+          start = () => voice.start();
           return voice.status;
         }}
       </VoiceButton>,
@@ -251,6 +251,7 @@ describe("React controls", () => {
 
     const button = getButton("Start voice input");
     await waitForEnabled(button);
+    expect(button.dataset["voiceinputError"]).toBeUndefined();
     expect(buttonRef).toBe(button);
     expect(button.name).toBe("voice-trigger");
     expect(button.classList.contains("custom-trigger")).toBe(true);
@@ -287,6 +288,15 @@ describe("React controls", () => {
       ),
     );
     expect(button.dataset["voiceinputError"]).toBe("provider-error");
+
+    await act(async () => {
+      button.click();
+      await fake.controller.waitForSession(1);
+    });
+    await vi.waitFor(() =>
+      expect(button.dataset["voiceinputStatus"]).toBe("listening"),
+    );
+    expect(button.dataset["voiceinputError"]).toBeUndefined();
   });
 
   it("lets a consumer prevent the component's default trigger action", async () => {

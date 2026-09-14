@@ -1364,6 +1364,54 @@ describe("duration limits", () => {
     await session.stop();
   });
 
+  it("assigns segment-prefixed IDs when a provider omits segment identity", async () => {
+    let streamController:
+      | ReadableStreamDefaultController<VoiceInputProviderV1StreamPart>
+      | undefined;
+    const provider: VoiceInputProviderV1 = {
+      specificationVersion: "v1",
+      provider: "implicit-segments",
+      modelId: "test",
+      sampleRate: 24_000,
+      validateOptions() {},
+      doOpen() {
+        const stream = new ReadableStream<VoiceInputProviderV1StreamPart>({
+          start(controller) {
+            streamController = controller;
+          },
+        });
+        return Promise.resolve({
+          stream,
+          sendAudio() {},
+          finish() {
+            streamController?.close();
+          },
+          abort() {
+            streamController?.close();
+          },
+        });
+      },
+    };
+    const audio = createFakeAudioSource();
+    const session = createVoiceInputSession({
+      provider,
+      audioSource: audio.audioSource,
+    });
+    const events: VoiceInputSessionEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    await session.start();
+    streamController?.enqueue({ type: "final", text: "first" });
+    streamController?.enqueue({ type: "final", text: "second" });
+    await waitFor(() =>
+      expect(events.filter((event) => event.type === "final")).toHaveLength(2),
+    );
+    expect(events.filter((event) => event.type === "final")).toEqual([
+      expect.objectContaining({ segmentId: "segment:0" }),
+      expect.objectContaining({ segmentId: "segment:1" }),
+    ]);
+    await session.stop();
+  });
+
   it("warns immediately for a short session and stops at the limit", async () => {
     vi.useFakeTimers();
     const { session, events } = createSession({ maxDurationMs: 1_000 });

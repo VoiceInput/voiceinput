@@ -14,13 +14,13 @@ as your React package:
 **npm**
 
 ```bash
-npm install @voiceinput/core@next
+npm install @voiceinput/core
 ```
 
 **pnpm**
 
 ```bash
-pnpm add @voiceinput/core@next
+pnpm add @voiceinput/core
 ```
 
 Create a build script that writes the matching audio processor to your public

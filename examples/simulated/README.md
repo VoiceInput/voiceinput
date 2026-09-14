@@ -1,6 +1,8 @@
 # Simulated VoiceInput examples
 
-Run from the repository root:
+This example runs only inside the VoiceInput pnpm workspace because its
+`workspace:*` dependencies cannot be installed with npm. Run from the repository
+root:
 
 ```sh
 pnpm install

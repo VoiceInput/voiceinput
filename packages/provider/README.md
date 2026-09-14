@@ -10,13 +10,13 @@ testing that interface. React application developers usually need only
 **npm**
 
 ```bash
-npm install @voiceinput/provider@next
+npm install @voiceinput/provider
 ```
 
 **pnpm**
 
 ```bash
-pnpm add @voiceinput/provider@next
+pnpm add @voiceinput/provider
 ```
 
 ## Provider contract
@@ -36,6 +36,7 @@ const provider: VoiceInputProviderV1 = {
 
   async doOpen(options) {
     // Return a session that accepts mono PCM16 and emits normalized parts.
+    throw new Error("Implement the provider transport before use.");
   },
 };
 ```
@@ -160,6 +161,8 @@ Main entry point:
 - `VoiceInputError`
 - `getVoiceInputErrorMessage`
 - `VoiceInputErrorCode`, `VoiceInputErrorOptions`
+- `VoiceTokenAuthorization`, `VoiceTokenRateLimitResult`
+- `VoiceTokenHandlerContext`, `VoiceTokenIssuedMetadata`
 - `VoiceEndpointingOptions`, `VoiceTranscriptionOptions`
 - `VoiceInputProviderV1`
 - `VoiceInputProviderV1CallOptions`
@@ -199,6 +202,18 @@ strictly sequential custom providers; without it, each final advances an
 implicit segment and duplicate finals cannot be identified reliably. New
 adapters should always implement segment identity and use the published
 conformance cases.
+
+The official adapters map their provider events as follows:
+
+- OpenAI uses the Realtime transcription item ID. It buffers completed items so
+  finals are emitted in item order.
+- ElevenLabs assigns one sequential ID to each pending commit. Partial results
+  revise that segment, and `committed_transcript` closes it; `final_transcript`
+  is informational.
+- Deepgram uses the result's audio start boundary. `is_final` closes that
+  segment, while `speech_final` marks the end of detected speech.
+
+## Audio backpressure
 
 `sendAudio` may return a promise for backpressure. Bound transport queues and
 honor abort while waiting; never silently drop audio. The official adapters use

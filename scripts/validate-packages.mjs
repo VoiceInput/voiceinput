@@ -184,6 +184,10 @@ if (!stylesheet.endsWith("/styles.css")) {
 
 const typeConsumer = `
 import type {
+  VoiceTokenAuthorization,
+  VoiceTokenHandlerContext,
+  VoiceTokenIssuedMetadata,
+  VoiceTokenRateLimitResult,
   VoiceInputProviderV1,
   VoiceInputProviderV1Session,
 } from "@voiceinput/provider";
@@ -191,14 +195,32 @@ import {
   createFakeVoiceInputProvider,
   createVoiceInputProviderV1ConformanceCases,
 } from "@voiceinput/provider/test";
-import {
-  createVoiceInputSession,
-  type VoiceAudioSource,
-} from "@voiceinput/core";
+import { createVoiceInputSession } from "@voiceinput/core";
 import type {
   UseVoiceInputOptions,
   UseVoiceInputResult,
+  VoiceAudioSource,
+  VoiceInputErrorCode,
+  VoiceInputInterimBehavior,
+  VoiceInputTextEngineSnapshot,
+  VoiceInputTextSelection,
+  VoiceInputTextSpan,
+  VoiceInputTextSpanState,
+  VoiceInputTextTarget,
+  VoiceInputTransformTranscript,
 } from "@voiceinput/react";
+import type {
+  CreateOpenAITokenHandlerOptions,
+  OpenAITokenIssuedMetadata,
+} from "@voiceinput/openai/server";
+import type {
+  CreateElevenLabsTokenHandlerOptions,
+  ElevenLabsTokenIssuedMetadata,
+} from "@voiceinput/elevenlabs/server";
+import type {
+  CreateDeepgramTokenHandlerOptions,
+  DeepgramTokenIssuedMetadata,
+} from "@voiceinput/deepgram/server";
 import "@voiceinput/openai";
 import "@voiceinput/openai/server";
 import "@voiceinput/elevenlabs";
@@ -211,12 +233,49 @@ declare const providerSession: VoiceInputProviderV1Session;
 declare const audioSource: VoiceAudioSource;
 declare const hookOptions: UseVoiceInputOptions;
 declare const hookResult: UseVoiceInputResult;
+declare const authorization: VoiceTokenAuthorization;
+declare const rateLimitResult: VoiceTokenRateLimitResult;
+declare const handlerContext: VoiceTokenHandlerContext;
+declare const issuedMetadata: VoiceTokenIssuedMetadata;
+declare const errorCode: VoiceInputErrorCode;
+declare const interimBehavior: VoiceInputInterimBehavior;
+declare const textSnapshot: VoiceInputTextEngineSnapshot;
+declare const selection: VoiceInputTextSelection;
+declare const span: VoiceInputTextSpan;
+declare const spanState: VoiceInputTextSpanState;
+declare const target: VoiceInputTextTarget;
+declare const transform: VoiceInputTransformTranscript;
+declare const openAIOptions: CreateOpenAITokenHandlerOptions;
+declare const openAIMetadata: OpenAITokenIssuedMetadata;
+declare const elevenLabsOptions: CreateElevenLabsTokenHandlerOptions;
+declare const elevenLabsMetadata: ElevenLabsTokenIssuedMetadata;
+declare const deepgramOptions: CreateDeepgramTokenHandlerOptions;
+declare const deepgramMetadata: DeepgramTokenIssuedMetadata;
 
 provider.validateOptions({ language: "en-CA" });
 providerSession.sendAudio(new Int16Array([1, 2]));
 createVoiceInputSession({ provider, audioSource });
 hookOptions.provider?.validateOptions({});
 hookResult.stop("user");
+hookResult.getTriggerProps({ "aria-label": "Speak" });
+authorization.subject;
+rateLimitResult.allowed;
+handlerContext.request;
+issuedMetadata.expiresAt;
+errorCode satisfies string;
+interimBehavior satisfies string;
+textSnapshot.value;
+selection.start;
+span.id;
+spanState satisfies string;
+target.value;
+transform("hello");
+openAIOptions.providerTokenUrl;
+openAIMetadata.expiresAt;
+elevenLabsOptions.providerTokenUrl;
+elevenLabsMetadata.provider;
+deepgramOptions.providerTokenUrl;
+deepgramMetadata.expiresAt;
 createFakeVoiceInputProvider({ sampleRate: 16_000 });
 createVoiceInputProviderV1ConformanceCases({
   createHarness: () => createFakeVoiceInputProvider({ autoOpen: false }),
@@ -364,7 +423,7 @@ function App() {
     }),
     React.createElement(
       "button",
-      { "aria-label": "trigger", ...voice.triggerProps },
+      { "aria-label": "trigger", ...voice.getTriggerProps() },
       "Speak",
     ),
   );

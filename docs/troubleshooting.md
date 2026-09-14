@@ -1,170 +1,109 @@
 # Troubleshooting
 
-If recording or text insertion fails, check `voice.error.code`. The same error
-is available in the `onError` callback. Use the code to choose a recovery
-action. Display `getVoiceInputErrorMessage(voice.error)` from
-`@voiceinput/react` when the user needs an explanation.
+Check `voice.error.code` when recording or insertion fails. The same error is
+available to `onError`.
 
-| Error or symptom                                | First thing to check                                          |
-| ----------------------------------------------- | ------------------------------------------------------------- |
-| `unsupported-browser` or disabled control       | HTTPS, microphone APIs, and AudioWorklet                      |
-| `user-activation-required`                      | Start again from a direct button or keyboard activation       |
-| `permission-denied`                             | Site and operating-system microphone permissions              |
-| `device-not-found` / `device-busy`              | Connected microphone and other apps using it                  |
-| `unauthorized`, HTTP 401/403                    | Sign-in session, cookies, and configured origin               |
-| `rate-limited`, HTTP 429                        | Retry delay and your app’s quota                              |
-| `token-error`                                   | Server environment variables and provider credential response |
-| `network-error`                                 | Token endpoint, WebSocket connection, and CSP                 |
-| `audio-error`                                   | Microphone capture and AudioWorklet loading                   |
-| `provider-error`                                | Provider settings, server logs, and provider status           |
-| `invalid-configuration` / `unsupported-feature` | Option values and the selected provider’s supported settings  |
+| Error or symptom                                | First thing to check                                |
+| ----------------------------------------------- | --------------------------------------------------- |
+| `unsupported-browser` or disabled control       | HTTPS, microphone APIs, and AudioWorklet            |
+| `user-activation-required`                      | Start again from a direct button or keyboard action |
+| `permission-denied`                             | Site and operating-system microphone permissions    |
+| `device-not-found` / `device-busy`              | Connected microphone and other apps using it        |
+| `unauthorized`, HTTP 401/403                    | Sign-in session, cookies, and configured origin     |
+| `rate-limited`, HTTP 429                        | Retry delay and the application's quota             |
+| `token-error`                                   | Server environment and provider credential response |
+| `network-error`                                 | Token endpoint, WebSocket, proxy, and CSP           |
+| `audio-error`                                   | Microphone capture and AudioWorklet loading         |
+| `provider-error`                                | Provider status and server diagnostics              |
+| `invalid-configuration` / `unsupported-feature` | The selected [provider's options](providers.md)     |
 
-Inspect `error.message` and `error.cause` in local developer diagnostics when
-you need more detail. Do not display those diagnostic values to end users.
+Display `getVoiceInputErrorMessage(error)` from `@voiceinput/react` when the
+user needs an explanation. Keep `error.message` and `error.cause` for local
+diagnostics because they can contain implementation detail.
 
-## The control is disabled or `isSupported` is false
+## The control is disabled
 
-VoiceInput requires all of the following:
+VoiceInput needs a secure context, `navigator.mediaDevices.getUserMedia`,
+`AudioContext`, and `AudioWorklet`. Localhost is normally treated as secure for
+development. `getBrowserVoiceInputSupport()` from `@voiceinput/core` lists
+missing capabilities.
 
-- a secure context (`https:`), except browser localhost exceptions
-- `navigator.mediaDevices.getUserMedia`
-- `AudioContext`
-- `AudioWorklet`
-
-Use `getBrowserVoiceInputSupport()` from `@voiceinput/core` to list missing
-capabilities. Do not attempt microphone access from an insecure embedded frame.
-If the application is framed, verify the top-level `Permissions-Policy` allows
+For an embedded application, confirm the top-level `Permissions-Policy` allows
 microphone access for the frame's origin.
 
 ## Permission is denied
 
-`user-activation-required` means the browser requires another direct activation
-before it can start audio. `permission-denied` means the browser or operating
-system rejected access.
-
-- Trigger recording from a real click, pointer press, Enter, or Space event.
+- Start from a real click, pointer press, Enter, or Space action.
 - Check the site's microphone permission in browser settings.
 - Check the operating system's microphone privacy settings.
-- After changing permission, reload the page; browser behavior after a denial
-  differs.
-- On iOS, also verify Safari's per-site microphone setting.
+- Reload after changing a denied permission if the browser requires it.
+- On iOS, check Safari's per-site microphone setting.
 
-VoiceInput requests permission only during activation. It does not prompt on
-mount.
+VoiceInput asks for permission only when recording starts.
 
 ## No microphone or a busy device
 
-- `device-not-found`: the browser found no usable audio input.
-- `device-busy`: another application, tab, exclusive driver, or operating system
-  policy prevented capture.
-- `audio-error`: capture or AudioWorklet setup failed for another reason.
+Reconnect the input, close applications that may hold it, and retry from a fresh
+user action. `device-not-found` means no usable input was available.
+`device-busy` means another application, driver, or policy blocked capture.
 
-Disconnect/reconnect the device, close competing applications, and retry from a
-fresh user gesture. Preserve `error.cause` in local development logs; do not
-show raw browser errors to end users.
+## Safari starts late or stops in the background
 
-## Safari starts late or does not start
+Start recording directly from a user action. Avoid calling `start()` from an
+effect or delayed callback that has lost user activation. On iOS, start on an
+HTTPS page in the foreground. If backgrounding interrupts capture, start a new
+session after returning instead of reusing the old one.
 
-Safari may create a suspended `AudioContext`. VoiceInput resumes it inside the
-activation path, but the start still must follow a user gesture. Avoid calling
-`start()` from an effect, timer, or promise chain that has lost user activation.
-
-On iOS Safari:
-
-- test on HTTPS or localhost
-- avoid starting while the page is backgrounded
-- expect capture to be interrupted when the tab or app backgrounds
-- let VoiceInput stop and start a new session after returning to the foreground
-  instead of assuming the old socket/microphone survived
+Safari microphone testing is manual and ongoing. See
+[browser support](support-policy.md) for the current scope.
 
 ## The token endpoint returns 401 or 403
 
-The required `authorize(request)` callback returned `null` or your surrounding
-server rejected the request.
-
-- Keep the token endpoint same-origin when using cookie sessions.
-- Confirm session cookies reach the endpoint.
+- Keep the endpoint same-origin when using cookie sessions.
+- Confirm the session cookie reaches the endpoint.
 - Check cookie `Secure`, `SameSite`, domain, and path settings.
-- If cross-origin cookie auth is intentional, pass the provider factory a custom
-  `fetch` wrapper using `credentials: "include"`, and configure credentialed
-  CORS for the exact browser origin. Official adapters otherwise use
-  `credentials: "same-origin"`.
+- Compare `Origin` to the configured application origin.
 
-Do not remove authorization to make the error disappear.
+For an intentional cross-origin session, supply a custom provider `fetch` with
+`credentials: "include"` and configure credentialed CORS for the exact browser
+origin. Official adapters otherwise use `credentials: "same-origin"`.
 
 ## Credentials expire or opening fails intermittently
 
-Official adapters request a fresh short-lived credential for every session. Do
-not cache token-handler responses; they include `Cache-Control: no-store`.
-
-If the browser receives a token but waits too long before opening the provider
-socket, start a new session so the adapter requests another credential. Confirm
-that server and client clocks are reasonably synchronized and that proxies are
-not caching `POST` responses.
+Official adapters request a fresh temporary credential for each session. Do not
+cache token-handler responses; they include `Cache-Control: no-store`. If a
+credential sits unused before the provider socket opens, begin a new session.
 
 ## Rate limits
 
-`rate-limited` may come from your application `rateLimit` hook or the provider.
-Use `error.retryAfterMs` when present. Production quota state should live in a
-durable shared store; an in-memory map is unsafe across serverless or
-multi-instance deployments.
+`rate-limited` may come from your application or the provider. Respect
+`error.retryAfterMs` when present. Store production quotas in shared durable
+storage so every server instance sees the same limit.
 
-## Network and provider failures
+## Network, provider, and audio failures
 
-- `network-error`: the token endpoint or realtime connection could not be
-  reached; it is normally retryable.
-- `token-error`: the endpoint or provider failed to issue a valid credential.
-- `provider-error`: the realtime provider rejected the session, sent malformed
-  output, or closed unexpectedly.
+Inspect the token endpoint status, server diagnostics, and browser WebSocket.
+Check CSP `connect-src`, proxies, VPNs, blockers, and provider status. Never log
+provider keys or issued credentials.
 
-Inspect the token endpoint's HTTP status and server logs, then the browser's
-WebSocket connection. Check CSP `connect-src`, proxies, VPNs, ad blockers, and
-provider status. Never log the provider key or issued client credential.
+If capture reports `audio-error`, check for a blocked AudioWorklet request. A
+strict policy can use the documented
+[same-origin worklet](content-security-policy.md).
 
-If microphone permission succeeds but setup reports `audio-error`, check for a
-blocked AudioWorklet request. The default path needs `blob:` in the effective
-script policy; a strict policy can use the documented
-[same-origin worklet path](content-security-policy.md) instead.
-
-VoiceInput preserves provider-finalized text already received. It discards
-untrusted provisional text if graceful provider finalization times out.
-
-## An option fails before the permission prompt
-
-This is intentional. Core and adapter validation runs before audio preparation.
-`invalid-configuration` means the value is malformed. `unsupported-feature`
-means the value is well formed but the selected model/provider cannot implement
-that portable option faithfully, including provider-specific capability limits.
-
-Treat `code` as the stable branching contract. `error.message` and `cause` are
-diagnostic and may change between releases. `provider`, `retryable`, and
-`retryAfterMs` add provider identity and retry guidance. Use
-`getVoiceInputErrorMessage(error)` for safe, stable user-facing copy.
-
-Review the selected provider README:
-
-- [OpenAI](../packages/openai/README.md)
-- [ElevenLabs](../packages/elevenlabs/README.md)
-- [Deepgram](../packages/deepgram/README.md)
+VoiceInput keeps final text already received. If graceful provider finalization
+times out, it preserves the last interim text as a fallback in the field and
+`finalTranscript`.
 
 ## Text appears in the wrong place
 
 - Spread `voice.getTriggerProps()` onto the real activation button so selection
   is captured before focus changes.
-- For native controlled fields using the hook, pass `value` and `onValueChange`
-  and keep the field’s ordinary `onChange` handler for typing. Controlled
-  `VoiceInput` and `VoiceTextarea` wrappers use `onValueChange` for both typing
-  and dictation; they do not need a second state setter.
-- Do not use unsupported input types such as `email`, `number`, or `date`.
-- If the user edits or moves the caret during dictation, VoiceInput deliberately
-  freezes text it can no longer prove ownership of and re-anchors later speech.
+- Attach `voice.targetRef` to a supported native input or textarea.
+- Keep a controlled native field's ordinary `onChange` and pass `value` with
+  `onValueChange` to the hook.
+- Avoid unsupported input types such as `email`, `number`, and `date`.
 
-Use `voice.getTextSnapshot()` in a development inspector to see the current
-selection and owned spans.
-
-## Development playground login or quota behavior
-
-The repository playgrounds use a loopback-only signed cookie fixture and
-maintainer controls for unauthorized and expired states. The fixture is disabled
-in production and is **not production authentication or rate limiting**.
-Application integrations must use their real identity and durable quota systems.
+If the user edits or moves the caret during dictation, VoiceInput freezes text
+it can no longer prove ownership of and inserts later phrases at the new caret.
+Use `voice.getTextSnapshot()` in development to inspect the selection and owned
+spans.

@@ -489,7 +489,6 @@ export function useVoiceInputInternal(
     () => ({
       ...snapshot,
       targetRef,
-      triggerProps,
       getTriggerProps,
       isSupported,
       getTextSnapshot,
@@ -512,7 +511,6 @@ export function useVoiceInputInternal(
       stop,
       targetRef,
       toggle,
-      triggerProps,
     ],
   );
 }

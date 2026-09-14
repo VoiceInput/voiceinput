@@ -1,25 +1,22 @@
 # `@voiceinput/deepgram`
 
-Use Deepgram to transcribe audio from your React fields. You need a provider API
-key and an authenticated server route. The browser uses temporary credentials;
-your long-lived key stays on the server.
-
-For a full application example, follow the
-[quickstart](../../docs/quickstart.md) or an
-[integration guide](../../docs/overview.md#choose-an-integration).
+Use Deepgram live transcription with VoiceInput. Keep the long-lived provider
+key on the server and give the browser a temporary credential through an
+authenticated route. Follow the [quickstart](../../docs/quickstart.md) for a
+complete application.
 
 ## Install
 
 **npm**
 
 ```bash
-npm install @voiceinput/react@next @voiceinput/deepgram@next
+npm install @voiceinput/react @voiceinput/deepgram
 ```
 
 **pnpm**
 
 ```bash
-pnpm add @voiceinput/react@next @voiceinput/deepgram@next
+pnpm add @voiceinput/react @voiceinput/deepgram
 ```
 
 ## Browser adapter
@@ -32,23 +29,27 @@ const provider = deepgram({
 });
 ```
 
+Pass `provider` to `VoiceInputProvider` or directly to `useVoiceInput`.
+
 ## Server token handler
 
-Keep this code in a server route. `authenticate(request)` below represents your
-existing authentication function, not a VoiceInput export. It must validate the
-request and return a user or `null`. For cookie sessions, also validate the
-configured origin. Copy the complete route from the
-[quickstart](../../docs/quickstart.md#3-create-the-token-route) or use an
-[authentication recipe](../../docs/authentication-recipes.md).
+Keep this code in a server route. Add your session and origin checks in
+`authorize`; see the
+[authentication recipes](../../docs/authentication-recipes.md) for complete
+examples.
 
 ```ts
 import { createDeepgramTokenHandler } from "@voiceinput/deepgram/server";
+import { getCurrentUser } from "@/lib/auth"; // your existing session check
+
+const appOrigin = new URL(process.env.APP_ORIGIN!).origin;
 
 export const POST = createDeepgramTokenHandler({
   apiKey: process.env.DEEPGRAM_API_KEY!,
   ttlSeconds: 30,
   authorize: async (request) => {
-    const user = await authenticate(request);
+    if (request.headers.get("origin") !== appOrigin) return null;
+    const user = await getCurrentUser(request);
     return user ? { subject: user.id } : null;
   },
 });
@@ -61,29 +62,25 @@ rate-limit callbacks receive independent request bodies. If `onTokenIssued`
 throws, token delivery fails closed.
 
 The default `ttlSeconds` is 30; overrides must be integers from 1 to 3600. Use
-the shortest practical lifetime—the token only needs to remain valid for the
-WebSocket handshake. Deepgram grant tokens carry `usage::write` across core
-voice APIs rather than a speech-to-text-only scope. Isolate the backing Member
-key in a dedicated project, apply project spending controls, and use separate
-projects/keys for production and testing. See Deepgram's official
-[token grant](https://developers.deepgram.com/reference/auth/tokens/grant) and
-[authentication guide](https://developers.deepgram.com/guides/fundamentals/token-based-authentication).
+the shortest practical lifetime because the token only needs to remain valid for
+the WebSocket handshake.
 
 ### `CreateDeepgramTokenHandlerOptions`
 
-| Option                    | Purpose                                                         |
-| ------------------------- | --------------------------------------------------------------- |
-| `apiKey`                  | Required server-only Deepgram key                               |
-| `authorize(request)`      | Required application authorization                              |
-| `model`                   | Default model; default `nova-3`                                 |
-| `allowedModels`           | Browser-selectable models; defaults to only `model`             |
-| `ttlSeconds`              | Temporary-token lifetime, default 30; 1–3600 seconds            |
-| `rateLimit(context)`      | Optional application quota check                                |
-| `onTokenIssued(metadata)` | Metadata-only callback with subject, model, and expiry duration |
-| `fetch`, `grantUrl`       | Transport/endpoint overrides                                    |
+| Option                      | Purpose                                                     |
+| --------------------------- | ----------------------------------------------------------- |
+| `apiKey`                    | Required server-only Deepgram key                           |
+| `authorize(request)`        | Required application authorization                          |
+| `model`                     | Default model; default `nova-3`                             |
+| `allowedModels`             | Browser-selectable models; defaults to only `model`         |
+| `ttlSeconds`                | Temporary-token lifetime, default 30; 1–3600 seconds        |
+| `rateLimit(context)`        | Optional application quota check                            |
+| `onTokenIssued(metadata)`   | Metadata-only callback with subject, model, and expiry time |
+| `fetch`, `providerTokenUrl` | Transport/endpoint overrides                                |
 
-`DeepgramTokenHandlerContext` contains `request`, `subject`, and `model`.
-`DeepgramTokenIssuedMetadata` also contains `expiresIn`.
+Callback context uses `VoiceTokenHandlerContext` from `@voiceinput/provider`.
+`DeepgramTokenIssuedMetadata` contains `provider: "deepgram"`, `subject`,
+`model`, and `expiresAt` as epoch milliseconds.
 
 ## Transcription options
 
@@ -105,9 +102,6 @@ prop. Provider-only options belong in the browser factory.
 - `endpointing`: provider default when omitted, disabled when `false`, or the
   supplied positive integer silence threshold
 - `smartFormat` and `punctuate`: both default to `true`
-
-Invalid or unsupported settings fail before microphone permission with distinct
-error codes.
 
 ### `DeepgramVoiceInputProviderOptions`
 
@@ -133,10 +127,10 @@ Server-only entry point:
 
 - `createDeepgramTokenHandler(options)`
 - `CreateDeepgramTokenHandlerOptions`
-- `DeepgramAuthorization`
-- `DeepgramRateLimitResult`
-- `DeepgramTokenHandlerContext`
 - `DeepgramTokenIssuedMetadata`
+
+Shared authorization, rate-limit, handler-context, and issued-metadata types
+come from `@voiceinput/provider`.
 
 ## Security
 
@@ -144,5 +138,12 @@ Import `/server` only from server code; the export is disabled under the browser
 condition. Never expose `DEEPGRAM_API_KEY` to the client. The browser uses the
 temporary JWT to stream audio directly to Deepgram.
 
-See the
-[secure integration guides](https://github.com/VoiceInput/voiceinput/blob/main/docs/vite-hono.md).
+Deepgram grant tokens carry `usage::write` across core voice APIs rather than a
+speech-to-text-only scope. Isolate the backing Member key in a dedicated
+project, apply spending controls, and use separate projects and keys for
+production and testing. See Deepgram's
+[token grant](https://developers.deepgram.com/reference/auth/tokens/grant) and
+[authentication guide](https://developers.deepgram.com/guides/fundamentals/token-based-authentication).
+
+See [how VoiceInput works](../../docs/overview.md#how-it-works) for the complete
+credential and audio security boundary.

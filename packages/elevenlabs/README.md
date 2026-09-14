@@ -1,25 +1,22 @@
 # `@voiceinput/elevenlabs`
 
-Use ElevenLabs Realtime Scribe to transcribe audio from your React fields. You
-need a provider API key and an authenticated server route. The browser uses
-temporary credentials; your long-lived key stays on the server.
-
-For a full application example, follow the
-[quickstart](../../docs/quickstart.md) or an
-[integration guide](../../docs/overview.md#choose-an-integration).
+Use ElevenLabs Realtime Scribe with VoiceInput. Keep the long-lived provider key
+on the server and give the browser a temporary credential through an
+authenticated route. Follow the [quickstart](../../docs/quickstart.md) for a
+complete application.
 
 ## Install
 
 **npm**
 
 ```bash
-npm install @voiceinput/react@next @voiceinput/elevenlabs@next
+npm install @voiceinput/react @voiceinput/elevenlabs
 ```
 
 **pnpm**
 
 ```bash
-pnpm add @voiceinput/react@next @voiceinput/elevenlabs@next
+pnpm add @voiceinput/react @voiceinput/elevenlabs
 ```
 
 ## Browser adapter
@@ -32,22 +29,26 @@ const provider = elevenlabs({
 });
 ```
 
+Pass `provider` to `VoiceInputProvider` or directly to `useVoiceInput`.
+
 ## Server token handler
 
-Keep this code in a server route. `authenticate(request)` below represents your
-existing authentication function, not a VoiceInput export. It must validate the
-request and return a user or `null`. For cookie sessions, also validate the
-configured origin. Copy the complete route from the
-[quickstart](../../docs/quickstart.md#3-create-the-token-route) or use an
-[authentication recipe](../../docs/authentication-recipes.md).
+Keep this code in a server route. Add your session and origin checks in
+`authorize`; see the
+[authentication recipes](../../docs/authentication-recipes.md) for complete
+examples.
 
 ```ts
 import { createElevenLabsTokenHandler } from "@voiceinput/elevenlabs/server";
+import { getCurrentUser } from "@/lib/auth"; // your existing session check
+
+const appOrigin = new URL(process.env.APP_ORIGIN!).origin;
 
 export const POST = createElevenLabsTokenHandler({
   apiKey: process.env.ELEVENLABS_API_KEY!,
   authorize: async (request) => {
-    const user = await authenticate(request);
+    if (request.headers.get("origin") !== appOrigin) return null;
+    const user = await getCurrentUser(request);
     return user ? { subject: user.id } : null;
   },
 });
@@ -61,17 +62,20 @@ Authorization and rate-limit callbacks receive independent request bodies. If
 
 ### `CreateElevenLabsTokenHandlerOptions`
 
-| Option                    | Purpose                                                  |
-| ------------------------- | -------------------------------------------------------- |
-| `apiKey`                  | Required server-only ElevenLabs key                      |
-| `authorize(request)`      | Required application authorization                       |
-| `model`                   | Default model; default `scribe_v2_realtime`              |
-| `allowedModels`           | Browser-selectable models; defaults to only `model`      |
-| `rateLimit(context)`      | Optional application quota check                         |
-| `onTokenIssued(metadata)` | Metadata-only callback with provider, subject, and model |
-| `fetch`, `tokenUrl`       | Transport/endpoint overrides                             |
+| Option                      | Purpose                                                  |
+| --------------------------- | -------------------------------------------------------- |
+| `apiKey`                    | Required server-only ElevenLabs key                      |
+| `authorize(request)`        | Required application authorization                       |
+| `model`                     | Default model; default `scribe_v2_realtime`              |
+| `allowedModels`             | Browser-selectable models; defaults to only `model`      |
+| `rateLimit(context)`        | Optional application quota check                         |
+| `onTokenIssued(metadata)`   | Metadata-only callback with provider, subject, and model |
+| `fetch`, `providerTokenUrl` | Transport/endpoint overrides                             |
 
-`ElevenLabsTokenHandlerContext` contains `request`, `subject`, and `model`.
+Callback context uses `VoiceTokenHandlerContext` from `@voiceinput/provider`.
+`ElevenLabsTokenIssuedMetadata` contains `provider: "elevenlabs"`, `subject`,
+and `model`. The handler omits the optional `expiresAt` field because the token
+is single use.
 
 ## Transcription options
 
@@ -91,8 +95,7 @@ prop. Provider-only options belong in the browser factory.
   when `false`, or VAD with a supplied 300–3000 ms silence threshold
 
 Vocabulary accepts at most 50 trimmed terms, each at most 20 characters and
-without line breaks. Invalid or unsupported settings fail before microphone
-permission with distinct error codes.
+without line breaks.
 
 ### `ElevenLabsVoiceInputProviderOptions`
 
@@ -125,10 +128,10 @@ Server-only entry point:
 
 - `createElevenLabsTokenHandler(options)`
 - `CreateElevenLabsTokenHandlerOptions`
-- `ElevenLabsAuthorization`
-- `ElevenLabsRateLimitResult`
-- `ElevenLabsTokenHandlerContext`
 - `ElevenLabsTokenIssuedMetadata`
+
+Shared authorization, rate-limit, handler-context, and issued-metadata types
+come from `@voiceinput/provider`.
 
 ## Security
 
@@ -136,5 +139,5 @@ Import `/server` only from server code; the export is disabled under the browser
 condition. Never expose `ELEVENLABS_API_KEY` to the client. The browser uses the
 single-use token to stream audio directly to ElevenLabs.
 
-See the
-[secure integration guides](https://github.com/VoiceInput/voiceinput/blob/main/docs/nextjs.md).
+See [how VoiceInput works](../../docs/overview.md#how-it-works) for the complete
+credential and audio security boundary.

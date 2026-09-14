@@ -2,6 +2,12 @@
   "name": "voiceinput",
   "version": "0.0.0",
   "private": true,
+  "description": "Add provider-agnostic voice input to React fields.",
+  "license": "MIT",
+  "homepage": "https://voiceinput.dev/",
+  "bugs": {
+    "url": "https://github.com/VoiceInput/voiceinput/issues"
+  },
   "type": "module",
   "repository": {
     "type": "git",

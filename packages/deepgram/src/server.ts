@@ -1,46 +1,40 @@
+import type {
+  VoiceTokenAuthorization,
+  VoiceTokenHandlerContext,
+  VoiceTokenIssuedMetadata,
+  VoiceTokenRateLimitResult,
+} from "@voiceinput/provider";
+
 import { DEEPGRAM_DEFAULT_MODEL } from "./session-config.js";
 
 const DEFAULT_GRANT_URL = "https://api.deepgram.com/v1/auth/grant";
 const DEFAULT_TTL_SECONDS = 30;
 const MAX_TOKEN_REQUEST_BYTES = 16 * 1024;
 
-export interface DeepgramAuthorization {
-  readonly subject: string;
-}
-
-export type DeepgramRateLimitResult =
-  | { readonly allowed: true }
-  | { readonly allowed: false; readonly retryAfterSeconds?: number };
-
-export interface DeepgramTokenHandlerContext {
-  readonly request: Request;
-  readonly subject: string;
-  readonly model: string;
-}
-
-export interface DeepgramTokenIssuedMetadata {
+export interface DeepgramTokenIssuedMetadata extends VoiceTokenIssuedMetadata {
   readonly provider: "deepgram";
-  readonly subject: string;
-  readonly model: string;
-  readonly expiresIn: number;
+  readonly expiresAt: number;
 }
 
 export interface CreateDeepgramTokenHandlerOptions {
   readonly apiKey: string;
   readonly authorize: (
     request: Request,
-  ) => PromiseLike<DeepgramAuthorization | null> | DeepgramAuthorization | null;
+  ) =>
+    | PromiseLike<VoiceTokenAuthorization | null>
+    | VoiceTokenAuthorization
+    | null;
   readonly model?: string;
   readonly allowedModels?: readonly string[];
   readonly ttlSeconds?: number;
   readonly rateLimit?: (
-    context: DeepgramTokenHandlerContext,
-  ) => PromiseLike<DeepgramRateLimitResult> | DeepgramRateLimitResult;
+    context: VoiceTokenHandlerContext,
+  ) => PromiseLike<VoiceTokenRateLimitResult> | VoiceTokenRateLimitResult;
   readonly onTokenIssued?: (
     metadata: DeepgramTokenIssuedMetadata,
   ) => PromiseLike<void> | void;
   readonly fetch?: typeof globalThis.fetch;
-  readonly grantUrl?: string;
+  readonly providerTokenUrl?: string;
 }
 
 export function createDeepgramTokenHandler(
@@ -60,7 +54,7 @@ export function createDeepgramTokenHandler(
   const apiKey = nonEmpty(options.apiKey, "apiKey");
   const ttlSeconds = validateTtl(options.ttlSeconds ?? DEFAULT_TTL_SECONDS);
   const fetchImplementation = options.fetch ?? globalThis.fetch;
-  const grantUrl = options.grantUrl ?? DEFAULT_GRANT_URL;
+  const providerTokenUrl = options.providerTokenUrl ?? DEFAULT_GRANT_URL;
 
   return async (request) => {
     if (request.method !== "POST") {
@@ -85,7 +79,7 @@ export function createDeepgramTokenHandler(
           "The requested Deepgram model is not allowed.",
         );
       }
-      const context: DeepgramTokenHandlerContext = {
+      const context: VoiceTokenHandlerContext = {
         request: copyRequest(request, requestBody),
         subject,
         model,
@@ -100,7 +94,7 @@ export function createDeepgramTokenHandler(
           retryAfter === undefined ? {} : { "Retry-After": String(retryAfter) },
         );
       }
-      const response = await fetchImplementation(grantUrl, {
+      const response = await fetchImplementation(providerTokenUrl, {
         method: "POST",
         headers: {
           Authorization: `Token ${apiKey}`,
@@ -129,7 +123,7 @@ export function createDeepgramTokenHandler(
         provider: "deepgram",
         subject,
         model,
-        expiresIn: token.expires_in,
+        expiresAt: Date.now() + token.expires_in * 1_000,
       });
       return Response.json(token, {
         headers: { "Cache-Control": "no-store" },

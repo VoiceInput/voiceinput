@@ -1,27 +1,18 @@
+import type {
+  VoiceTokenAuthorization,
+  VoiceTokenHandlerContext,
+  VoiceTokenIssuedMetadata,
+  VoiceTokenRateLimitResult,
+} from "@voiceinput/provider";
+
 import { ELEVENLABS_DEFAULT_MODEL } from "./session-config.js";
 
 const DEFAULT_TOKEN_URL =
   "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe";
 const MAX_TOKEN_REQUEST_BYTES = 16 * 1024;
 
-export interface ElevenLabsAuthorization {
-  readonly subject: string;
-}
-
-export type ElevenLabsRateLimitResult =
-  | { readonly allowed: true }
-  | { readonly allowed: false; readonly retryAfterSeconds?: number };
-
-export interface ElevenLabsTokenHandlerContext {
-  readonly request: Request;
-  readonly subject: string;
-  readonly model: string;
-}
-
-export interface ElevenLabsTokenIssuedMetadata {
+export interface ElevenLabsTokenIssuedMetadata extends VoiceTokenIssuedMetadata {
   readonly provider: "elevenlabs";
-  readonly subject: string;
-  readonly model: string;
 }
 
 export interface CreateElevenLabsTokenHandlerOptions {
@@ -29,19 +20,19 @@ export interface CreateElevenLabsTokenHandlerOptions {
   readonly authorize: (
     request: Request,
   ) =>
-    | PromiseLike<ElevenLabsAuthorization | null>
-    | ElevenLabsAuthorization
+    | PromiseLike<VoiceTokenAuthorization | null>
+    | VoiceTokenAuthorization
     | null;
   readonly model?: string;
   readonly allowedModels?: readonly string[];
   readonly rateLimit?: (
-    context: ElevenLabsTokenHandlerContext,
-  ) => PromiseLike<ElevenLabsRateLimitResult> | ElevenLabsRateLimitResult;
+    context: VoiceTokenHandlerContext,
+  ) => PromiseLike<VoiceTokenRateLimitResult> | VoiceTokenRateLimitResult;
   readonly onTokenIssued?: (
     metadata: ElevenLabsTokenIssuedMetadata,
   ) => PromiseLike<void> | void;
   readonly fetch?: typeof globalThis.fetch;
-  readonly tokenUrl?: string;
+  readonly providerTokenUrl?: string;
 }
 
 export function createElevenLabsTokenHandler(
@@ -60,7 +51,7 @@ export function createElevenLabsTokenHandler(
   }
   const apiKey = nonEmpty(options.apiKey, "apiKey");
   const fetchImplementation = options.fetch ?? globalThis.fetch;
-  const tokenUrl = options.tokenUrl ?? DEFAULT_TOKEN_URL;
+  const providerTokenUrl = options.providerTokenUrl ?? DEFAULT_TOKEN_URL;
 
   return async (request) => {
     if (request.method !== "POST") {
@@ -85,7 +76,7 @@ export function createElevenLabsTokenHandler(
           "The requested ElevenLabs model is not allowed.",
         );
       }
-      const context: ElevenLabsTokenHandlerContext = {
+      const context: VoiceTokenHandlerContext = {
         request: copyRequest(request, requestBody),
         subject,
         model,
@@ -100,7 +91,7 @@ export function createElevenLabsTokenHandler(
           retryAfter === undefined ? {} : { "Retry-After": String(retryAfter) },
         );
       }
-      const response = await fetchImplementation(tokenUrl, {
+      const response = await fetchImplementation(providerTokenUrl, {
         method: "POST",
         headers: { "xi-api-key": apiKey },
         signal: request.signal,

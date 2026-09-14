@@ -605,7 +605,7 @@ class VoiceInputSessionController implements VoiceInputSession {
 
     const segmentId =
       part.type === "interim" || part.type === "final"
-        ? (part.segmentId ?? `legacy:${run.implicitSegment}`)
+        ? (part.segmentId ?? `segment:${run.implicitSegment}`)
         : "";
     if (part.type === "interim" || part.type === "final") {
       if (typeof segmentId !== "string" || segmentId.length === 0)

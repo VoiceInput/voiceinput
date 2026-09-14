@@ -4,7 +4,8 @@ import { createDeepgramTokenHandler } from "./server.js";
 
 describe("createDeepgramTokenHandler", () => {
   it("authorizes, mints a bounded JWT, and audits without leaking credentials", async () => {
-    const upstream = vi.fn<typeof fetch>(async (_input, init) => {
+    const upstream = vi.fn<typeof fetch>(async (input, init) => {
+      expect(input).toBe("https://provider.example.test/token");
       expect(new Headers(init?.headers).get("Authorization")).toBe(
         "Token dg-server",
       );
@@ -16,6 +17,7 @@ describe("createDeepgramTokenHandler", () => {
         ignored: "private",
       });
     });
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
     const audit = vi.fn<(value: unknown) => void>();
     const handler = createDeepgramTokenHandler({
       apiKey: "dg-server",
@@ -23,6 +25,7 @@ describe("createDeepgramTokenHandler", () => {
       ttlSeconds: 45,
       onTokenIssued: audit,
       fetch: upstream,
+      providerTokenUrl: "https://provider.example.test/token",
     });
 
     const response = await handler(tokenRequest({}));
@@ -37,10 +40,11 @@ describe("createDeepgramTokenHandler", () => {
       provider: "deepgram",
       subject: "user-1",
       model: "nova-3",
-      expiresIn: 45,
+      expiresAt: 1_700_000_045_000,
     });
     expect(JSON.stringify(audit.mock.calls)).not.toContain("jwt_secret");
     expect(JSON.stringify(audit.mock.calls)).not.toContain("dg-server");
+    now.mockRestore();
   });
 
   it("rejects unauthorized, rate-limited, and disallowed requests before minting", async () => {

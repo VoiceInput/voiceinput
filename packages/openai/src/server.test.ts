@@ -5,7 +5,8 @@ import { createOpenAITokenHandler } from "./server.js";
 
 describe("createOpenAITokenHandler", () => {
   it("authorizes, rate limits, mints a scoped credential, and audits metadata", async () => {
-    const upstream = vi.fn<typeof fetch>(async (_input, init) => {
+    const upstream = vi.fn<typeof fetch>(async (input, init) => {
+      expect(input).toBe("https://provider.example.test/token");
       const headers = new Headers(init?.headers);
       expect(headers.get("Authorization")).toBe("Bearer sk-server");
       expect(headers.get("OpenAI-Safety-Identifier")).toBe("hashed-user");
@@ -43,6 +44,7 @@ describe("createOpenAITokenHandler", () => {
       safetyIdentifier: () => "hashed-user",
       onTokenIssued: audit,
       fetch: upstream,
+      providerTokenUrl: "https://provider.example.test/token",
     });
 
     const response = await handler(
@@ -63,7 +65,7 @@ describe("createOpenAITokenHandler", () => {
       provider: "openai",
       subject: "user-1",
       model: "gpt-live-transcribe",
-      expiresAt: 2_000_000_000,
+      expiresAt: 2_000_000_000_000,
     });
     expect(JSON.stringify(audit.mock.calls)).not.toContain("ek_ephemeral");
     expect(JSON.stringify(audit.mock.calls)).not.toContain("sk-server");

@@ -38,6 +38,25 @@ describe("release gate", () => {
     expect(plan.artifacts.map(({ name }) => name)).toEqual(PUBLIC_PACKAGES);
   });
 
+  it("accepts the stable 0.1.0 suite on latest", () => {
+    const state = validState();
+    state.expectedVersion = "0.1.0";
+    state.distTag = "latest";
+    state.packages = state.packages.map((package_) => ({
+      ...package_,
+      version: "0.1.0",
+    }));
+    state.artifacts = state.artifacts.map((artifact) => ({
+      ...artifact,
+      version: "0.1.0",
+    }));
+
+    expect(createReleasePlan(state)).toMatchObject({
+      version: "0.1.0",
+      distTag: "latest",
+    });
+  });
+
   it("blocks 0.0.0", () => {
     const state = validState();
     state.expectedVersion = "0.0.0";

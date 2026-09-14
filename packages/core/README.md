@@ -12,13 +12,13 @@ engine that inserts speech while preserving unrelated edits.
 **npm**
 
 ```bash
-npm install @voiceinput/core@next
+npm install @voiceinput/core
 ```
 
 **pnpm**
 
 ```bash
-pnpm add @voiceinput/core@next
+pnpm add @voiceinput/core
 ```
 
 ## Session
@@ -63,10 +63,10 @@ full run, releases acquired audio, reports a retryable `network-error`, and
 permits a fresh `start()`.
 
 Audio/provider shutdown has a `finalizationTimeoutMs` budget (15 seconds by
-default), including the final audio flush. A text transform runs afterward with
-its own `transformTimeoutMs` budget. If it expires, the session releases
-resources, promotes the last interim text, completes any text transform, returns
-to `idle`, and emits `stop` with reason `finalization-timeout`. The snapshot
+default), including the final audio flush. If finalization times out, the
+session releases resources, promotes the last interim text, runs any configured
+text transform under its separate `transformTimeoutMs` budget, returns to
+`idle`, and emits `stop` with reason `finalization-timeout`. The snapshot
 `finalTranscript` includes that preserved fallback; it is not a guarantee that
 the provider finalized every phrase. Errors while flushing audio or finalizing
 after Stop preserve text in the same way: the session completes the text engine,
@@ -134,7 +134,15 @@ context, media devices, `getUserMedia`, `AudioContext`, and `AudioWorklet`.
 unrelated user content:
 
 ```ts
+let value = textarea.value;
+
 const engine = createVoiceInputTextEngine({
+  controlled: {
+    getValue: () => value,
+    onValueChange: (nextValue) => {
+      value = nextValue;
+    },
+  },
   interimBehavior: "inline",
   transformTranscript: async (text) => text.trim(),
   transformTimeoutMs: 10_000,
@@ -155,8 +163,8 @@ spans. If a user edits or moves the caret, it freezes text it can no longer
 prove ownership of and re-anchors later speech. Uncontrolled targets receive a
 bubbling native `input` event.
 
-For a controlled target, provide `getValue` and `onValueChange`, then pass each
-committed application value to `reconcileControlledValue`.
+For a controlled target, pass each committed application value to
+`reconcileControlledValue`.
 
 `interimBehavior: "inline"` inserts replaceable interim text. `"expose"` keeps
 interim text out of the field while still reporting it in snapshots.
@@ -176,6 +184,7 @@ Session and errors:
 
 Browser audio:
 
+- `VOICE_INPUT_AUDIO_WORKLET_SOURCE`
 - `createBrowserAudioSource`, `CreateBrowserAudioSourceOptions`
 - `getBrowserVoiceInputSupport`
 - `BrowserVoiceInputSupport`, `BrowserVoiceInputCapability`
@@ -191,7 +200,8 @@ Text ownership:
 - `VoiceInputControlledTextBinding`
 - `VoiceInputInterimBehavior`
 - `VoiceInputTransformTranscript`
-- `VoiceInputTextCompletion`
+- `VoiceInputTextCompletion`, `VoiceInputTextLimit`
+- `VoiceInputTextEngineEvent`, `VoiceInputTextWritableChange`
 
 ## Provider boundary
 
@@ -200,25 +210,9 @@ tokens, and settings belong in adapter factories, not core options. See the
 [`@voiceinput/provider` guide](https://github.com/VoiceInput/voiceinput/blob/main/packages/provider/README.md)
 to implement an adapter.
 
-## Configuration, segments and history
-
-`session.updateOptions(options)` supplies configuration for the next recording;
-active recording configuration is unchanged. `textEngine.updateOptions(options)`
-similarly samples interim and transform settings on the next `begin()`.
-
-Pass the provider's `segmentId` as the second argument to `applyInterim` and
-`applyFinal`. Official adapters provide identifiers for every transcript part.
-Omitting it retains sequential compatibility: every final closes the current
-implicit segment. This legacy mode cannot distinguish duplicate final delivery.
-
 The text engine exposes `undo()`, `redo()`, `isWritable()`, and `subscribe()`.
 Subscribers receive `writable-change`, `text-limit`, `target-unavailable`, and
-`reset` events. See the [editing contract](../../docs/editing-contract.md) for
-behavior.
-
-Capture starts while connecting and queues up to fifteen seconds of PCM in
-memory. It drains in order once connected; overflow or sustained transport
-stalls stop with a recoverable error. Recording duration includes buffered
-capture. Backgrounding stops capture by default; unexpected AudioContext or
-track interruption is a recoverable audio error. Audio and transcript data are
-never persisted by core.
+`reset` events. See [editing and undo](../../docs/editing-contract.md) for the
+field behavior and
+[`@voiceinput/provider`](../provider/README.md#segment-identity) for segment
+identity and audio backpressure.

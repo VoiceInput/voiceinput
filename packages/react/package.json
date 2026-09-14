@@ -3,12 +3,16 @@
   "version": "0.1.0-beta.2",
   "description": "Headless React voice input with cursor-safe editing and accessible controls.",
   "keywords": [
-    "voice-input",
+    "voiceinput",
+    "dictation",
     "speech-to-text",
-    "transcription",
-    "react"
+    "voice",
+    "microphone",
+    "realtime",
+    "react",
+    "hook"
   ],
-  "homepage": "https://voiceinput.dev/docs/react",
+  "homepage": "https://voiceinput.dev/docs/react/",
   "bugs": {
     "url": "https://github.com/VoiceInput/voiceinput/issues"
   },
@@ -18,6 +22,9 @@
   ],
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/VoiceInput/voiceinput.git",
@@ -44,7 +51,8 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./styles.css": "./styles.css"
+    "./styles.css": "./styles.css",
+    "./package.json": "./package.json"
   },
   "dependencies": {
     "@voiceinput/core": "workspace:*",

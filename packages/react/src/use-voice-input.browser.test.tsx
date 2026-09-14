@@ -751,7 +751,7 @@ function ControlledField({
     onValueChange: setValue,
     onStatusChange: onStatus,
   });
-  const { targetRef, triggerProps } = voice;
+  const { targetRef } = voice;
   return (
     <>
       <textarea
@@ -760,7 +760,7 @@ function ControlledField({
         value={value}
         onChange={(event) => setValue(event.currentTarget.value)}
       />
-      <button aria-label="controlled trigger" {...triggerProps}>
+      <button aria-label="controlled trigger" {...voice.getTriggerProps()}>
         Speak
       </button>
     </>
@@ -774,14 +774,14 @@ function InspectableField({
   expose: (readSnapshot: () => VoiceInputTextEngineSnapshot) => void;
   onEvent: (event: VoiceInputSessionEvent) => void;
 }): React.JSX.Element {
-  const { getTextSnapshot, targetRef, triggerProps } = useVoiceInput({
+  const { getTextSnapshot, getTriggerProps, targetRef } = useVoiceInput({
     onEvent,
   });
   useEffect(() => expose(getTextSnapshot), [expose, getTextSnapshot]);
   return (
     <>
       <textarea aria-label="inspectable" ref={targetRef} />
-      <button aria-label="inspectable trigger" {...triggerProps}>
+      <button aria-label="inspectable trigger" {...getTriggerProps()}>
         Speak
       </button>
     </>
@@ -798,13 +798,14 @@ function CallbackField({
   onChange: (text: string) => void;
 }): React.JSX.Element {
   const [value, setValue] = useState("");
-  const { targetRef, triggerProps, transcript } = useVoiceInput({
+  const voice = useVoiceInput({
     value,
     onValueChange: setValue,
     onFinalTranscriptPart: onFinalPart,
     onFinalTranscript: onFinal,
     onTranscriptChange: onChange,
   });
+  const { targetRef, transcript } = voice;
   return (
     <>
       <textarea
@@ -813,7 +814,7 @@ function CallbackField({
         value={value}
         onChange={(event) => setValue(event.currentTarget.value)}
       />
-      <button aria-label="callback trigger" {...triggerProps}>
+      <button aria-label="callback trigger" {...voice.getTriggerProps()}>
         Speak
       </button>
       <output aria-label="callback transcript">{transcript}</output>
@@ -841,7 +842,7 @@ function UncontrolledField({
     ...(provider === undefined ? {} : { provider }),
     ...(audioSource === undefined ? {} : { audioSource }),
   });
-  const { targetRef, triggerProps } = voice;
+  const { targetRef } = voice;
   return (
     <>
       <textarea
@@ -850,7 +851,7 @@ function UncontrolledField({
         ref={targetRef}
         onInput={onInput}
       />
-      <button aria-label={`${name} trigger`} {...triggerProps}>
+      <button aria-label={`${name} trigger`} {...voice.getTriggerProps()}>
         Speak
       </button>
     </>
@@ -859,11 +860,12 @@ function UncontrolledField({
 
 function InlineTransformField(): React.JSX.Element {
   const [value, setValue] = useState("");
-  const { targetRef, triggerProps } = useVoiceInput({
+  const voice = useVoiceInput({
     value,
     onValueChange: setValue,
     transformTranscript: async (transcript) => transcript.toUpperCase(),
   });
+  const { targetRef } = voice;
   return (
     <>
       <textarea
@@ -872,7 +874,7 @@ function InlineTransformField(): React.JSX.Element {
         value={value}
         onChange={(event) => setValue(event.currentTarget.value)}
       />
-      <button aria-label="transform trigger" {...triggerProps}>
+      <button aria-label="transform trigger" {...voice.getTriggerProps()}>
         Speak
       </button>
     </>
@@ -890,12 +892,13 @@ function ReconfigurableField({
 }): React.JSX.Element {
   const [provider, setProvider] = useState(firstProvider);
   const [value, setValue] = useState("");
-  const { targetRef, triggerProps } = useVoiceInput({
+  const voice = useVoiceInput({
     provider,
     audioSource,
     value,
     onValueChange: setValue,
   });
+  const { targetRef } = voice;
   return (
     <>
       <textarea
@@ -904,7 +907,7 @@ function ReconfigurableField({
         value={value}
         onChange={(event) => setValue(event.currentTarget.value)}
       />
-      <button aria-label="reconfigured trigger" {...triggerProps}>
+      <button aria-label="reconfigured trigger" {...voice.getTriggerProps()}>
         Speak
       </button>
       <button
@@ -946,14 +949,15 @@ function ReconfigurableProviderField({
 
 function DisableWhileHeld(): React.JSX.Element {
   const [disabled, setDisabled] = useState(false);
-  const { targetRef, triggerProps } = useVoiceInput({
+  const voice = useVoiceInput({
     activationMode: "hold",
     disabled,
   });
+  const { targetRef } = voice;
   return (
     <>
       <textarea aria-label="hold" ref={targetRef} />
-      <button aria-label="hold trigger" {...triggerProps}>
+      <button aria-label="hold trigger" {...voice.getTriggerProps()}>
         Hold
       </button>
       <button

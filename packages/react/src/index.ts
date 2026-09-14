@@ -2,11 +2,20 @@
 
 export { getVoiceInputErrorMessage, VoiceInputError } from "@voiceinput/core";
 export type {
+  VoiceAudioSource,
+  VoiceInputErrorCode,
+  VoiceInputInterimBehavior,
   VoiceInputSessionEvent,
   VoiceInputSnapshot,
   VoiceInputStatus,
   VoiceInputStopReason,
+  VoiceInputTextEngineSnapshot,
   VoiceInputTextLimit,
+  VoiceInputTextSelection,
+  VoiceInputTextSpan,
+  VoiceInputTextSpanState,
+  VoiceInputTextTarget,
+  VoiceInputTransformTranscript,
 } from "@voiceinput/core";
 export type {
   VoiceEndpointingOptions,

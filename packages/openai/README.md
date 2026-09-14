@@ -1,25 +1,22 @@
 # `@voiceinput/openai`
 
-Use OpenAI to transcribe audio from your React fields. You need a provider API
-key and an authenticated server route. The browser uses temporary credentials;
-your long-lived key stays on the server.
-
-For a full application example, follow the
-[quickstart](../../docs/quickstart.md) or an
-[integration guide](../../docs/overview.md#choose-an-integration).
+Use OpenAI Realtime transcription with VoiceInput. Keep the long-lived provider
+key on the server and give the browser a temporary credential through an
+authenticated route. Follow the [quickstart](../../docs/quickstart.md) for a
+complete application.
 
 ## Install
 
 **npm**
 
 ```bash
-npm install @voiceinput/react@next @voiceinput/openai@next
+npm install @voiceinput/react @voiceinput/openai
 ```
 
 **pnpm**
 
 ```bash
-pnpm add @voiceinput/react@next @voiceinput/openai@next
+pnpm add @voiceinput/react @voiceinput/openai
 ```
 
 ## Browser adapter
@@ -36,20 +33,22 @@ Pass `provider` to `VoiceInputProvider` or directly to `useVoiceInput`.
 
 ## Server token handler
 
-Keep this code in a server route. `authenticate(request)` below represents your
-existing authentication function, not a VoiceInput export. It must validate the
-request and return a user or `null`. For cookie sessions, also validate the
-configured origin. Copy the complete route from the
-[quickstart](../../docs/quickstart.md#3-create-the-token-route) or use an
-[authentication recipe](../../docs/authentication-recipes.md).
+Keep this code in a server route. Add your session and origin checks in
+`authorize`; see the
+[authentication recipes](../../docs/authentication-recipes.md) for complete
+examples.
 
 ```ts
 import { createOpenAITokenHandler } from "@voiceinput/openai/server";
+import { getCurrentUser } from "@/lib/auth"; // your existing session check
+
+const appOrigin = new URL(process.env.APP_ORIGIN!).origin;
 
 export const POST = createOpenAITokenHandler({
   apiKey: process.env.OPENAI_API_KEY!,
   authorize: async (request) => {
-    const user = await authenticate(request);
+    if (request.headers.get("origin") !== appOrigin) return null;
+    const user = await getCurrentUser(request);
     return user ? { subject: user.id } : null;
   },
   rateLimit: async ({ subject }) => {
@@ -82,21 +81,16 @@ request bodies. If `onTokenIssued` throws, credential delivery fails closed.
 | `organization`, `project`   | Optional OpenAI request headers                                     |
 | `safetyIdentifier(context)` | Optional per-subject OpenAI safety identifier                       |
 | `rateLimit(context)`        | Optional application quota check                                    |
-| `onTokenIssued(metadata)`   | Metadata-only audit callback with subject, model, and expiry        |
-| `fetch`, `clientSecretUrl`  | Transport/endpoint overrides                                        |
+| `onTokenIssued(metadata)`   | Metadata-only callback with subject, model, and expiry              |
+| `fetch`, `providerTokenUrl` | Transport/endpoint overrides                                        |
 
-`OpenAITokenHandlerContext` contains `request`, `subject`, and `model`.
+Callback context uses `VoiceTokenHandlerContext` from `@voiceinput/provider`.
 `OpenAITokenIssuedMetadata` contains `provider: "openai"`, `subject`, `model`,
-and `expiresAt`.
+and `expiresAt` as epoch milliseconds.
 
 The default commits separate phrases during a recording, allowing undo and
-correction to work at phrase boundaries. Live checks on 2026-09-04 confirmed
-that `gpt-live-transcribe` rejects server VAD and does not commit until Stop. It
-remains available for earlier interim feedback: set its model in both the
-adapter and token handler and use `endpointing: false`. In that mode a recording
-is one segment; editing its interim suppresses insertion until the next
-recording. See [provider certification](../../docs/provider-certification.md)
-for evidence and the latency tradeoff.
+correction to work at phrase boundaries. `gpt-live-transcribe` requires
+`endpointing: false` and commits one segment when recording stops.
 
 ## Transcription options
 
@@ -116,12 +110,10 @@ prop. Provider-only options belong in the browser factory.
 - `endpointing`: server VAD with 500 ms silence when omitted, manual commit when
   `false`, or server VAD with the requested `silence_duration_ms`
 - `gpt-live-transcribe*`: manual commit only; omitted endpointing maps to
-  `null`. Explicit server endpointing fails with `unsupported-feature` before
-  permission.
+  `null`. Explicit server endpointing returns `unsupported-feature`.
 
 Vocabulary accepts at most 100 trimmed terms, each at most 200 characters and
-without angle brackets or line breaks. Invalid or unsupported settings fail
-before microphone permission with distinct error codes.
+without angle brackets or line breaks.
 
 ### `OpenAIVoiceInputProviderOptions`
 
@@ -148,10 +140,10 @@ Server-only entry point:
 
 - `createOpenAITokenHandler(options)`
 - `CreateOpenAITokenHandlerOptions`
-- `OpenAIAuthorization`
-- `OpenAIRateLimitResult`
-- `OpenAITokenHandlerContext`
 - `OpenAITokenIssuedMetadata`
+
+Shared authorization, rate-limit, handler-context, and issued-metadata types
+come from `@voiceinput/provider`.
 
 ## Security
 
@@ -160,9 +152,5 @@ browser condition. Never place `OPENAI_API_KEY` in a public environment variable
 or send it to `openai()`. The browser adapter obtains an ephemeral credential
 from your authenticated endpoint and then streams audio directly to OpenAI.
 
-See the
-[Next.js](https://github.com/VoiceInput/voiceinput/blob/main/docs/nextjs.md),
-[Vite/Hono](https://github.com/VoiceInput/voiceinput/blob/main/docs/vite-hono.md),
-and
-[Express](https://github.com/VoiceInput/voiceinput/blob/main/docs/express.md)
-integration guides.
+See [how VoiceInput works](../../docs/overview.md#how-it-works) for the complete
+credential and audio security boundary.

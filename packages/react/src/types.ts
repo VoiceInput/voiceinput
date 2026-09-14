@@ -84,18 +84,15 @@ export interface VoiceInputTriggerProps extends Pick<
 
 export interface UseVoiceInputResult extends VoiceInputSnapshot {
   readonly targetRef: RefCallback<VoiceInputTextTarget>;
-  /** Prefer getTriggerProps when adding application event handlers. */
-  readonly triggerProps: VoiceInputTriggerProps;
   readonly isSupported: boolean;
-  getTriggerProps(
-    this: void,
+  getTriggerProps: (
     props?: ButtonHTMLAttributes<HTMLButtonElement>,
-  ): ButtonHTMLAttributes<HTMLButtonElement> & VoiceInputTriggerProps;
-  getTextSnapshot(this: void): VoiceInputTextEngineSnapshot;
-  start(this: void): Promise<void>;
-  stop(this: void, reason?: VoiceInputStopReason): Promise<void>;
-  cancel(this: void): Promise<void>;
-  undo(this: void): void;
-  redo(this: void): void;
-  toggle(this: void): Promise<void>;
+  ) => ButtonHTMLAttributes<HTMLButtonElement> & VoiceInputTriggerProps;
+  getTextSnapshot: () => VoiceInputTextEngineSnapshot;
+  start: () => Promise<void>;
+  stop: (reason?: VoiceInputStopReason) => Promise<void>;
+  cancel: () => Promise<void>;
+  undo: () => void;
+  redo: () => void;
+  toggle: () => Promise<void>;
 }

@@ -14,8 +14,6 @@ pnpm-lock.yaml
 /apps/website/src/content/docs/
 .wrangler/
 
-# Installed agent instruction packages retain their upstream formatting.
-.agents/skills/
-
 # Local audit input is intentionally kept outside source control.
 /project-audit.md
+/TEMP_internal-pre-audit-plan.md

@@ -137,17 +137,6 @@ code {
   display: block;
   flex-shrink: 0;
 }
-.beta {
-  margin-left: 3px;
-  padding: 3px 6px;
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  font-family: "Wix Madefor Text Variable", sans-serif;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--muted);
-  letter-spacing: 0;
-}
 .header nav {
   display: flex;
   align-items: center;

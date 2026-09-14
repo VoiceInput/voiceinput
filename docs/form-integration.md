@@ -1,56 +1,42 @@
 # Existing fields and forms
 
-VoiceInput edits the field’s draft value; your app still validates and submits
-the form. It supports native inputs and textareas, including custom components
-that forward their ref to those elements.
-
-The [runnable simulated example](../examples/simulated) exercises these patterns
-without accounts or credentials. Real applications use an official provider and
-an authenticated server token route.
+VoiceInput edits a field's draft value while your application keeps ownership of
+validation, submission, styling, and form state.
 
 ## Existing composer or shadcn textarea
-
-Use the headless hook when your application already owns its textarea, styling
-and submit flow. A shadcn textarea works when it forwards its ref to the native
-textarea. Keep AI SDK message sending in the application's existing submit
-handler; VoiceInput only edits the draft.
-
-The following excerpt belongs inside your existing composer component. Import
-`useVoiceInput` from `@voiceinput/react`; `Textarea`, `message`, `setMessage`,
-and `voiceProvider` are your existing component, state, and provider.
 
 ```tsx
 import { getVoiceInputErrorMessage, useVoiceInput } from "@voiceinput/react";
 
-const { targetRef, getTriggerProps, status, error } = useVoiceInput({
+const voice = useVoiceInput({
   provider: voiceProvider,
   value: message,
   onValueChange: setMessage,
 });
+const active = voice.status !== "idle" && voice.status !== "error";
 
 return (
   <>
     <Textarea
-      ref={targetRef}
+      ref={voice.targetRef}
       value={message}
       onChange={(event) => setMessage(event.currentTarget.value)}
     />
-    <button {...getTriggerProps()}>
-      {status === "idle" ? "Speak" : "Stop"}
-    </button>
-    {error ? <p role="alert">{getVoiceInputErrorMessage(error)}</p> : null}
+    <button {...voice.getTriggerProps()}>{active ? "Stop" : "Speak"}</button>
+    {voice.error ? (
+      <p role="alert">{getVoiceInputErrorMessage(voice.error)}</p>
+    ) : null}
   </>
 );
 ```
 
-For an optional controlled wrapper,
-`<VoiceTextarea value={message} onValueChange={setMessage} voice={{ provider: voiceProvider }} />`
-handles both typing and dictation. A second state setter in `onChange` is
-unnecessary.
+Use the headless hook when the application already owns the textarea and submit
+flow. A custom field such as a shadcn textarea works when it forwards its ref to
+the native `textarea`.
 
-## React Hook Form
+## React Hook Form registration
 
-Install the form library if your app does not already use it:
+Install React Hook Form if the project does not already use it:
 
 **npm**
 
@@ -64,12 +50,11 @@ npm install react-hook-form
 pnpm add react-hook-form
 ```
 
-Import `useForm` and `Controller` from `react-hook-form`, and `VoiceTextarea`
-from `@voiceinput/react`. Native change events let an uncontrolled wrapper
-participate in registration. This excerpt belongs inside your form component:
+An uncontrolled `VoiceTextarea` emits native changes and works with
+registration:
 
 ```tsx
-const { register, handleSubmit, reset, formState } = useForm({
+const { register, handleSubmit, reset } = useForm({
   defaultValues: { message: "" },
   mode: "onChange",
 });
@@ -78,7 +63,7 @@ return (
   <form onSubmit={handleSubmit(onSubmit)}>
     <VoiceTextarea
       {...register("message", { required: true, minLength: 5 })}
-      voice={{ provider: voiceProvider }}
+      voice={{ provider }}
       maxLength={500}
     />
     <button type="submit">Submit</button>
@@ -89,17 +74,7 @@ return (
 );
 ```
 
-### Controlled form example
-
-For controlled forms, use `Controller` and map `field.value` and
-`field.onChange` to the wrapper's `value` and `onValueChange`, while forwarding
-`field.ref`, `field.name`, and `field.onBlur`. Do not pass the same form updater
-to both `onChange` and `onValueChange`.
-
-The simulated form verifies validation, dirty state, submitted text, reset and
-disabled behavior. See the [editing contract](editing-contract.md) for
-limitations, length notifications and the distinction between recognized and
-inserted text.
+## Controlled form
 
 ```tsx
 import { Controller, useForm } from "react-hook-form";
@@ -137,11 +112,11 @@ export function MessageForm({
               aria-invalid={fieldState.invalid}
               aria-describedby={fieldState.error ? "message-error" : undefined}
             />
-            {fieldState.error && (
+            {fieldState.error ? (
               <p id="message-error" role="alert">
                 {fieldState.error.message}
               </p>
-            )}
+            ) : null}
           </>
         )}
       />
@@ -151,7 +126,10 @@ export function MessageForm({
 }
 ```
 
-In Next.js, add `"use client"` at the top of this component. Configure the
-[authenticated token route](quickstart.md#3-create-the-token-route) before
-trying real dictation. Type and dictate into the field, then submit: both kinds
-of edits should reach `onSubmit` through the same form value.
+`Controller` maps `field.value` and `field.onChange` to the wrapper's `value`
+and `onValueChange`, then forwards its ref, name, and blur handler. See the
+[React API](../packages/react/README.md#components) for wrapper event behavior
+and the [editing contract](editing-contract.md) for resets and length limits.
+
+The [simulated example](../examples/simulated) runs these patterns without a
+microphone or provider account.

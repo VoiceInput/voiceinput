@@ -43,7 +43,7 @@ export default defineConfig({
       tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 3 },
       sidebar: groups.map((group) => ({
         label: group,
-        collapsed: group === "Advanced",
+        collapsed: false,
         items: docs
           .filter((doc) => doc.group === group)
           .map((doc) => ({ slug: `docs/${doc.slug}` })),

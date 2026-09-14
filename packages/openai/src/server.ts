@@ -1,4 +1,10 @@
-import { VoiceInputError } from "@voiceinput/provider";
+import {
+  VoiceInputError,
+  type VoiceTokenAuthorization,
+  type VoiceTokenHandlerContext,
+  type VoiceTokenIssuedMetadata,
+  type VoiceTokenRateLimitResult,
+} from "@voiceinput/provider";
 
 import {
   OPENAI_DEFAULT_MODEL,
@@ -10,24 +16,8 @@ const DEFAULT_CLIENT_SECRET_URL =
   "https://api.openai.com/v1/realtime/client_secrets";
 const MAX_TOKEN_REQUEST_BYTES = 16 * 1024;
 
-export interface OpenAIAuthorization {
-  readonly subject: string;
-}
-
-export type OpenAIRateLimitResult =
-  | { readonly allowed: true }
-  | { readonly allowed: false; readonly retryAfterSeconds?: number };
-
-export interface OpenAITokenHandlerContext {
-  readonly request: Request;
-  readonly subject: string;
-  readonly model: string;
-}
-
-export interface OpenAITokenIssuedMetadata {
+export interface OpenAITokenIssuedMetadata extends VoiceTokenIssuedMetadata {
   readonly provider: "openai";
-  readonly subject: string;
-  readonly model: string;
   readonly expiresAt: number;
 }
 
@@ -35,22 +25,25 @@ export interface CreateOpenAITokenHandlerOptions {
   readonly apiKey: string;
   readonly authorize: (
     request: Request,
-  ) => PromiseLike<OpenAIAuthorization | null> | OpenAIAuthorization | null;
+  ) =>
+    | PromiseLike<VoiceTokenAuthorization | null>
+    | VoiceTokenAuthorization
+    | null;
   readonly model?: string;
   readonly allowedModels?: readonly string[];
   readonly organization?: string;
   readonly project?: string;
   readonly safetyIdentifier?: (
-    context: OpenAITokenHandlerContext,
+    context: VoiceTokenHandlerContext,
   ) => PromiseLike<string | undefined> | string | undefined;
   readonly rateLimit?: (
-    context: OpenAITokenHandlerContext,
-  ) => PromiseLike<OpenAIRateLimitResult> | OpenAIRateLimitResult;
+    context: VoiceTokenHandlerContext,
+  ) => PromiseLike<VoiceTokenRateLimitResult> | VoiceTokenRateLimitResult;
   readonly onTokenIssued?: (
     metadata: OpenAITokenIssuedMetadata,
   ) => PromiseLike<void> | void;
   readonly fetch?: typeof globalThis.fetch;
-  readonly clientSecretUrl?: string;
+  readonly providerTokenUrl?: string;
 }
 
 export function createOpenAITokenHandler(
@@ -69,7 +62,8 @@ export function createOpenAITokenHandler(
   }
   const apiKey = validateNonEmpty(options.apiKey, "apiKey");
   const fetchImplementation = options.fetch ?? globalThis.fetch;
-  const clientSecretUrl = options.clientSecretUrl ?? DEFAULT_CLIENT_SECRET_URL;
+  const providerTokenUrl =
+    options.providerTokenUrl ?? DEFAULT_CLIENT_SECRET_URL;
 
   return async (request) => {
     if (request.method !== "POST") {
@@ -95,7 +89,7 @@ export function createOpenAITokenHandler(
           "The requested OpenAI model is not allowed.",
         );
       }
-      const createContext = (): OpenAITokenHandlerContext => ({
+      const createContext = (): VoiceTokenHandlerContext => ({
         request: copyRequest(request, requestBody),
         subject,
         model: tokenRequest.model,
@@ -113,7 +107,7 @@ export function createOpenAITokenHandler(
 
       const safetyIdentifier =
         await options.safetyIdentifier?.(createContext());
-      const response = await fetchImplementation(clientSecretUrl, {
+      const response = await fetchImplementation(providerTokenUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -160,7 +154,7 @@ export function createOpenAITokenHandler(
         provider: "openai",
         subject,
         model: tokenRequest.model,
-        expiresAt: credential.expires_at,
+        expiresAt: credential.expires_at * 1_000,
       });
 
       return Response.json(credential, {

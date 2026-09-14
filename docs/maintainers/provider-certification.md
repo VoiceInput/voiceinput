@@ -5,7 +5,7 @@ protocol evidence. The September 4 entry below supersedes the initial OpenAI
 default. Earlier measurements were taken on 2026-09-02 from the same local
 machine and network using the checked-in 2.245-second LibriSpeech fixture, whose
 reference is `BY HARRY QUILTER M A`. The fixture's license, attribution, and
-hash are in [`fixtures/audio/README.md`](../fixtures/audio/README.md).
+hash are in [`fixtures/audio/README.md`](../../fixtures/audio/README.md).
 
 Run the checked-in harness after building:
 
@@ -138,6 +138,7 @@ One recording is one phrase in that mode. Explicit server endpointing is
 rejected locally instead of returning an opaque token failure.
 
 The exact candidate's fixture results, engine versions and limitations are
-recorded in `docs/releases/desktop-beta.md`. Physical microphones, real-world
-speech diversity, mobile interruption behavior and manual assistive-technology
-checks remain outside these Node-streamed fixture observations.
+recorded in `docs/maintainers/releases/desktop-beta.md`. Physical microphones,
+real-world speech diversity, mobile interruption behavior and manual
+assistive-technology checks remain outside these Node-streamed fixture
+observations.

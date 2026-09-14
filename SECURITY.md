@@ -2,10 +2,8 @@
 
 ## Supported versions
 
-Before the first stable release, only the newest prerelease on the npm `next`
-tag receives security fixes. Once stable releases begin, the
-[support policy](docs/support-policy.md) will list every maintained release
-line.
+The latest 0.x release receives security fixes. See
+[browser and runtime support](docs/support-policy.md) for requirements.
 
 ## Report a vulnerability privately
 

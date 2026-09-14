@@ -3,12 +3,18 @@
   "version": "0.1.0-beta.2",
   "description": "ElevenLabs Realtime Scribe adapter and secure token handler for VoiceInput.",
   "keywords": [
-    "voice-input",
+    "voiceinput",
+    "dictation",
     "speech-to-text",
-    "transcription",
-    "elevenlabs"
+    "voice",
+    "microphone",
+    "realtime",
+    "react",
+    "elevenlabs",
+    "scribe",
+    "adapter"
   ],
-  "homepage": "https://voiceinput.dev/docs/providers/elevenlabs",
+  "homepage": "https://voiceinput.dev/docs/providers/elevenlabs/",
   "bugs": {
     "url": "https://github.com/VoiceInput/voiceinput/issues"
   },
@@ -54,7 +60,8 @@
         "types": "./dist/server.d.cts",
         "default": "./dist/server.cjs"
       }
-    }
+    },
+    "./package.json": "./package.json"
   },
   "dependencies": {
     "@voiceinput/provider": "workspace:*"

@@ -1,19 +1,17 @@
 # Example projects
 
-Choose a simulation to explore editing, or an authenticated example for real
-transcription. The two authenticated projects use **OpenAI, Clerk, and
-Upstash**. You can [switch providers](providers.md) after setup.
+Run the simulation to explore editing without credentials, or choose a
+full-stack example for real transcription.
 
-| Example          | What you can try                                   | Requirements                                                     |
-| ---------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
-| Simulated fields | Dictation at the cursor, undo, and React Hook Form | Node.js and the repository’s pinned pnpm version; no credentials |
-| Next.js          | A controlled field with a secure server route      | OpenAI key, configured Clerk app, Upstash Redis                  |
-| Vite + Hono      | A React field with a separate Node API             | OpenAI key, configured Clerk app, Upstash Redis                  |
+| Example                | What you can try                                   | Requirements                                            |
+| ---------------------- | -------------------------------------------------- | ------------------------------------------------------- |
+| Simulated fields       | Cursor insertion, undo, and React Hook Form        | Repository workspace; no microphone or provider account |
+| Full-stack Next.js     | Controlled field, Clerk session, and Upstash quota | OpenAI, Clerk, and Upstash accounts                     |
+| Full-stack Vite + Hono | React field with a separate Node API               | OpenAI, Clerk, and Upstash accounts                     |
 
 ## Simulated fields
 
-Clone the repository and run these commands from its root. This is a pnpm
-workspace; the contributor workflow uses the pinned pnpm version.
+Clone the repository and run the example from the workspace root:
 
 ```bash
 git clone https://github.com/VoiceInput/voiceinput.git
@@ -25,78 +23,42 @@ pnpm --filter @voiceinput/example-simulated dev
 ```
 
 Open `http://127.0.0.1:5174`. The first field uses the hook, and the second uses
-React Hook Form. Try changing the cursor position, dictating, and undoing an
-edit. This simulation never records audio or connects to a provider.
-[View the example source](../examples/simulated).
+React Hook Form. The simulation never records audio or connects to a provider.
+[View its source](../examples/simulated).
 
-## Next.js with Clerk and Upstash
+## Full-stack Next.js example
 
-Copy the [Next.js example directory](../examples/nextjs-app-router) into a
-standalone project. Copy `.env.example` to `.env.local` and fill every value.
-Configure Clerk for your `APP_ORIGIN`, then run inside that project:
-
-**npm**
-
-```bash
-npm install
-npm run dev
-```
-
-**pnpm**
+Copy the [Next.js example](../examples/nextjs-app-router) into a standalone
+project. Copy `.env.example` to `.env.local`, fill each value, and configure
+Clerk for `APP_ORIGIN`.
 
 ```bash
 pnpm install
-pnpm run dev
+pnpm dev
 ```
 
-Open the URL printed by Next.js, sign in, and try dictation. A working setup
-inserts speech into the field and permits ordinary typing and undo. See the
-[Next.js guide](nextjs.md) for how the parts connect.
+Open the URL printed by Next.js, sign in, and try dictation. See the
+[Next.js guide](nextjs.md) for the route, provider, and field setup.
 
-## Vite + Hono with Clerk and Upstash
+## Full-stack Vite + Hono example
 
-Copy the [Vite example directory](../examples/vite-hono) into a standalone
-project. Copy `.env.example` to `.env.local`, fill every value, and configure
-Clerk for `APP_ORIGIN`. Install dependencies and start the API:
-
-**npm**
-
-```bash
-npm install
-npm run dev:api
-```
-
-**pnpm**
+Copy the [Vite + Hono example](../examples/vite-hono) into a standalone project.
+Copy `.env.example` to `.env.local`, fill each value, and configure Clerk for
+`APP_ORIGIN`.
 
 ```bash
 pnpm install
-pnpm run dev:api
+pnpm dev:api
 ```
 
-In a second terminal in the same directory, start Vite:
+In a second terminal, run `pnpm dev:web`. Open the Vite URL, sign in, and try
+the field. Vite proxies `/api` to Hono so session cookies stay same-origin. See
+the [Vite + Hono guide](vite-hono.md) for the full setup.
 
-**npm**
+## Before deployment
 
-```bash
-npm run dev:web
-```
-
-**pnpm**
-
-```bash
-pnpm run dev:web
-```
-
-Open the Vite URL, sign in, and try the field. Vite proxies `/api` to Hono, so
-session cookies and token requests stay on the same origin. The
-[Vite + Hono guide](vite-hono.md) explains this setup.
-
-## Before deploying an example
-
-Use HTTPS, keep provider keys server-only, and authenticate and rate-limit token
-requests. Set your actual deployed origin in `APP_ORIGIN`. Review the
+Use HTTPS, keep provider keys server-only, authenticate and rate-limit token
+requests, and set the deployed origin in `APP_ORIGIN`. Review the
 [deployment checklist](nextjs.md#deployment-checklist),
-[Content Security Policy setup](content-security-policy.md), and
-[browser support](support-policy.md). Repository maintainer playgrounds have
-separate development-only authentication fixtures; use these consumer examples
-for application integration.
+[Content Security Policy guide](content-security-policy.md), and
+[browser support](support-policy.md).

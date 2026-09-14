@@ -1,104 +1,54 @@
 # Quickstart
 
-Add a voice button to an existing React textarea. This example uses **Next.js
-App Router, OpenAI, and an existing Clerk sign-in setup**. For another stack,
-follow [Vite + Hono](vite-hono.md), [Express](express.md), or the
-[authentication recipes](authentication-recipes.md).
+Add a voice button to an existing Next.js textarea with OpenAI.
 
-To try your own microphone before setting up a project, use the
-[live demo](https://voiceinput.dev/). The demo handles temporary credentials;
-your app should use an authenticated server endpoint as shown below.
-
-## Before you start
-
-- A Next.js app using React 18.2+ or React 19 and Node.js 22+.
-- Clerk sign-in already configured, including its middleware. Use the
-  [Clerk Next.js setup](https://clerk.com/docs/quickstarts/nextjs) if needed.
-- An OpenAI API key with access to transcription.
-
-For a complete starter with Clerk and rate limits already wired up, use the
-[Next.js example project](golden-paths.md). To explore without credentials, try
-the [simulated example](golden-paths.md#simulated-fields).
-
-<span id="1-install"></span>
-
-## 1. Install the packages
+## 1. Install
 
 **npm**
 
 ```bash
-npm install @voiceinput/react@next @voiceinput/openai@next
+npm install @voiceinput/react @voiceinput/openai
 ```
 
 **pnpm**
 
 ```bash
-pnpm add @voiceinput/react@next @voiceinput/openai@next
+pnpm add @voiceinput/react @voiceinput/openai
 ```
 
-`@next` explicitly follows the VoiceInput beta release channel. It is unrelated
-to Next.js. Until the first stable release, untagged installs also resolve to
-the initial beta; use `@next` to receive subsequent beta versions.
+## 2. Add server environment variables
 
-## 2. Set your server environment variables
+Create `.env.local` with your OpenAI key and the exact origin of your app:
 
-Add these values to `.env.local` in your app. Keep your existing Clerk settings.
-Use your app's actual origin, including the development port.
-
-```dotenv title=".env.local"
+```dotenv
 OPENAI_API_KEY=your-openai-api-key
 APP_ORIGIN=http://localhost:3000
 ```
 
 Keep `OPENAI_API_KEY` server-only. Never give it a `NEXT_PUBLIC_` prefix.
 
-<span id="2-add-an-authenticated-server-route"></span>
-
 ## 3. Create the token route
 
-The route checks the signed-in user before issuing a temporary credential. If
-your app uses another auth library, replace the `authorize` callback with the
-matching [authentication recipe](authentication-recipes.md).
-
 ```ts title="src/app/api/voice-token/route.ts"
-import { auth } from "@clerk/nextjs/server";
 import { createOpenAITokenHandler } from "@voiceinput/openai/server";
+import { getCurrentUser } from "@/lib/auth"; // your existing session check
 
-export const runtime = "nodejs";
-
-const apiKey = process.env.OPENAI_API_KEY;
-const origin = process.env.APP_ORIGIN;
-if (!apiKey || !origin) {
-  throw new Error("OPENAI_API_KEY and APP_ORIGIN are required.");
-}
-const appOrigin = new URL(origin).origin;
+const appOrigin = new URL(process.env.APP_ORIGIN!).origin;
 
 export const POST = createOpenAITokenHandler({
-  apiKey,
+  apiKey: process.env.OPENAI_API_KEY!,
   authorize: async (request) => {
-    if (
-      request.headers.get("origin") !== appOrigin ||
-      request.headers.get("sec-fetch-site") === "cross-site"
-    )
-      return null;
-
-    const { isAuthenticated, userId } = await auth();
-    return isAuthenticated && userId ? { subject: userId } : null;
+    if (request.headers.get("origin") !== appOrigin) return null;
+    const user = await getCurrentUser(request);
+    return user ? { subject: user.id } : null;
   },
 });
 ```
 
-Returning `null` produces a `401` response without issuing a credential. Keep
-this route on the same origin as the React app so its session cookies are sent
-automatically. Before production, add a
-[shared rate limit](authentication-recipes.md#durable-upstash-quota).
+Returning `null` produces a `401` without issuing a credential. Replace
+`getCurrentUser` with the session check already used by your app.
 
-<span id="3-enhance-a-field"></span>
-
-## 4. Add the React field
-
-Keep a native textarea's ordinary `onChange` handler for typing. The hook's
-`onValueChange` callback updates the same state when dictation changes the text.
+## 4. Add the field
 
 ```tsx title="src/app/composer.tsx"
 "use client";
@@ -137,62 +87,22 @@ export function Composer() {
 }
 ```
 
-Render it in a page your signed-in users can access:
+Render `Composer` from a page that your signed-in users can access.
 
-```tsx title="src/app/page.tsx"
-import { Composer } from "./composer";
+## 5. Run
 
-export default function Page() {
-  return <Composer />;
-}
-```
+Start the Next.js development server, open the app, and press **Speak**. Allow
+microphone access and dictate into the textarea. Restart the server after
+changing `.env.local`.
 
-## 5. Run and try it
+If the route returns `401`, check the session and `APP_ORIGIN`. For other
+failures, use the [troubleshooting guide](troubleshooting.md).
 
-**npm**
+## Next steps
 
-```bash
-npm run dev
-```
-
-**pnpm**
-
-```bash
-pnpm run dev
-```
-
-Open your app, sign in, click in the textarea, and press **Speak**. Allow
-microphone access and say a short sentence. Text should appear at the cursor.
-Press **Stop**, then try typing and undoing an edit.
-
-If it does not work, check the [troubleshooting guide](troubleshooting.md). A
-`401` usually means the session or configured origin did not match. Restart the
-development server after changing environment variables.
-
-## Optional: use a ready-made field
-
-Replace the native field and button with `VoiceTextarea` if you want a control
-that already includes the voice button. Its `onValueChange` handles both typing
-and dictation, so a second state setter in `onChange` is unnecessary.
-
-```tsx
-import { VoiceTextarea } from "@voiceinput/react";
-
-<VoiceTextarea
-  aria-label="Message"
-  value={message}
-  onValueChange={setMessage}
-  voice={{ provider }}
-/>;
-```
-
-Import the optional theme once in your root layout:
-
-```ts
-import "@voiceinput/react/styles.css";
-```
-
-For multiple fields, `VoiceInputProvider` can share configuration and coordinate
-which field uses the microphone. A standalone field does not need it. Continue
-with the [React API](../packages/react/README.md) or the
-[deployment checklist](nextjs.md#deployment-checklist).
+- Use the ready-made [`VoiceTextarea`](../packages/react/README.md#components).
+- Add your auth library with the
+  [authentication recipes](authentication-recipes.md).
+- Protect the route with a
+  [durable rate limit](authentication-recipes.md#durable-upstash-quota).
+- Run the [full-stack examples](golden-paths.md).

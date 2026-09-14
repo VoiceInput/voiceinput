@@ -3,12 +3,18 @@
   "version": "0.1.0-beta.2",
   "description": "OpenAI Realtime transcription adapter and secure token handler for VoiceInput.",
   "keywords": [
-    "voice-input",
+    "voiceinput",
+    "dictation",
     "speech-to-text",
-    "transcription",
-    "openai"
+    "voice",
+    "microphone",
+    "realtime",
+    "react",
+    "openai",
+    "whisper",
+    "adapter"
   ],
-  "homepage": "https://voiceinput.dev/docs/providers/openai",
+  "homepage": "https://voiceinput.dev/docs/providers/openai/",
   "bugs": {
     "url": "https://github.com/VoiceInput/voiceinput/issues"
   },
@@ -54,7 +60,8 @@
         "types": "./dist/server.d.cts",
         "default": "./dist/server.cjs"
       }
-    }
+    },
+    "./package.json": "./package.json"
   },
   "dependencies": {
     "@voiceinput/provider": "workspace:*"

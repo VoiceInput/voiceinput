@@ -20,7 +20,7 @@ const listeningText: Record<InterimBehavior, string> = {
   inline: "Speak naturally. Text appears as you speak.",
   expose: "Speak naturally. Text appears as each phrase is finalized.",
 };
-const idleText = "20 seconds. Audio is relayed to OpenAI and not stored.";
+const idleText = "Record up to 20 seconds.";
 
 const subscribeToHydration = () => () => {};
 const getHydratedSnapshot = () => true;

@@ -1,37 +1,27 @@
 # Express
 
-Connect an existing Express API to your React voice field. Official token
-handlers accept a standard web `Request` and return a standard web `Response`.
-An existing Express application can bridge those objects in a few lines;
-VoiceInput does not need an Express-specific package.
+Bridge an existing Express route to a VoiceInput token handler. The handler
+accepts a web `Request` and returns a web `Response`. The bridge preserves your
+cookies and authorization headers while translating those objects.
 
-## Before you start
-
-Use Node.js 22+ and an existing Express app with authentication. Install the
-server adapter and Express in your API project:
+## Install
 
 **npm**
 
 ```bash
-npm install @voiceinput/openai@next express
+npm install @voiceinput/openai express
 ```
 
 **pnpm**
 
 ```bash
-pnpm add @voiceinput/openai@next express
+pnpm add @voiceinput/openai express
 ```
 
 Set `OPENAI_API_KEY` and `APP_ORIGIN` in the server environment. Install
-`@voiceinput/react` and the same provider adapter in your React app using the
-[quickstart](quickstart.md).
+`@voiceinput/react` and the same provider adapter in the React application.
 
 ## Add the token route
-
-`authenticateRequest` is your application’s sign-in helper. It must validate the
-incoming request and return a user or `null`; use the
-[authentication recipes](authentication-recipes.md) to implement it. The bridge
-below uses `express.json()` to parse the small token request.
 
 ```ts
 import { createOpenAITokenHandler } from "@voiceinput/openai/server";
@@ -39,23 +29,14 @@ import express, {
   type Request as ExpressRequest,
   type Response as ExpressResponse,
 } from "express";
-
-import { authenticateRequest } from "./auth.js";
-
-const apiKey = process.env.OPENAI_API_KEY;
-if (!apiKey) throw new Error("OPENAI_API_KEY is required.");
+import { getCurrentUser } from "./auth.js"; // your existing session check
 
 const appOrigin = new URL(process.env.APP_ORIGIN!).origin;
-
 const issueVoiceToken = createOpenAITokenHandler({
-  apiKey,
+  apiKey: process.env.OPENAI_API_KEY!,
   authorize: async (request) => {
-    if (
-      request.headers.get("origin") !== appOrigin ||
-      request.headers.get("sec-fetch-site") === "cross-site"
-    )
-      return null;
-    const user = await authenticateRequest(request);
+    if (request.headers.get("origin") !== appOrigin) return null;
+    const user = await getCurrentUser(request);
     return user ? { subject: user.id } : null;
   },
 });
@@ -64,7 +45,7 @@ const app = express();
 
 app.post(
   "/api/voice-token",
-  express.json({ limit: "8kb" }),
+  express.json({ limit: "16kb" }),
   async (request, response, next) => {
     try {
       const webRequest = toWebRequest(request);
@@ -121,29 +102,11 @@ async function sendWebResponse(
 }
 ```
 
-## How the bridge works
+Configure Express `trust proxy` correctly before relying on `request.protocol`.
+Keep the browser adapter on a relative endpoint such as `/api/voice-token` so
+session cookies stay same-origin.
 
-The copied headers preserve cookies and authorization headers for your
-`authorize` implementation. Re-serializing the parsed JSON body is safe for the
-provider token handlers, which accept a small JSON object and reject unknown
-fields.
-
-If your route is mounted behind a trusted reverse proxy, configure Express
-`trust proxy` correctly before relying on `request.protocol`. Prefer a relative,
-same-origin token endpoint in the browser.
-
-The same bridge works with `createElevenLabsTokenHandler` and
-`createDeepgramTokenHandler`. Keep the selected provider's long-lived key in the
-Express server environment and retain the required `authorize` callback.
-
-## Connect the React field
-
-Configure the browser adapter with `tokenEndpoint: "/api/voice-token"` and pass
-it to the hook. Serve or proxy the React app and API through the same origin so
-cookies reach the endpoint. Run your existing Express server and React app, sign
-in, and try dictation in the field.
-
-Before production, add a
-[shared rate limit](authentication-recipes.md#durable-upstash-quota) and use
-HTTPS. See [troubleshooting](troubleshooting.md) for token or connection
-failures.
+The bridge also works with `createElevenLabsTokenHandler` and
+`createDeepgramTokenHandler`. Add your session library and shared quota with the
+[authentication recipes](authentication-recipes.md), then follow the
+[quickstart field setup](quickstart.md#4-add-the-field).

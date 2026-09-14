@@ -2,171 +2,98 @@
 
 # VoiceInput
 
-Add dictation to your existing React inputs and textareas. VoiceInput captures
-the microphone in the browser, streams audio directly to OpenAI, ElevenLabs, or
-Deepgram, and inserts transcripts into the field the user is already editing.
-
-The headless hook is the primary API. Optional controls provide a quick start
-without creating a second transcription stack.
+Add dictation to React inputs and textareas without replacing your field.
 
 ## Why VoiceInput
 
-- Keep the same field code when switching transcription providers.
 - Preserve selections, caret movement, manual edits, and controlled React state.
+- Switch between OpenAI, ElevenLabs, and Deepgram without changing field code.
 - Use toggle or hold-to-talk activation with keyboard and pointer support.
 - Keep long-lived provider keys on your server.
-- Start headless, or use accessible `VoiceButton`, `VoiceInput`, and
-  `VoiceTextarea` controls.
-- Ship no VoiceInput telemetry, hosted proxy, database, or Tailwind runtime.
+- Start with the headless hook or accessible ready-made controls.
 
-## Quickstart
-
-Install the React package and one provider adapter:
+## Install
 
 **npm**
 
 ```bash
-npm install @voiceinput/react@next @voiceinput/openai@next
+npm install @voiceinput/react @voiceinput/openai
 ```
 
 **pnpm**
 
 ```bash
-pnpm add @voiceinput/react@next @voiceinput/openai@next
+pnpm add @voiceinput/react @voiceinput/openai
 ```
 
-`@next` selects the beta release channel. Follow the
-[quickstart](docs/quickstart.md) to configure server credentials, add an
-authenticated token route, and connect an existing field. The example uses
-Next.js, OpenAI, and Clerk.
+```tsx
+"use client";
 
-For other stacks, use [Vite + Hono](docs/vite-hono.md),
-[Express](docs/express.md), or the
-[authentication recipes](docs/authentication-recipes.md). See
-[overview and requirements](docs/overview.md) before choosing a provider.
+import { getVoiceInputErrorMessage, useVoiceInput } from "@voiceinput/react";
+import { openai } from "@voiceinput/openai";
 
-## Try it without credentials
+const provider = openai({ tokenEndpoint: "/api/voice-token" });
 
-The [simulated example](examples/simulated) demonstrates editing, undo/redo and
-a React Hook Form integration without a microphone or external account. See the
-[composer and form recipes](docs/form-integration.md) and the
-[editing contract](docs/editing-contract.md).
+export function Composer() {
+  const { targetRef, getTriggerProps, status, error } = useVoiceInput({
+    provider,
+  });
+  const active = status !== "idle" && status !== "error";
 
-Use `VoiceInputProvider` when several fields should share configuration and
-coordinate microphone ownership. Standalone fields do not need a root context.
-Provider configuration changes apply to the next recording; rerenders do not
-interrupt an active session.
-
-## Choose packages
-
-| Package                                                   | Use it for                                                     |
-| --------------------------------------------------------- | -------------------------------------------------------------- |
-| [`@voiceinput/react`](packages/react/README.md)           | React context, `useVoiceInput`, and optional controls          |
-| [`@voiceinput/openai`](packages/openai/README.md)         | OpenAI Realtime transcription; default `gpt-transcribe`        |
-| [`@voiceinput/elevenlabs`](packages/elevenlabs/README.md) | ElevenLabs Realtime Scribe; default `scribe_v2_realtime`       |
-| [`@voiceinput/deepgram`](packages/deepgram/README.md)     | Deepgram live transcription; default `nova-3`                  |
-| [`@voiceinput/core`](packages/core/README.md)             | Framework-neutral sessions, browser audio, and text ownership  |
-| [`@voiceinput/provider`](packages/provider/README.md)     | Custom adapter contracts, fake provider, and conformance cases |
-
-A React application normally installs `@voiceinput/react` and one provider
-package. `@voiceinput/core` and `@voiceinput/provider` arrive transitively.
-
-## Architecture and privacy
-
-```mermaid
-flowchart LR
-  U[User gesture] --> B[Your browser UI]
-  B -->|authenticated token request| S[Your server endpoint]
-  S -->|long-lived API key| P[Provider token API]
-  P -->|short-lived credential| S
-  S -->|short-lived credential| B
-  B -->|microphone audio, direct| R[Provider realtime API]
-  R -->|transcript events| B
-  B --> T[Cursor-safe field insertion]
+  return (
+    <>
+      <textarea aria-label="Message" name="message" ref={targetRef} />
+      <button {...getTriggerProps()}>{active ? "Stop" : "Speak"}</button>
+      {error && <p role="alert">{getVoiceInputErrorMessage(error)}</p>}
+    </>
+  );
+}
 ```
 
-Long-lived credentials remain in your server environment. The browser receives
-only a provider-scoped short-lived or single-use credential, then sends audio
-directly to the selected provider. VoiceInput does not proxy or persist audio or
-transcripts, and the open-source packages send no telemetry to VoiceInput-owned
-systems. Provider processing and retention follow your provider configuration
-and agreement.
+Create a server route that authorizes the current user before issuing a
+temporary provider credential:
 
-## Shared behavior and provider differences
+```ts
+import { createOpenAITokenHandler } from "@voiceinput/openai/server";
+import { getCurrentUser } from "@/lib/auth"; // your existing session check
 
-All adapters implement the same versioned session contract and normalize interim
-text, final text, speech boundaries, closure, and errors. They do not pretend
-provider capabilities are identical.
+const appOrigin = new URL(process.env.APP_ORIGIN!).origin;
 
-| Capability                             | OpenAI                                         | ElevenLabs           | Deepgram                                                      |
-| -------------------------------------- | ---------------------------------------------- | -------------------- | ------------------------------------------------------------- |
-| Default model                          | `gpt-transcribe`                               | `scribe_v2_realtime` | `nova-3`                                                      |
-| PCM16 rate                             | 24 kHz                                         | 16 kHz               | 16 kHz                                                        |
-| Omitted language                       | Automatic                                      | Automatic            | `multi` on known multilingual Nova models; otherwise required |
-| Vocabulary mapping                     | Prompt, or keywords for live-transcribe models | Key terms            | Nova-3 key terms                                              |
-| Omitted `endpointing` on default model | Server VAD, 500 ms silence                     | VAD, 650 ms silence  | Provider default                                              |
-| `endpointing: false`                   | Manual commit                                  | Manual commit        | Disables endpointing                                          |
+export const POST = createOpenAITokenHandler({
+  apiKey: process.env.OPENAI_API_KEY!,
+  authorize: async (request) => {
+    if (request.headers.get("origin") !== appOrigin) return null;
+    const user = await getCurrentUser(request);
+    return user ? { subject: user.id } : null;
+  },
+});
+```
 
-Unsupported or invalid normalized options fail before microphone permission is
-requested; adapters never silently discard them.
+## How it works
 
-The measurements and product-contract evidence behind these launch defaults are
-recorded in [Provider certification](docs/provider-certification.md).
+1. The user starts dictation and grants microphone access.
+2. Your authenticated route issues a temporary provider credential.
+3. The browser streams audio directly to the transcription provider.
+4. VoiceInput inserts returned text at the user's current selection.
 
-## Browser support
+## Packages
 
-This release is a desktop beta supporting React 18 and 19. Editing is tested in
-Playwright Chromium, Firefox and WebKit; the release record identifies the exact
-versions and separate microphone/provider evidence. Physical Safari and iOS
-microphones and manual assistive-technology checks remain unverified.
-
-Runtime support is capability-based. The browser must provide a secure context,
-`getUserMedia`, `AudioContext`, and `AudioWorklet`; microphone access therefore
-requires HTTPS except for browser localhost exceptions. Use `isSupported` to
-disable custom UI. The packaged controls do this automatically.
-
-See [troubleshooting](docs/troubleshooting.md) for permissions, Safari,
-backgrounding, expiring credentials, and network failures. The
-[support policy](docs/support-policy.md) records the Node, TypeScript, React,
-and browser compatibility contract.
+| Package                                                   | Purpose                                             |
+| --------------------------------------------------------- | --------------------------------------------------- |
+| [`@voiceinput/react`](packages/react/README.md)           | Headless hook, context, and optional controls       |
+| [`@voiceinput/openai`](packages/openai/README.md)         | OpenAI Realtime transcription                       |
+| [`@voiceinput/elevenlabs`](packages/elevenlabs/README.md) | ElevenLabs Realtime Scribe                          |
+| [`@voiceinput/deepgram`](packages/deepgram/README.md)     | Deepgram live transcription                         |
+| [`@voiceinput/core`](packages/core/README.md)             | Framework-neutral sessions, audio, and text editing |
+| [`@voiceinput/provider`](packages/provider/README.md)     | Provider contracts and conformance tools            |
 
 ## Documentation
 
-- [Editing, undo, constraints and events](docs/editing-contract.md)
-- [Existing composers and form libraries](docs/form-integration.md)
-- [React API](packages/react/README.md)
-- [Core API](packages/core/README.md)
-- [Provider contract and custom adapters](packages/provider/README.md)
-- [OpenAI](packages/openai/README.md)
-- [ElevenLabs](packages/elevenlabs/README.md)
-- [Deepgram](packages/deepgram/README.md)
-- [Write a custom provider](docs/custom-provider.md)
-- [Minimal golden paths](docs/golden-paths.md)
-- [Authentication and durable quota recipes](docs/authentication-recipes.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Support policy](docs/support-policy.md)
-- [Security policy and private reporting](SECURITY.md)
-
-## Local development
-
-```bash
-corepack enable
-pnpm install
-cp .env.example .env
-pnpm test
-pnpm test:browser
-pnpm test:e2e
-pnpm build
-pnpm validate:packages
-pnpm test:security
-```
-
-The Next.js and Vite/Hono apps are maintainer laboratories. Their signed local
-cookie, loopback checks, and in-memory behavior are deliberately
-**development-only fixtures**, not production authentication or rate limiting.
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete workspace commands.
-Release candidates also follow the
-[release checklist](docs/release-checklist.md).
+[Quickstart](docs/quickstart.md) · [Overview](docs/overview.md) ·
+[Providers](docs/providers.md) · [Examples](docs/golden-paths.md) ·
+[React API](packages/react/README.md) ·
+[Browser support](docs/support-policy.md) ·
+[Troubleshooting](docs/troubleshooting.md) · [Contributing](CONTRIBUTING.md)
 
 ## License
 

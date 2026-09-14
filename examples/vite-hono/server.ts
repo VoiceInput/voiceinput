@@ -7,7 +7,7 @@ import { Hono } from "hono";
 
 const appOrigin = new URL(required("APP_ORIGIN")).origin;
 const clerk = createClerkClient({
-  publishableKey: required("CLERK_PUBLISHABLE_KEY"),
+  publishableKey: required("VITE_CLERK_PUBLISHABLE_KEY"),
   secretKey: required("CLERK_SECRET_KEY"),
 });
 const ratelimit = new Ratelimit({

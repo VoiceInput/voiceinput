@@ -1,12 +1,12 @@
 # Contributing to VoiceInput
 
-VoiceInput is an MIT-licensed TypeScript monorepo. The project uses PNPM and
-Turborepo to coordinate its packages and maintainer playgrounds.
+VoiceInput is an MIT-licensed TypeScript monorepo built with pnpm and Turborepo.
 
 ## Prerequisites
 
-- Node.js 22.22.0 (see `.nvmrc`)
-- Corepack enabled so the repository selects PNPM 11.23.0
+- Node.js 22.22.0 via `.nvmrc`; root and package `engines` require Node.js
+  22.18+
+- Corepack enabled so the repository selects pnpm 11.23.0
 
 ## Setup
 
@@ -16,53 +16,56 @@ pnpm install
 cp .env.example .env
 ```
 
-Provider API keys are optional until provider-backed development begins. Keep
-long-lived credentials in server-only environment variables. Never place them in
-browser code, public-prefixed variables, fixtures, logs, or committed files.
+Provider keys are optional until you work on a live integration. Keep them in
+server-only environment variables and out of browser code, fixtures, logs, and
+committed files.
 
 ## Workspace layout
 
-- `packages/provider`: versioned provider contracts and conformance utilities
-- `packages/core`: framework-neutral session, audio-source, and insertion
-  behavior
+- `packages/provider`: provider contracts, transport utilities, and conformance
+  cases
+- `packages/core`: framework-neutral sessions, browser audio, and text editing
 - `packages/react`: React bindings and optional controls
-- `packages/openai`: OpenAI client and server integration
-- `packages/elevenlabs`: ElevenLabs client and server integration
-- `packages/deepgram`: Deepgram client and server integration
+- `packages/openai`, `packages/elevenlabs`, `packages/deepgram`: provider
+  adapters
+- `apps/website`: the documentation site and live demo
 - `apps/playground-next`: Next.js maintainer playground
 - `apps/playground-vite`: Vite maintainer playground
 - `apps/playground-api`: Fetch-standard playground API
+- `apps/playground-auth`: shared development authentication fixture
+- `apps/playground-shared`: shared playground components and utilities
+- `examples`: runnable consumer integrations and the credential-free simulation
+
+The playgrounds contain development fixtures for contributors; application
+integrations should follow the public guides and examples.
 
 ## Commands
 
 ```bash
 pnpm build
 pnpm dev
-pnpm typecheck
-pnpm lint
 pnpm format:check
+pnpm lint
+pnpm typecheck
 pnpm test
 pnpm test:browser
+pnpm test:a11y
 pnpm test:e2e
-pnpm validate:packages
+pnpm test:voice-live
+pnpm test:provider-smoke-suite
+pnpm test:secrets
 pnpm test:security
+pnpm validate:packages
+pnpm generate:worklet
 ```
 
-Run `pnpm format` to apply Prettier formatting. Oxlint is the only
-JavaScript/TypeScript linter; do not add ESLint configuration or compatibility
-packages.
+Run `pnpm format` to apply Prettier formatting. Oxlint is the JavaScript and
+TypeScript linter.
 
-`pnpm test:e2e` builds the workspace, starts both playground stacks, and runs
-their deterministic fake-audio/provider flows. Maintainers with BrowserStack
-credentials can run the same suite with `pnpm test:e2e:browserstack`; that
-command supplements the Playwright matrix with a small WebDriver smoke on
-branded current and previous macOS Safari.
+Live provider commands load an ignored root `.env` when present. The Deepgram
+credential needs permission to create temporary grants. BrowserStack checks are
+available through `pnpm test:e2e:browserstack` when credentials are configured.
 
-`pnpm test:provider-smoke` loads an ignored root `.env` when present, mints a
-short-lived credential for each provider, opens its live WebSocket, and sends
-deterministic PCM without requesting a physical microphone. The Deepgram key
-must have Member-or-higher permission so it can call `/v1/auth/grant`.
-
-Run `pnpm changeset` for user-visible package work. The six public packages are
-versioned as one fixed group until 1.0. Publishing is manual and must follow the
-[release checklist](docs/release-checklist.md).
+Run `pnpm changeset` for user-visible package changes. The six public packages
+are versioned as one fixed group. Maintainers can find release and validation
+procedures in [docs/maintainers](docs/maintainers/README.md).
