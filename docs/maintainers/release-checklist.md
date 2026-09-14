@@ -89,7 +89,7 @@ folders from a developer machine.
 
 ## After publication — owner steps
 
-1. Point lingering prerelease installs at stable by running this for each of
+1. Point the testing channel at the public release by running this for each of
    `provider`, `core`, `react`, `openai`, `elevenlabs`, and `deepgram`:
 
    ```bash
@@ -97,7 +97,8 @@ folders from a developer machine.
    ```
 
 2. Tag the published commit `v0.1.0` and create the GitHub release with the
-   generated changes and migration notes.
+   initial public API and validation notes. Earlier beta versions were owner
+   testing builds, so no beta migration contract applies.
 3. Copy the [release record template](release-record-template.md) to
    `docs/maintainers/releases/0.1.0.md` and fill it with actual results and
    artifact hashes. Attach the manifest and CI artifact to the GitHub release.

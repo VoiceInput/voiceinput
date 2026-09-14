@@ -1,5 +1,9 @@
 # Public desktop beta launch — September 4, 2026
 
+Historical testing record. The owner retired the beta releases and their GitHub
+tags on September 14, 2026. The [0.1.0 release record](0.1.0.md) describes the
+first supported public release and current deployment.
+
 The six SDK packages were published as `0.1.0-beta.1` with the `next` dist-tag
 from candidate `37e871ba3de710112d387aa50adf6129992aa667`. The repository is
 public, and the website and 18 documentation pages are deployed to
@@ -8,7 +12,6 @@ public, and the website and 18 documentation pages are deployed to
 - [Successful candidate CI](https://github.com/VoiceInput/voiceinput/actions/runs/33925517234)
 - [Successful live provider smoke](https://github.com/VoiceInput/voiceinput/actions/runs/33925519169)
 - [Candidate source](https://github.com/VoiceInput/voiceinput/tree/37e871ba3de710112d387aa50adf6129992aa667)
-- [Release and hashed artifacts](https://github.com/VoiceInput/voiceinput/releases/tag/v0.1.0-beta.1)
 
 Repository history, tracked files, extracted tarballs, and completed candidate
 workflow logs passed Gitleaks. Each public npm tarball's SHA-512 was compared
