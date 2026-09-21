@@ -31,6 +31,40 @@ export default defineConfig({
       title: "VoiceInput",
       disable404Route: true,
       favicon: "/favicon.png",
+      head: [
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image",
+            content: "https://voiceinput.dev/social.png",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: { property: "og:image:type", content: "image/png" },
+        },
+        { tag: "meta", attrs: { property: "og:image:width", content: "2172" } },
+        { tag: "meta", attrs: { property: "og:image:height", content: "724" } },
+        {
+          tag: "meta",
+          attrs: { property: "og:image:alt", content: "VoiceInput logo" },
+        },
+        {
+          tag: "meta",
+          attrs: { name: "twitter:card", content: "summary_large_image" },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "twitter:image",
+            content: "https://voiceinput.dev/social.png",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: { name: "twitter:image:alt", content: "VoiceInput logo" },
+        },
+      ],
       social: [
         {
           icon: "github",
