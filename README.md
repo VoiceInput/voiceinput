@@ -2,6 +2,8 @@
 
 # VoiceInput
 
+[![npm downloads per week](https://img.shields.io/npm/dw/@voiceinput/react)](https://www.npmjs.com/package/@voiceinput/react)
+
 Add dictation to React inputs and textareas without replacing your field.
 
 ## Why VoiceInput
